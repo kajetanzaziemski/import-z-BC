@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        font-size: 13px;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        margin-top: 8px;
+      }
+      th, td {
+        border: 1px solid #ccc;
+        padding: 6px 8px;
+        text-align: left;
+      }
+      th {
+        background-color: #f1f3f4;
+        font-weight: bold;
+      }
+      tr:nth-child(even) {
+        background-color: #fafafa;
+      }
+      #status {
+        color: #888;
+        font-style: italic;
+      }
+      #openNewWindow {
+        display: inline-block;
+        margin-bottom: 8px;
+        font-size: 12px;
+        color: #1a73e8;
+        cursor: pointer;
+        text-decoration: none;
+      }
+      #openNewWindow:hover {
+        text-decoration: underline;
+      }
+      #openNewWindow.disabled {
+        color: #aaa;
+        pointer-events: none;
+        cursor: default;
+        text-decoration: none;
+      }
+
+      /* The switch - the box around the slider */
+      .switch {
+        position: relative;
+        display: inline-block;
+        width: 60px;
+        height: 34px;
+      }
+
+      /* Hide default HTML checkbox */
+      .switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
+
+      /* The slider */
+      .slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #ccc;
+        -webkit-transition: .4s;
+        transition: .4s;
+      }
+
+      .slider:before {
+        position: absolute;
+        content: "";
+        height: 26px;
+        width: 26px;
+        left: 4px;
+        bottom: 4px;
+        background-color: white;
+        -webkit-transition: .4s;
+        transition: .4s;
+      }
+
+      input:checked + .slider {
+        background-color: #60cf44;
+      }
+
+      input:focus + .slider {
+        box-shadow: 0 0 1px #2196F3;
+      }
+
+      input:checked + .slider:before {
+        -webkit-transform: translateX(26px);
+        -ms-transform: translateX(26px);
+        transform: translateX(26px);
+      }
+
+      /* Rounded sliders */
+      .slider.round {
+        border-radius: 34px;
+      }
+
+      .slider.round:before {
+        border-radius: 50%;
+      }
+    </style>
+    <script>
+      var lastData = null; // cache the trigger data so the popup can reuse it
+
+      window.onload = refreshStatusInfo;
+
+      function statusChange(data){ 
+        google.script.run
+          .withSuccessHandler(refreshStatusInfo)
+          .withFailureHandler(showLackOfStatusInfo)
+          .changeAddonStatus(data)
+      }
+
+      var triedRefresh = false;
+      function fillAgentSettings(data){
+        var container = document.getElementById("agentStatus");
+        if(data){
+          container.innerHTML = "Konfiguracja poprawna";  
+        }
+        else if(!triedRefresh){
+          // alert("data = fals, triedRefresh = false");
+          container.innerHTML = "Odświeżanie konfiguracji...";
+          triedRefresh = true;
+          agentRefresh();
+        }
+        else{
+          container.innerHTML = "Konfiguracja niepełna. Odśwież konfigurację lub wyłącz dodatek.";
+        }
+      }
+
+      function showAgentError(error) {
+        document.getElementById("agentStatus").innerHTML =
+          '<p id="status">Blad pobierania danych: ' + escapeHtml(error.message) + '</p>';
+      }
+
+      function fillImportSheetInfo(data){
+        document.getElementById('importSettingsSheetForm').importSettingsSheetName.value = data;
+      }
+
+      function showImportSheetError(error){
+        document.getElementById('sheetSettingsErrorDiv').innerHTML =
+          "Blad odswiezania nazwy arkusza: <font color='red'>" + escapeHtml(error.message) + "</font>";
+      }
+
+
+      function agentRefresh(){
+        // alert("refreshing Agent");
+        document.getElementById("forceAgentRefreshBtn").innerHTML = "Odświeżanie...";
+        google.script.run
+          .withSuccessHandler(afterAgentRefresh)
+          .withFailureHandler(showAgentError)
+          .forceAgentRefresh()
+      }
+
+      function afterAgentRefresh(){
+        document.getElementById("forceAgentRefreshBtn").innerHTML = " Odśwież triggery ";
+        refreshStatusInfo();
+      }
+
+      function showToggle(data){
+        document.getElementById("statusInfo").innerHTML =  `<label class="switch"> \n <input type="checkbox" ${data ? "checked" : ""} id="addonStatusSwitch" onchange="statusChange(this.checked)"> \n <span class="slider round"></span> \n </label> <p> data: ${escapeHtml(JSON.stringify(data))} </p>`;
+      }
+
+      function showLackOfStatusInfo(){
+        document.getElementById("statusInfo").innerHTML = '<p id="status">Error loading status info: ' + escapeHtml(error.message) + '</p>';
+      }
+
+      function refreshStatusInfo(){
+        google.script.run
+          .withSuccessHandler(showToggle)
+          .withFailureHandler(showLackOfStatusInfo)
+          .getAddonStatus();
+        google.script.run
+          .withSuccessHandler(fillImportSheetInfo)
+          .withFailureHandler(showImportSheetError)
+          .getImportSettingsSheetName();
+        google.script.run
+          .withSuccessHandler(fillAgentSettings)
+          .withFailureHandler(showAgentError)
+          .getAgentStatus();
+      }
+      
+      function escapeHtml(str) {
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;');
+      }
+
+      function isHtmlLink(str) {
+        return /^\s*<a\s+href=.*?>.*<\/a>\s*$/i.test(String(str));
+      }
+
+      function formatCell(str) {
+        if (isHtmlLink(str)) {
+          // ensure links open in a new tab
+          return String(str).replace(/<a\s+/i, '<a target="_blank" rel="noopener" ');
+        }
+        return escapeHtml(str);
+      }
+      
+      function saveSettings(form){
+        let btn = document.getElementById("sheetSettingsSubmit");
+        btn.disabled = true;
+        btn.innerHTML = "Zapisywanie..."; 
+        google.script.run
+                        .withSuccessHandler(afterSave)
+                        .withFailureHandler(afterFailure)
+                        .withUserObject(form)
+                        .setImportSettingsSheetName(form.importSettingsSheetName.value);
+      }
+
+      function afterSave(serverResponse,form){
+        document.getElementById('sheetSettingsSubmit').innerHTML = " Zapisano <font color = 'green' > <bold> ✓ </bold> </font>";
+        document.getElementById('sheetSettingsErrorDiv').innerHTML = "";
+        setTimeout(() => resetSaveButton('sheetSettingsSubmit'),2500);
+      }
+
+      function afterFailure(serverResponse,form){
+        let btn = document.getElementById('sheetSettingsSubmit');
+        btn.innerHTML = "Spróbuj zapisać ponownie";
+        btn.disabled = false; 
+        document.getElementById('sheetSettingsErrorDiv').innerHTML = "Błąd zapisywania nazwy: <font color='red'>" + serverResponse.message +"</font>"; 
+      }
+
+      function resetSaveButton(id){
+        let btn = document.getElementById(id);
+        btn.innerHTML = "Zapisz zmiany";
+        btn.disabled = false;
+      }
+
+    </script>
+  </head>
+  <body>
+    <div id="activeToggle">
+      <p> Aktywuj "Import z BC" w arkuszu: </p>
+      <p id="statusInfo"> Loading... </p>
+    </div>
+    
+    <b> Ustawienia tego dokumentu </b><br />
+    <form onsubmit="saveSettings(this)" id='importSettingsSheetForm'>
+      Arkusz ustawień importu <br />
+      <input type="text" name="importSettingsSheetName" value="Loading…"/> <br />
+      <div id='sheetSettingsErrorDiv'> </div>
+      <button type="submit" id="sheetSettingsSubmit"> Zapisz zmiany </button>
+    </form>
+
+    <div id="importSettings">
+      <p> Agent w arkuszu: </p>
+      <p id="agentStatus"> Loading… </p>
+    </div>
+    <div>
+      <button id="forceAgentRefreshBtn" onclick="agentRefresh()"> Odśwież triggery </button>
+      <p id="refreshInfo"> </p>
+    </div>
+  </body>
+</html>

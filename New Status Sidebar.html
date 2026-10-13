@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <link rel="stylesheet" href="https://ssl.gstatic.com/docs/script/css/add-ons1.css">
+    <style>
+      /* add-ons1.css already sets Arial; only the size needs overriding */
+      body {
+        font-size: 13px;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        margin-top: 8px;
+      }
+      th, td {
+        border: 1px solid #ccc;
+        padding: 6px 8px;
+        text-align: left;
+      }
+      th {
+        background-color: #f1f3f4;
+        font-weight: bold;
+      }
+      tr:nth-child(even) {
+        background-color: #fafafa;
+      }
+      #status {
+        color: #888;
+        font-style: italic;
+      }
+      #openNewWindow {
+        display: inline-block;
+        margin-bottom: 8px;
+        font-size: 12px;
+        color: #1a73e8;
+        cursor: pointer;
+        text-decoration: none;
+      }
+      #openNewWindow:hover {
+        text-decoration: underline;
+      }
+      #openNewWindow.disabled {
+        color: #aaa;
+        pointer-events: none;
+        cursor: default;
+        text-decoration: none;
+      }
+
+      /* ---------- Tabs ---------- */
+      .tab-bar {
+        display: flex;
+        border-bottom: 1px solid #ccc;
+        margin-bottom: 10px;
+      }
+      .tab-btn {
+        flex: 1;
+        padding: 8px 6px;
+        background: #f1f3f4;
+        border: none;
+        border-bottom: 3px solid transparent;
+        cursor: pointer;
+        font-size: 12px;
+        font-family: inherit;
+        text-wrap: wrap;
+        white-space: normal;
+        height: auto;
+        text-align: center;
+        line-height: 1.1;
+        word-break: break-word;
+      }
+      .tab-btn:hover {
+        background: #e8eaed;
+      }
+      .tab-btn.active {
+        background: #ffffff;
+        border-bottom: 3px solid #1a73e8;
+        font-weight: bold;
+      }
+      .tab-panel {
+        display: none;
+      }
+      .tab-panel.active {
+        display: block;
+      }
+
+      /* ---------- Toggle switch ---------- */
+      .switch {
+        position: relative;
+        display: inline-block;
+        width: 60px;
+        height: 34px;
+      }
+      .switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
+      .slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #ccc;
+        -webkit-transition: .4s;
+        transition: .4s;
+      }
+      .slider:before {
+        position: absolute;
+        content: "";
+        height: 26px;
+        width: 26px;
+        left: 4px;
+        bottom: 4px;
+        background-color: white;
+        -webkit-transition: .4s;
+        transition: .4s;
+      }
+      input:checked + .slider {
+        background-color: #1a73e8; <!-- green: #60cf44 -->
+      }
+      input:focus + .slider {
+        box-shadow: 0 0 1px #2196F3;
+      }
+      input:checked + .slider:before {
+        -webkit-transform: translateX(26px);
+        -ms-transform: translateX(26px);
+        transform: translateX(26px);
+      }
+      .slider.round {
+        border-radius: 34px;
+      }
+      .slider.round:before {
+        border-radius: 50%;
+      }
+    </style>
+    <script>
+      /* =========================================================
+         State
+      ========================================================= */
+      var triedRefresh = false; // guards against infinite agent-refresh loop
+
+      /* =========================================================
+         Utility helpers
+      ========================================================= */
+      function escapeHtml(str) {
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;');
+      }
+
+      function isHtmlLink(str) {
+        return /^\s*<a\s+href=.*?>.*<\/a>\s*$/i.test(String(str));
+      }
+
+      function formatCell(str) {
+        if (isHtmlLink(str)) {
+          // ensure links open in a new tab
+          return String(str).replace(/<a\s+/i, '<a target="_blank" rel="noopener" ');
+        }
+        return escapeHtml(str);
+      }
+
+      function resetSaveButton(id) {
+        var btn = document.getElementById(id);
+        btn.innerHTML = "Zapisz zmiany";
+        btn.disabled = false;
+      }
+
+      /* =========================================================
+         Tabs
+      ========================================================= */
+      function selectTab(tabId) {
+        document.querySelectorAll('.tab-panel').forEach(function (panel) {
+          panel.classList.toggle('active', panel.id === 'tab-' + tabId);
+        });
+        document.querySelectorAll('.tab-btn').forEach(function (btn) {
+          btn.classList.toggle('active', btn.dataset.tab === tabId);
+        });
+      }
+
+      /* =========================================================
+         Addon status toggle
+      ========================================================= */
+      function refreshStatusInfo() {
+        google.script.run
+          .withSuccessHandler(showStatusToggle)
+          .withFailureHandler(showStatusError)
+          .getAddonStatus();
+      }
+
+      function statusChange(isChecked) {
+        // if(isChecked) triedRefresh = true;
+        google.script.run
+          .withSuccessHandler(refreshAllInfo)
+          .withFailureHandler(showStatusError)
+          .changeAddonStatus(isChecked);
+      }
+
+      function showStatusToggle(data) {
+        document.getElementById("statusInfo").innerHTML =
+          '<label class="switch">' +
+          '<input type="checkbox" ' + (data ? "checked" : "") + ' id="addonStatusSwitch" onchange="statusChange(this.checked)">' +
+          '<span class="slider round"></span>' +
+          '</label>';
+      }
+
+      function showStatusError(error) {
+        document.getElementById("statusInfo").innerHTML =
+          '<p id="status">Błąd wczytywania statusu: ' + escapeHtml(error.message) + '</p>';
+      }
+
+      /* =========================================================
+         Agent status
+      ========================================================= */
+      function refreshAgentInfo() {
+        google.script.run
+          .withSuccessHandler(showAgentStatus)
+          .withFailureHandler(showAgentError)
+          .getAgentStatus();
+      }
+
+      function showAgentStatus(data) {
+        var container = document.getElementById("agentStatus");
+        if (data[0]) {
+          container.innerHTML = "Konfiguracja poprawna";
+        } else if (!data[1]) {
+          container.innerHTML = "Konfiguracja niepełna. Włącz dodadetk, żeby odświeżyć konfigurację i rozpocząć pracę z dodatkiem.";
+        } else if (!triedRefresh) {
+          container.innerHTML = "Odświeżanie konfiguracji...";
+          triedRefresh = true;
+          agentRefresh();
+        } else {
+          container.innerHTML = "Konfiguracja niepełna. Odśwież konfigurację, żeby pracować z dodatkiem lub wyłącz dodatek.";
+        }
+      }
+
+      function showAgentError(error) {
+        document.getElementById("agentStatus").innerHTML =
+          '<p id="status">Błąd pobierania danych: ' + escapeHtml(error.message) + '</p>';
+      }
+
+      function agentRefresh() {
+        document.getElementById("forceAgentRefreshBtn").innerHTML = "Odświeżanie...";
+        google.script.run
+          .withSuccessHandler(afterAgentRefresh)
+          .withFailureHandler(showAgentError)
+          .forceAgentRefresh();
+      }
+
+      function afterAgentRefresh() {
+        document.getElementById("forceAgentRefreshBtn").innerHTML = " Odśwież konfigurację ";
+        refreshAllInfo();
+      }
+
+      /* =========================================================
+         Import settings sheet name
+      ========================================================= */
+      function refreshImportSheetInfo() {
+        google.script.run
+          .withSuccessHandler(fillImportSheetName)
+          .withFailureHandler(showImportSheetError)
+          .getImportSettingsSheetName();
+      }
+
+      function fillImportSheetName(data) {
+        document.getElementById('importSettingsSheetForm').importSettingsSheetName.value = data;
+      }
+
+      function showImportSheetError(error) {
+        document.getElementById('sheetSettingsErrorDiv').innerHTML =
+          "Błąd odświeżania nazwy arkusza: <font color='red'>" + escapeHtml(error.message) + "</font>";
+      }
+
+      function saveImportSheetName(form) {
+        var btn = document.getElementById("sheetSettingsSubmit");
+        btn.disabled = true;
+        btn.innerHTML = "Zapisywanie...";
+        google.script.run
+          .withSuccessHandler(afterImportSheetSave)
+          .withFailureHandler(afterImportSheetSaveFailure)
+          .setImportSettingsSheetName(form.importSettingsSheetName.value);
+      }
+
+      function afterImportSheetSave() {
+        document.getElementById('sheetSettingsSubmit').innerHTML = " Zapisano <font color='green'><bold>✓</bold></font>";
+        document.getElementById('sheetSettingsErrorDiv').innerHTML = "";
+        setTimeout(function () { resetSaveButton('sheetSettingsSubmit'); }, 2500);
+        refreshAllInfo();
+      }
+
+      function afterImportSheetSaveFailure(error) {
+        var btn = document.getElementById('sheetSettingsSubmit');
+        btn.innerHTML = "Spróbuj zapisać ponownie";
+        btn.disabled = false;
+        document.getElementById('sheetSettingsErrorDiv').innerHTML =
+          "Błąd zapisywania nazwy: <font color='red'>" + escapeHtml(error.message) + "</font>";
+      }
+
+      /* =========================================================
+         Global settings (from Global Settings Side Bar.html)
+      ========================================================= */
+      function saveSettings(form) {
+        var btn = document.getElementById(form.scope.value + 'Submit');
+        btn.disabled = true;
+        btn.innerHTML = "Zapisywanie...";
+        google.script.run
+          .withSuccessHandler(afterSave)
+          .withFailureHandler(afterFailure)
+          .withUserObject(form)
+          .setGlobalSettings(form);
+      }
+
+      function afterSave(serverResponse, form) {
+        document.getElementById(form.scope.value + 'Submit').innerHTML = " Zapisano <font color='green'><bold>✓</bold></font>";
+        document.getElementById(form.scope.value + 'Div').innerHTML = "";
+        setTimeout(function () { resetSaveButton(form.scope.value + 'Submit'); }, 2500);
+      }
+
+      function afterFailure(serverResponse, form) {
+        var btn = document.getElementById(form.scope.value + 'Submit');
+        btn.innerHTML = "Spróbuj zapisać ponownie";
+        btn.disabled = false;
+        document.getElementById(form.scope.value + 'Div').innerHTML = "<font color='red'>" + serverResponse.message + "</font>";
+      }
+
+      /* =========================================================
+         Init
+      ========================================================= */
+      function refreshAllInfo() {
+        refreshStatusInfo();
+        refreshAgentInfo();
+        refreshImportSheetInfo();
+      }
+
+      window.onload = refreshAllInfo;
+    </script>
+  </head>
+  <body>
+   <div class="sidebar">
+
+    <div class="tab-bar">
+      <button class="tab-btn active" data-tab="status" onclick="selectTab('status')">Ogólne</button>
+      <button class="tab-btn" data-tab="help" onclick="selectTab('help')">Połączenie z BC</button>
+      <button class="tab-btn" data-tab="future" onclick="selectTab('future')">Autoryzacja</button>
+    </div>
+
+    <!-- ============ TAB 1: current sidebar content ============ -->
+    <div id="tab-status" class="tab-panel active">
+      <h1> Włącz / wyłącz "Import z BC" </h1>
+      <div id="activeToggle">
+        <p id="statusInfo"> Pobieranie danych... </p>
+      </div>
+      <hr />
+
+      <h1> Arkusz ustawień importu </h1>
+      <form onsubmit="event.preventDefault(); saveImportSheetName(this)" id='importSettingsSheetForm'>
+        <div class="block form-group">
+          <label for="importSettingsSheetName">Nazwa arkusza: </label>
+          <input type="text" id="importSettingsSheetName" name="importSettingsSheetName" value="Pobieranie danych…"/>
+        </div>
+        <div id='sheetSettingsErrorDiv'> </div>
+        <button type="submit" class="action" id="sheetSettingsSubmit"> Zapisz zmiany </button>
+      </form>
+      <hr />
+
+      <h1> Stan konfiguracji: </h1>
+      <div id="importSettings">
+        <p id="agentStatus"> Pobieranie danych… </p>
+      </div>
+      <div class="block">
+        <button id="forceAgentRefreshBtn" onclick="agentRefresh()"> Odśwież konfigurację </button>
+        <p id="refreshInfo"> </p>
+      </div>
+    </div>
+
+    <!-- ============ TAB 2: content of Global Settings Side Bar.html ============ -->
+    <div id="tab-help" class="tab-panel">
+      <h1> Ustawienia tego dokumentu </h1>
+      <form onsubmit="event.preventDefault(); saveSettings(this)">
+        <div class="block form-group">
+          <label for="tenantid-document">Tenant Id</label>
+          <input type="text" id="tenantid-document" name="tenantid" placeholder="Tenant Id" value="<?= getGlobalSettings().getTenantId("document") ?? "" ?>"/>
+        </div>
+        <div class="block form-group">
+          <label for="environment-document">Environment</label>
+          <input type="text" id="environment-document" name="environment" placeholder="Environment" value="<?= getGlobalSettings().getBCEnvironment("document") ?? "" ?>"/>
+        </div>
+        <div class="block form-group">
+          <label for="company-document">Company</label>
+          <input type="text" id="company-document" name="company" placeholder="Company" value="<?= getGlobalSettings().getCompany("document") ?? "" ?>"/>
+        </div>
+        <input type="hidden" name="scope" value="document" />
+        <div id='documentDiv'> </div>
+        <button type="submit" class="action" id="documentSubmit"> Zapisz zmiany </button>
+      </form>
+      <hr />
+
+      <h1> Moje ustawienia </h1>
+      <form onsubmit="event.preventDefault(); saveSettings(this)">
+        <div class="block form-group">
+          <label for="tenantid-user">Tenant Id</label>
+          <input type="text" id="tenantid-user" name="tenantid" placeholder="Tenant Id" value="<?= getGlobalSettings().getTenantId("user") ?? "" ?>"/>
+        </div>
+        <div class="block form-group">
+          <label for="environment-user">Environment</label>
+          <input type="text" id="environment-user" name="environment" placeholder="Environment" value="<?= getGlobalSettings().getBCEnvironment("user") ?? "" ?>"/>
+        </div>
+        <div class="block form-group">
+          <label for="company-user">Company</label>
+          <input type="text" id="company-user" name="company" placeholder="Company" value="<?= getGlobalSettings().getCompany("user") ?? "" ?>"/>
+        </div>
+        <input type="hidden" name="scope" value="user" />
+        <div id='userDiv'> </div>
+        <button type="submit" class="action" id="userSubmit"> Zapisz zmiany </button>
+      </form>
+      <hr />
+
+      <h1> Ustawienia organizacji (wszystkich użytkowników) </h1>
+      <form onsubmit="event.preventDefault(); saveSettings(this)">
+        <div class="block form-group">
+          <label for="tenantid-script">Tenant Id</label>
+          <input type="text" id="tenantid-script" name="tenantid" placeholder="Tenant Id" value="<?= getGlobalSettings().getTenantId("script") ?? "" ?>"/>
+        </div>
+        <div class="block form-group">
+          <label for="environment-script">Environment</label>
+          <input type="text" id="environment-script" name="environment" placeholder="Environment" value="<?= getGlobalSettings().getBCEnvironment("script") ?? "" ?>"/>
+        </div>
+        <div class="block form-group">
+          <label for="company-script">Company</label>
+          <input type="text" id="company-script" name="company" placeholder="Company" value="<?= getGlobalSettings().getCompany("script") ?? "" ?>"/>
+        </div>
+        <input type="hidden" name="scope" value="script" />
+        <div id='scriptDiv'> </div>
+        <button type="submit" class="action" id="scriptSubmit"> Zapisz zmiany </button>
+      </form>
+    </div>
+
+    <!-- ============ TAB 3: placeholder for future content ============ -->
+    <div id="tab-future" class="tab-panel">
+      <p><span class="gray">Ta zakładka jest zarezerwowana na przyszłą zawartość.</span></p>
+    </div>
+
+   </div>
+  </body>
+</html>

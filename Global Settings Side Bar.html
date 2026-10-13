@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+
+    <script>
+      function saveSettings(form){
+        let btn = document.getElementById(form.scope.value+'Submit');
+        btn.disabled = true;
+        btn.innerHTML = "Zapisywanie..."; 
+        google.script.run
+                        .withSuccessHandler(afterSave)
+                        .withFailureHandler(afterFailure)
+                        .withUserObject(form)
+                        .setGlobalSettings(form);
+      }
+
+      function afterSave(serverResponse,form){
+        document.getElementById(form.scope.value+'Submit').innerHTML = " Zapisano <font color = 'green' > <bold> ✓ </bold> </font>";
+        document.getElementById(form.scope.value+'Div').innerHTML = "";
+        setTimeout(() => resetSaveButton(form.scope.value+'Submit'),2500);
+      }
+
+      function afterFailure(serverResponse,form){
+        let btn = document.getElementById(form.scope.value+'Submit');
+        btn.innerHTML = "Spróbuj zapisać ponownie";
+        btn.disabled = false; 
+        document.getElementById(form.scope.value+'Div').innerHTML = "<font color='red'>" + serverResponse.message +"</font>"; 
+      }
+
+      function resetSaveButton(id){
+        let btn = document.getElementById(id);
+        btn.innerHTML = "Zapisz zmiany";
+        btn.disabled = false;
+      }
+    </script>
+  </head>
+  <body>
+    
+    <b> Ustawienia tego dokumentu </b><br />
+    <form onsubmit="saveSettings(this)">
+      Tenant Id <br />
+      <input type="text" name="tenantid" placeholder="Tenant Id" value="<?= getGlobalSettings().getTenantId("document") ?? "" ?>"/> <br />
+      Environment <br />
+      <input type="text" name="environment" placeholder="Environment" value="<?= getGlobalSettings().getBCEnvironment("document") ?? "" ?>"/> <br />
+      Company <br />
+      <input type="text" name="company" placeholder="Company" value="<?= getGlobalSettings().getCompany("document") ?? "" ?>"/> <br />
+      <input type="hidden" name="scope" value="document" />
+      <div id='documentDiv'> </div>
+      <button type="submit" id="documentSubmit"> Zapisz zmiany </button>
+    </form>
+
+    <b> Moje ustawienia</b><br />
+    <form onsubmit="saveSettings(this)">
+      Tenant Id <br />
+      <input type="text" name="tenantid" placeholder="Tenant Id" value="<?= getGlobalSettings().getTenantId("user") ?? "" ?>"/> <br />
+      Environment <br />
+      <input type="text" name="environment" placeholder="Environment" value="<?= getGlobalSettings().getBCEnvironment("user") ?? "" ?>"/> <br />
+      Company <br />
+      <input type="text" name="company" placeholder="Company" value="<?= getGlobalSettings().getCompany("user") ?? "" ?>"/> <br />
+      <input type="hidden" name="scope" value="user" />
+      <div id='userDiv'> </div>
+      <button type="submit" id="userSubmit"> Zapisz zmiany </button>
+    </form>
+
+    <b> Ustawienia organizacji (wszystkich użytkowników)</b><br />
+    <form onsubmit="saveSettings(this)">
+      Tenant Id <br />
+      <input type="text" name="tenantid" placeholder="Tenant Id" value="<?= getGlobalSettings().getTenantId("script") ?? "" ?>"/> <br />
+      Environment <br />
+      <input type="text" name="environment" placeholder="Environment" value="<?= getGlobalSettings().getBCEnvironment("script") ?? "" ?>"/> <br />
+      Company <br />
+      <input type="text" name="company" placeholder="Company" value="<?= getGlobalSettings().getCompany("script") ?? "" ?>"/> <br />
+      <input type="hidden" name="scope" value="script" />
+      <div id='scriptDiv'> </div>
+      <button type="submit" id="scriptSubmit"> Zapisz zmiany </button>
+    </form>
+
+  </body>
+</html>

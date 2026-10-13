@@ -1,0 +1,125 @@
+function onOpen(e) {
+  // Logger.log(e.authMode);
+  // testFunc_errorReporting();
+  menuSelector();
+  if(e.authMode != ScriptApp.AuthMode.NONE) Controller.run("onOpenAction",onOpenAction,e);
+}
+
+function onOpenAction(e){
+  StatusManager.lightStatusCheck();
+}
+
+function onEdit(e) {                    
+  Controller.run("simpleOnEdit",() => {
+    Utilities.sleep(1500);
+    reconcileEdit(e, SIMPLE_TRACE_KEY);
+  });
+}
+
+gStgs = null;
+function getGlobalSettings(){
+  return gStgs ?? (gStgs = new GlobalSettings());
+}
+
+function setGlobalSettings(form){
+  // throw new Error("Cannot set values: "+form.tenantid+" "+form.environment+" "+form.company);
+  // Logger.log(`Setting ${form.scope} properties to (t/e/c): ${form.tenantid}, ${form.environment}, ${form.company}.`)
+  getGlobalSettings().setAllPropertiesForScope(form.scope,form.tenantid,form.environment,form.company);
+}
+
+function sheetEdit(e){
+  Controller.registerInit(() => TriggerWrapper.logTriggerUsed(e.triggerUid));
+  Controller.run("sheetEditAction",() => {
+    if(!StatusManager.checkTriggerPower(e.triggerUid)) return;
+    reconcileEdit(e, INSTAL_TRACE_KEY);
+    sheetEditAction(e);
+  });
+}
+
+/**
+ * Action to be taken on sheet edit. Will be wrapped in Controller.run() inside the handler function.
+ * 
+ *
+ **/
+function sheetEditAction(e){
+  if(e.source.getActiveSheet().getName() == getImportSettings().getArray().importSheetName) getMainSettings().sheetEdit(e);
+  updateAfterEdit(e.source.getActiveSheet().getName(),e);  
+}
+
+function sheetChange(e){
+  Controller.registerInit(() => TriggerWrapper.logTriggerUsed(e.triggerUid));
+  Controller.run("sheetChangeAction",() => {
+    sheetChangeAction(e);
+    if(!StatusManager.checkTriggerPower(e.triggerUid)) return;
+  });
+}
+
+function sheetChangeAction(e){
+  Logger.log(e.changeType);
+  if(e.changeType=="EDIT" || e.changeType=="FORMAT") return;
+  updateAfterEdit(e.source.getActiveSheet().getName());
+}
+
+function updateAfterEdit(sheetName,editEvent){
+  if(getMainSettings().isConfigSheet(sheetName)){
+    let shCoed = new SheetCoeditor(sheetName,true);
+    try{
+    runFunctionWithLock(() => shCoed.sheetEdit(editEvent),sheetName+"_coedit");
+    } catch(e) {
+      shCoed.switchReadingControl(false);
+      throw e;
+    }
+    shCoed.switchReadingControl(false);
+  };
+}
+
+var mStgs = null;
+function getMainSettings(){
+  return mStgs ?? (mStgs = new SettingsSheet());
+}
+
+var bcMetadata = null;
+function getMetadata() {
+  return bcMetadata ?? (bcMetadata = new BCMetadata());
+}
+
+var docTL = null;
+function getDocumentTriggerLog(){
+  return docTL ?? (docTL = new DocumentTriggerLog());
+}
+
+var usrTL = null;
+function getUserTriggerLog(){
+  return usrTL ?? (usrTL = new UserTriggerLog());
+}
+
+const AEGENT_USER_KEY = "agentArray";
+var agtMng = null;
+function getAgentManager(){
+  return agtMng ?? (agtMng = new AgentManager(AEGENT_USER_KEY));
+}
+
+function getValidImportSettingsSheet(name,ss) {
+  if(!name) name = "Ustawienia importu";
+  if(!ss) ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(name);
+  if(!sheet) return name;
+  if(verifyIfSheetIsValidImportSettingsSheet(sheet)) return name;
+  Logger.log(`Sheet ${name} is not a valid Import Settings sheet. Trying sheet ${nextName(name)}`);
+  return getValidImportSettingsSheet(nextName(name,ss));
+}
+
+function verifyIfSheetIsValidImportSettingsSheet(sheet) {
+  let B2value = sheet.getRange("B2").getValue();
+  return B2value=="headerSheetList" || B2value=="Opis linii";
+}
+
+function nextName(name) {
+  const match = name.match(/^(.*)\s(\d+)$/); // base + trailing number
+  const base = match ? match[1] : name;
+  const num = match ? parseInt(match[2], 10) : 0;
+  return `${base} ${num + 1}`;
+}
+
+// - - - - - - - - Debugging - - - - - - - -   
+const DEBUG_turncate_table_output = true;

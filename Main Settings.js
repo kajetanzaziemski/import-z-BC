@@ -1,0 +1,88 @@
+const IMPORT_SETTINGS_SHEET_NAME_KEY = "importSettingsSheetName";
+const IMPORT_SETTINGS_KEY = "importSettingsArray";
+imStgs = null;
+function getImportSettings(){
+  return imStgs ?? (imStgs = new StorageObject(IMPORT_SETTINGS_KEY,"document"));
+}
+
+class MainSettings{
+  static getProperty(name){
+    return getImportSettings().getProperty(name);
+  }
+
+  static setProperty(name,value){
+    getImportSettings().setProperty(name,value);
+    return this;
+  }
+
+  static getSettingsSheetName(){
+    return this.getProperty("importSheetName");
+  }
+
+  static setSettingsSheetName(name){
+    if(!name) name = getValidImportSettingsSheet();
+    return this.setProperty("importSheetName",name)
+  }
+
+  static getAddonStatus(){
+    Logger.log("getAddonStatus returning "+(this.getProperty("addonStatus") ?? false)?'true':'false');
+    return this.getProperty("addonStatus") ?? false;
+  }
+
+  static setAddonStatus(statusOn){
+    if(statusOn == "on" || statusOn == "ON") statusOn = true;
+    if(statusOn == "off" || statusOn == "OFF") statusOn = false;
+    if(statusOn && !this.getSettingsSheetName()) this.setSettingsSheetName();
+    if(statusOn) Controller.registerClosingOnce(() => StatusManager.fullStatusCheck(),"status check")
+    return this.setProperty("addonStatus",statusOn);
+  }
+
+  static setRefreshPermit(issuedForId,intervalHoursValue){
+    let permit = {
+      issuedFor: issuedForId,
+      lastRefresh: Date.now(),
+      intervalHours: intervalHoursValue
+    }
+    return this.setProperty("refreshPermit",permit)
+  }
+
+  static updateRefreshPermit(permit){
+    return this.setProperty("refreshPermit",permit)
+  }
+
+  static getRefreshPermit() {
+    return this.getProperty("refreshPermit");
+  }
+}
+
+function getImportSettingsSheetName(){
+  return Controller.run("requestSettingsSheetName",()=>{
+    Logger.log("Asked for settings sheet name. Returning "+MainSettings.getSettingsSheetName());
+    return MainSettings.getSettingsSheetName();
+  });
+}
+
+function setImportSettingsSheetName(name){
+  return Controller.run("requestSetSettingsSheetName",()=>{
+    Logger.log("Changing settings Sheet name to "+name);
+    return MainSettings.setSettingsSheetName(name);
+  });
+}
+
+function changeAddonStatus(newStatus){
+  Controller.run("requestChangeAddonStatus",() =>{
+    Logger.log(`changeAddonStatus called. Changing to ${newStatus ? "ON" : "OFF"}`);
+    MainSettings.setAddonStatus(newStatus);
+  });
+}
+
+function getAddonStatus(){
+  return Controller.run("requestAddonStatus",()=>MainSettings.getAddonStatus());
+}
+
+function getPermitsInfo() {
+  return Controller.run("requestPermitsInfo",()=>{
+    if(MainSettings.getRefreshPermit()) return JSON.stringify(MainSettings.getRefreshPermit()); //Object.entries(MainSettings.getRefreshPermit()).map(entry => entry[0] + ": " + entry[1] + "<br />").join("\n");
+    return "No permits info ):";
+  });
+}

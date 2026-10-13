@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <link rel="stylesheet" href="https://ssl.gstatic.com/docs/script/css/add-ons1.css">
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        font-size: 13px;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        margin-top: 8px;
+      }
+      th, td {
+        border: 1px solid #ccc;
+        padding: 6px 8px;
+        text-align: left;
+      }
+      th {
+        background-color: #f1f3f4;
+        font-weight: bold;
+      }
+      tr:nth-child(even) {
+        background-color: #fafafa;
+      }
+      #status {
+        color: #888;
+        font-style: italic;
+      }
+      #openNewWindow {
+        display: inline-block;
+        margin-bottom: 8px;
+        font-size: 12px;
+        color: #1a73e8;
+        cursor: pointer;
+        text-decoration: none;
+      }
+      #openNewWindow:hover {
+        text-decoration: underline;
+      }
+      #openNewWindow.disabled {
+        color: #aaa;
+        pointer-events: none;
+        cursor: default;
+        text-decoration: none;
+      }
+    </style>
+    <script>
+      var lastData = null; // cache the trigger data so the popup can reuse it
+
+      window.onload = function () {
+        google.script.run
+          .withSuccessHandler(function(data) {
+            console.log('Success handler fired', data);
+            renderTable(data);
+          })
+          .withFailureHandler(function(err) {
+            console.log('Failure handler fired', err);
+            showError(err);
+          })
+          .listProjectTriggers();
+        refreshAllInfo();
+      };
+
+      function renderTable(data) {
+        try {
+          lastData = data;
+          var container = document.getElementById('triggerTable');
+
+          if (!data || !Array.isArray(data) || data.length === 0) {
+            container.innerHTML = '<p id="status">No triggers found. (Received: ' + 
+              JSON.stringify(data) + ')</p>';
+            return;
+          }
+
+          container.innerHTML = buildTableHtml(data);
+          document.getElementById('openNewWindow').classList.remove('disabled');
+        } catch (e) {
+          document.getElementById('triggerTable').innerHTML =
+            '<p id="status">Client-side error: ' + e.message + '</p>';
+        }
+      }
+
+      function buildTableHtml(data) {
+        var html = '<table><thead><tr>';
+        data[0].forEach(function (cell) {
+          html += '<th>' + formatCell(cell) + '</th>';
+        });
+        html += '</tr></thead><tbody>';
+
+        for (var i = 1; i < data.length; i++) {
+          html += '<tr>';
+          data[i].forEach(function (cell) {
+            html += '<td>' + formatCell(cell) + '</td>';
+          });
+          html += '</tr>';
+        }
+        html += '</tbody></table>';
+        return html;
+      }
+
+      function openInNewWindow() {
+        if (!lastData) return;
+
+        var win = window.open('', '_blank', 'width=900,height=600');
+        if (!win) {
+          alert('Popup blocked. Please allow popups for this site and try again.');
+          return;
+        }
+
+        var styles = document.querySelector('style').outerHTML;
+        var tableHtml = buildTableHtml(lastData);
+
+        win.document.open();
+        win.document.write(
+          '<!DOCTYPE html><html><head><title>Triggers in the project</title>' +
+          styles +
+          '</head><body><b>Triggers in the project:</b><br />' +
+          tableHtml +
+          '</body></html>'
+        );
+        win.document.close();
+      }
+
+      function showError(error) {
+        document.getElementById('triggerTable').innerHTML =
+          '<p id="status">Error loading triggers: ' + escapeHtml(error.message) + '</p>';
+      }
+
+      function escapeHtml(str) {
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;');
+      }
+
+      function isHtmlLink(str) {
+        return /^\s*<a\s+href=.*?>.*<\/a>\s*$/i.test(String(str));
+      }
+
+      function formatCell(str) {
+        if (isHtmlLink(str)) {
+          // ensure links open in a new tab
+          return String(str).replace(/<a\s+/i, '<a target="_blank" rel="noopener" ');
+        }
+        return escapeHtml(str);
+      }
+
+      function fDeleteAllAgents() {
+        google.script.run.deleteAllAgents();
+      }
+
+      function fDeletaAllInUserTriggerLog() {
+        google.script.run.deleteAllInUserTriggerLog();
+      }
+
+      function fDeleteAllInDocumentTriggerLog() {
+        google.script.run.deleteAllInDocumentTriggerLog();
+      }
+
+      function refreshAllInfo() {
+         refreshAutorefreshPermits();
+      }
+
+      function refreshAutorefreshPermits() {
+        google.script.run
+          .withSuccessHandler(showAutorefreshPermits)
+          .withFailureHandler(showAutorefreshPermits)
+          .getPermitsInfo();
+      }
+
+      function showAutorefreshPermits(data) {
+        var container = document.getElementById("autorefresh-permits-info");
+        container.innerHTML = data;
+      }
+
+    </script>
+  </head>
+  <body>
+    <div id = "main-settings-info">
+      <p id = "autorefresh-permits-info"> Loading... </p>
+    </div>
+    <div class="block">
+      <button id="deleteAllAgentsBtn" onclick="fDeleteAllAgents()"> Delete all agents in log </button>
+      <p id="deleteAllAgentsInfo"> </p>
+    </div>
+    <div class="block">
+      <button id="DeletaAllInUserTriggerLogBtn" onclick="fDeletaAllInUserTriggerLog()"> Purge User Log </button>
+      <p id="fDeletaAllInUserTriggerLogInfo"> </p>
+    </div>
+    <div class="block">
+      <button id="fDeleteAllInDocumentTriggerLogBtn" onclick="fDeleteAllInDocumentTriggerLog()"> Purge Document Log </button>
+      <p id="fDeleteAllInDocumentTriggerLogInfo"> </p>
+    </div>
+    <hr />
+    <a id="openNewWindow" class="disabled" onclick="openInNewWindow()">Open in new window ↗</a><br />
+    <b>Triggers in the project:</b><br />
+    <div id="triggerTable">
+      <p id="status">Loading triggers…</p>
+    </div>
+  </body>
+</html>
