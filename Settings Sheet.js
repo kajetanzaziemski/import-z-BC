@@ -180,6 +180,7 @@ class SettingsSheet{
   setRefreshTrigger(){
     const ss = this.sheet.getParent();
     ScriptApp.getUserTriggers(ss).filter(trigger => trigger.getHandlerFunction() == "autoRefresh").forEach(trigger => ScriptApp.deleteTrigger(trigger));
+    ScriptApp.getUserTriggers(ss).filter(trigger => trigger.getHandlerFunction() == "autoRefreshHandler").forEach(trigger => ScriptApp.deleteTrigger(trigger));
     let interval = this.getRefreshFrequency().freq;
     let intervalHrs = interval;
 
