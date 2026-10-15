@@ -50,6 +50,18 @@ class MainSettings{
     return this.setProperty("refreshPermit",permit)
   }
 
+  /**
+   * Records the run time on the permit, but only if it is still issued for the given trigger.
+   * The permit is re-read from the store, as it could have been reissued while the refresh was running.
+   */
+  static touchRefreshPermit(triggerUid){
+    let current = getImportSettings().getFreshProperty("refreshPermit");
+    if(!current || current.issuedFor !== triggerUid) return false;
+    current.lastRun = Date.now();
+    this.updateRefreshPermit(current);
+    return true;
+  }
+
   static getRefreshPermit() {
     return this.getProperty("refreshPermit");
   }

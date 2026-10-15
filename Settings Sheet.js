@@ -179,7 +179,8 @@ class SettingsSheet{
 
   setRefreshTrigger(){
     const ss = this.sheet.getParent();
-    ScriptApp.getUserTriggers(ss).filter(trigger => trigger.getHandlerFunction() == "autoRefresh").forEach(trigger => ScriptApp.deleteTrigger(trigger));
+    // Time-based triggers are not bound to the spreadsheet, so getUserTriggers(ss) does not list them. Use project triggers.
+    ScriptApp.getProjectTriggers().filter(trigger => ["autoRefresh","autoRefreshHandler"].includes(trigger.getHandlerFunction())).forEach(trigger => ScriptApp.deleteTrigger(trigger));
     let interval = this.getRefreshFrequency().freq;
     let intervalHrs = interval;
 
@@ -226,8 +227,7 @@ function autoRefreshContent(e) {
 
   autoRefreshFunction();
   
-  myPermit.lastRun = Date.now();
-  MainSettings.updateRefreshPermit(myPermit);
+  MainSettings.touchRefreshPermit(e.triggerUid);
 }
 
 /**
@@ -257,7 +257,6 @@ function autoRefreshContentOld(e) {
 
   autoRefreshFunction();
   
-  myPermit.lastRun = Date.now();
-  MainSettings.updateRefreshPermit(myPermit);
+  MainSettings.touchRefreshPermit(e.triggerUid);
 }
 
