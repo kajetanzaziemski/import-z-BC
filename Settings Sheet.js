@@ -179,8 +179,11 @@ class SettingsSheet{
 
   setRefreshTrigger(){
     const ss = this.sheet.getParent();
+    Logger.log(`setRefreshTrigger: Active sheet name:`+ss.getName());
+    Logger.log(ScriptApp.getUserTriggers(ss).filter(t => t.getEventType() === ScriptApp.EventType.CLOCK).map(t=> `${t.getHandlerFunction()} - ${t.getUniqueId()}\n`));
     ScriptApp.getUserTriggers(ss).filter(trigger => trigger.getHandlerFunction() == "autoRefresh").forEach(trigger => ScriptApp.deleteTrigger(trigger));
     ScriptApp.getUserTriggers(ss).filter(trigger => trigger.getHandlerFunction() == "autoRefreshHandler").forEach(trigger => ScriptApp.deleteTrigger(trigger));
+    Logger.log(ScriptApp.getUserTriggers(ss).filter(t => t.getEventType() === ScriptApp.EventType.CLOCK).map(t=> `${t.getHandlerFunction()} - ${t.getUniqueId()}\n`));
     let interval = this.getRefreshFrequency().freq;
     let intervalHrs = interval;
 
