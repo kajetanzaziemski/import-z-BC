@@ -10,10 +10,7 @@ function onOpenAction(e){
 }
 
 function onEdit(e) {                    
-  Controller.run("simpleOnEdit",() => {
-    Utilities.sleep(1500);
-    reconcileEdit(e, SIMPLE_TRACE_KEY);
-  });
+  Controller.run("simpleOnEdit",() => checkInstallableAgentRan(e));
 }
 
 gStgs = null;
@@ -30,8 +27,8 @@ function setGlobalSettings(form){
 function sheetEdit(e){
   Controller.registerInit(() => TriggerWrapper.logTriggerUsed(e.triggerUid));
   Controller.run("sheetEditAction",() => {
+    recordInstallableSeen(e);   // before the power check: a powered-off agent that is still alive must be seen
     if(!StatusManager.checkTriggerPower(e.triggerUid)) return;
-    reconcileEdit(e, INSTAL_TRACE_KEY);
     sheetEditAction(e);
   });
 }

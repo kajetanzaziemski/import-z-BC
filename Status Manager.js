@@ -134,7 +134,7 @@ class StatusManager{
 	static repairStatus(){
 		let editTrigId = getAgentManager().recruitAgent();
 		Logger.log("New agent installed. Edit Trigger Id = "+editTrigId);
-		if(editTrigId) Controller.registerClosing(resetUnmatchedStreak);
+		if(editTrigId) Controller.registerClosing(clearAgentSuspect);
 		return editTrigId;
 	}
 
