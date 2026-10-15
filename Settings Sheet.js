@@ -179,8 +179,10 @@ class SettingsSheet{
 
   setRefreshTrigger(){
     const ss = this.sheet.getParent();
+
     // Time-based triggers are not bound to the spreadsheet, so getUserTriggers(ss) does not list them. Use project triggers.
     ScriptApp.getProjectTriggers().filter(trigger => ["autoRefresh","autoRefreshHandler"].includes(trigger.getHandlerFunction())).forEach(trigger => ScriptApp.deleteTrigger(trigger));
+
     let interval = this.getRefreshFrequency().freq;
     let intervalHrs = interval;
 
