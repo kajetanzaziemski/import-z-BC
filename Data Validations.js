@@ -26,7 +26,7 @@ class MyDataValidation{
 
   getSpreadsheetAppDataValidation(){
     if(!this.dataValidationFunction) return null;
-    // Logger.log(this.getDVFunction()+": "+JSON.stringify(this.dataValArguments));
+    // dbgLog(this.getDVFunction()+": "+JSON.stringify(this.dataValArguments));
     let args = this.dataValArguments;
     if(this.dataValidationFunction == "VALUE_IN_LIST") if(args[1]==null) args.push(true);
     return SpreadsheetApp.newDataValidation()
@@ -113,7 +113,7 @@ class ConfigDValStore{
 
   tableNavProperties(table){
     if(table in this.navProperteis) return this.navProperteis[table];
-    // Logger.log("Creating new DV for NavProperties of "+table);
+    // dbgLog("Creating new DV for NavProperties of "+table);
     return this.navProperteis[table] = new MyDataValidation(
       "VALUE_IN_LIST",
       [getMetadata().listNavProperties(table)],
@@ -132,10 +132,10 @@ class ConfigDValStore{
   }
 
   fieldDV(table,field){
-    // Logger.log(`table: ${table}, field: ${field}`);
+    // dbgLog(`table: ${table}, field: ${field}`);
     if(!field || !table) return null;
     let dataType = getMetadata().getDataType(field,table);
-    // Logger.log(`dataType: ${dataType}`);
+    // dbgLog(`dataType: ${dataType}`);
     switch(dataType){
       case "Edm.Date": return this.dateValidator();
     }
@@ -145,7 +145,7 @@ class ConfigDValStore{
   realMyDataValidation(ticket){
     if(ticket==null) return new MyDataValidation();
     if(typeof(ticket)!="string"){
-      // Logger.log(typeof(ticket)); 
+      // dbgLog(typeof(ticket)); 
       throw new TypeError("Data Validations Store Ticket must be a valid string.");
     }
     let ticketValues = ticket.split(":");
@@ -157,16 +157,16 @@ class ConfigDValStore{
           default: return null;
         }
       case "table":
-        // Logger.log(ticket);
-        // Logger.log(ticketValues[1]);
-        // Logger.log(this.tables[ticketValues[1]]);
+        // dbgLog(ticket);
+        // dbgLog(ticketValues[1]);
+        // dbgLog(this.tables[ticketValues[1]]);
         if(!this.tables[ticketValues[1]]) return this.empty;
         switch(ticketValues[2]){
           case "fields": return this.tableFields(this.tables[ticketValues[1]]);
           case "navProperties": return this.tableNavProperties(this.tables[ticketValues[1]]);
         }
       case "field":
-        // Logger.log(ticket);
+        // dbgLog(ticket);
         return this.fieldDV(this.tables[ticketValues[1]],ticketValues[2])
     }
   }

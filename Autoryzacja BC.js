@@ -29,7 +29,7 @@ class BCConnection{
  * scope of the property store.
  **/
 function getBCService_(){
-  // Logger.log(getGlobalSettings().getServiceName());
+  // dbgLog(getGlobalSettings().getServiceName());
   return OAuth2.createService(getGlobalSettings().getServiceName())
 
       // Set the endpoint URLs
@@ -78,7 +78,7 @@ function showSidebar() {
     var page = template.evaluate();
     SpreadsheetApp.getUi().showSidebar(page);
   } else {
-    Logger.log("Access denied!")
+    dbgLog("Access denied!")
   }
 }
 

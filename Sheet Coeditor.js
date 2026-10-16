@@ -25,7 +25,7 @@ class SheetCoeditor{
 
   setupConfigHeader(sheet){
     let range = sheet.getRange(1,1,4,7);
-    // Logger.log(JSON.stringify(map2D(range.getFontColorObjects(),x=>x.asRgbColor().asHexString())));
+    // dbgLog(JSON.stringify(map2D(range.getFontColorObjects(),x=>x.asRgbColor().asHexString())));
     range.setFontWeights([["normal","bold","normal","normal","normal","normal","normal"],["normal","normal","normal","normal","normal","normal","normal"],["normal","bold","bold","normal","normal","normal","normal"],["normal","bold","bold","bold","bold","bold","normal"]]);
     range.setBackgrounds([["#cccccc","#cccccc","#ffffff","#ffffff","#ffffff","#ffffff","#cccccc"],["#cccccc","#cccccc","#cccccc","#cccccc","#cccccc","#cccccc","#cccccc"],["#cccccc","#ffffff","#ffffff","#ffffff","#ffffff","#ffffff","#cccccc"],["#cccccc","#ffffff","#ffffff","#ffffff","#ffffff","#ffffff","#cccccc"]]);
     range.setFontSizes([[10,10,10,10,10,10,10],[10,8,8,8,8,10,10],[10,8,8,10,10,10,10],[10,8,8,8,8,8,10]]);
@@ -104,7 +104,7 @@ class SheetCoeditor{
   }
 
   respondToManyCellsEdit(){
-    Logger.log("Many cells edit...");
+    dbgLog("Many cells edit...");
     this.cct = this.loadFromSheet();
     this.applyCoeditsWithLock();
   }
@@ -117,24 +117,24 @@ class SheetCoeditor{
     const properties = PropertiesService.getDocumentProperties();
     lock.tryLock(1000);
     if (lock.hasLock()) { 
-      Logger.log("Lock received. Applying coedits.");
+      dbgLog("Lock received. Applying coedits.");
       this.applyCoedits();
       properties.setProperty("requireCoedit","no");
-      Logger.log("Coedits applied. Setting requireCoedit to "+properties.getProperty("requireCoedit"));
+      dbgLog("Coedits applied. Setting requireCoedit to "+properties.getProperty("requireCoedit"));
     } else {
       properties.setProperty("requireCoedit","yes");
-      Logger.log("Script locked. Setting requireCoedit to "+properties.getProperty("requireCoedit")+" and waiting...");
+      dbgLog("Script locked. Setting requireCoedit to "+properties.getProperty("requireCoedit")+" and waiting...");
       lock.tryLock(10000);
       let requireCoedit = properties.getProperty("requireCoedit")=="yes";
-      Logger.log("Lock status: "+lock.hasLock()+". requireCoedit: "+requireCoedit);
+      dbgLog("Lock status: "+lock.hasLock()+". requireCoedit: "+requireCoedit);
       if (lock.hasLock() && requireCoedit) {
-        Logger.log("Lock available, coedits required. Applying coedits.");
+        dbgLog("Lock available, coedits required. Applying coedits.");
         this.cct = this.loadFromSheet();
         this.applyCoedits();
         properties.setProperty("requireCoedit","no");
-        Logger.log("Additional script finished. Setting requireCoedit to "+properties.getProperty("requireCoedit"));
+        dbgLog("Additional script finished. Setting requireCoedit to "+properties.getProperty("requireCoedit"));
       }
-      else Logger.log("Quitting.");
+      else dbgLog("Quitting.");
     }
 
     // // Insert options cascade representation to sheet for debugging.
@@ -151,7 +151,7 @@ class SheetCoeditor{
 
   insertRows(){
     this.cct.insertRows.toReversed().toSorted((a,b)=>b.afterRow-a.afterRow).forEach(instructions =>{
-      // Logger.log(instructions);
+      // dbgLog(instructions);
       this.insertRow(instructions);
     });
     SpreadsheetApp.flush();

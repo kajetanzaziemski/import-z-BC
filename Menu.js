@@ -13,7 +13,7 @@ function menuSelector(isAuthorized){
   //     isAuthorized = bcService.hasAccess();
   //   }
   //   catch{
-  //     Logger.log("Calling BC Service failed.");
+  //     dbgLog("Calling BC Service failed.");
   //   }
   // }
   // isAuthorized ? fullMenu() : basicMenu();
@@ -90,10 +90,10 @@ function refreshCurrentSheet(){
 
 function refreshCurrentSheet_script(){
   let activeSheet = SpreadsheetApp.getActive().getActiveSheet().getName();
-  // Logger.log("activeSheet: "+activeSheet);
+  // dbgLog("activeSheet: "+activeSheet);
   let mStgs = getMainSettings();
   let configSheet = mStgs.getConfigSheetName(activeSheet);
-  // Logger.log("configSheet: "+configSheet);
+  // dbgLog("configSheet: "+configSheet);
   if(configSheet) refreshAllDataForConfigSheet(configSheet);
   else Controller.registerClosingOnce(()=>SpreadsheetApp.getUi().alert("Wybrany arkusz nie jest arkszuem konfiguracji. \n Zobacz: menu Rozszerzenia -> Import z BC -> Pomoc."),"userAlertNoConfigSheet");
 }
@@ -155,7 +155,7 @@ function refreshAllDataForConfigSheet(configSheetName,resultSheetName){
   let shCoed = new SheetCoeditor(configSheetName,true);
   try{ 
     if(!shCoed.getTable()){
-      Logger.log("No table in config sheet. Quitting.");
+      dbgLog("No table in config sheet. Quitting.");
       shCoed.switchReadingControl(false);
       return;
     }
@@ -165,7 +165,7 @@ function refreshAllDataForConfigSheet(configSheetName,resultSheetName){
       .setExtendQuery(shCoed.getExtendTable(),shCoed.getExtendQueryArray(),shCoed.getDataTypes())
       .setupConnection();
     // odConnection.queryURL = odConnection.queryURL.replace("S.A.","sa");
-    Logger.log(odConnection.queryURL);
+    dbgLog(odConnection.queryURL);
     
     odConnection.readAllPages(shCoed);
 
@@ -184,7 +184,7 @@ function refreshAllDataForConfigSheet(configSheetName,resultSheetName){
     let sheet = ss.getSheetByName(sheetName);
     if (!sheet) sheet = ss.insertSheet(sheetName);
     sheet.getDataRange().clear();
-    Logger.log(columnDataTypes);
+    dbgLog(columnDataTypes);
     columnDataTypes.forEach((dataType,index)=>{
       sheet.getRange(1,index+1,table1.length,1).setNumberFormat(new DataType(dataType).getSpreadsheetNumberFormat()); 
     });
@@ -201,7 +201,7 @@ function estimateResponseSize(configSheetName){
   var shCoed = new SheetCoeditor(configSheetName,true);
   try{
     if(!shCoed.getTable()){
-      Logger.log("No table in config sheet. Quitting.")
+      dbgLog("No table in config sheet. Quitting.")
       return;
     }   
   } catch(e) {
@@ -216,10 +216,10 @@ function estimateResponseSize(configSheetName){
       .setExtendQuery(shCoed.getExtendTable(),shCoed.getExtendQueryArray(),shCoed.getDataTypes())
       .setupConnection();
     // odConnection.queryURL = odConnection.queryURL.replace("S.A.","sa");
-    Logger.log(odConnection.queryURL);
+    dbgLog(odConnection.queryURL);
     odConnection.fetchHttpResponse();
     odConnection.readPage();
-    Logger.log(odConnection.getTotalRows());
+    dbgLog(odConnection.getTotalRows());
   } catch(e) {
     shCoed.switchConnectionControl(false);
     throw e;  
@@ -232,7 +232,7 @@ function getTable(tableName,queryText) {
   var request = ODATA_URL_+`/Company('Megaron%20S.A.')/${tableName}`;
   request += "?"+(queryText ?? "$top=100");
   request += "&$count=true";
-  Logger.log(request);
+  dbgLog(request);
   return getTableWithRequest(request);
 }
 

@@ -62,7 +62,7 @@ class GlobalSettings{
   }
 
   getActiveProperty(key){
-    // Logger.log(this.getProperty(key,"document") +'\n'+ this.getProperty(key,"user") +'\n'+ this.getProperty(key,"script"));
+    // dbgLog(this.getProperty(key,"document") +'\n'+ this.getProperty(key,"user") +'\n'+ this.getProperty(key,"script"));
     return this.getProperty(key,"document") ?? this.getProperty(key,"user") ?? this.getProperty(key,"script");
   }
 

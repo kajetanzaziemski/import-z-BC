@@ -23,11 +23,11 @@ class ODataQuery {
   }
 
   setFilterDataType(filteringField,dataType){
-    // Logger.log(`Setting Data Type for ${filteringField}: ${dataType}`);
+    // dbgLog(`Setting Data Type for ${filteringField}: ${dataType}`);
     let properType = new DataType(dataType).getJSDataType();
     if(properType) this.filterDataTypes[filteringField] = properType;
     else this.info.push(`Cannot convert data type "${dataType}" to proper type. Data type not set.`);
-    // Logger.log("Last info: " + this.info.findLast(i => true));
+    // dbgLog("Last info: " + this.info.findLast(i => true));
   }
 
   detFilterDataType(filteringField){
@@ -85,14 +85,14 @@ class ODataQuery {
   }
 
   setFilterLogic(filteringField,logicChoice){
-    // Logger.log("Trying: Set filter logic for "+filteringField+" to "+logicChoice);
+    // dbgLog("Trying: Set filter logic for "+filteringField+" to "+logicChoice);
     if (logicChoice == "AND" || logicChoice == "OR") this.query.filterLogic.set(filteringField,logicChoice);
     else this.info.push(`${logicChoice} is not valid logic.`);
     return this;
   }
 
   getFilterLogic(filteringField){
-    // Logger.log("Reading filter logic for "+filteringField+": "+(this.query.filterLogic.get(filteringField) ?? "AND"));
+    // dbgLog("Reading filter logic for "+filteringField+": "+(this.query.filterLogic.get(filteringField) ?? "AND"));
     return this.query.filterLogic.get(filteringField) ?? "AND";
   }
 
@@ -188,12 +188,12 @@ class ODataQuery {
   }
 
   filterLogicOperator(filteringField){
-    // Logger.log("filterLogicOperator for: "  + filteringField);
+    // dbgLog("filterLogicOperator for: "  + filteringField);
     if(this.getFilterLogic(filteringField) == "AND"){
-      // Logger.log("and"); 
+      // dbgLog("and"); 
       return " and ";
     }
-    // Logger.log("or"); 
+    // dbgLog("or"); 
     return " or ";
   }
   

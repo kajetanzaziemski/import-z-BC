@@ -28,7 +28,7 @@ function userSafe(action){
 }
 
 function reportError(errorMessage){
-  Logger.log(errorMessage);
+  dbgLog(errorMessage);
 }
 
 class UnknownError extends Error{

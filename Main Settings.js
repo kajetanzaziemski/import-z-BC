@@ -25,7 +25,7 @@ class MainSettings{
   }
 
   static getAddonStatus(){
-    Logger.log("getAddonStatus returning "+(this.getProperty("addonStatus") ?? false)?'true':'false');
+    dbgLog("getAddonStatus returning "+(this.getProperty("addonStatus") ?? false)?'true':'false');
     return this.getProperty("addonStatus") ?? false;
   }
 
@@ -69,21 +69,21 @@ class MainSettings{
 
 function getImportSettingsSheetName(){
   return Controller.run("requestSettingsSheetName",()=>{
-    Logger.log("Asked for settings sheet name. Returning "+MainSettings.getSettingsSheetName());
+    dbgLog("Asked for settings sheet name. Returning "+MainSettings.getSettingsSheetName());
     return MainSettings.getSettingsSheetName();
   });
 }
 
 function setImportSettingsSheetName(name){
   return Controller.run("requestSetSettingsSheetName",()=>{
-    Logger.log("Changing settings Sheet name to "+name);
+    dbgLog("Changing settings Sheet name to "+name);
     return MainSettings.setSettingsSheetName(name);
   });
 }
 
 function changeAddonStatus(newStatus){
   Controller.run("requestChangeAddonStatus",() =>{
-    Logger.log(`changeAddonStatus called. Changing to ${newStatus ? "ON" : "OFF"}`);
+    dbgLog(`changeAddonStatus called. Changing to ${newStatus ? "ON" : "OFF"}`);
     MainSettings.setAddonStatus(newStatus);
   });
 }

@@ -22,16 +22,16 @@ const Controller = (function () {
   function run(actionName, actionFn, e) {
     closingActions = []; // fresh for this execution
 
-    Logger.log(`Running ${actionName}. Test returns ${/^menu/.test(actionName)}`);
+    dbgLog(`Running ${actionName}. Test returns ${/^menu/.test(actionName)}`);
     if(/^menu/.test(actionName)){ 
-      Logger.log(`Truning Addon On...`);
+      dbgLog(`Truning Addon On...`);
       MainSettings.setAddonStatus("ON");
     }
     if(!MainSettings.getAddonStatus() && !/^request/.test(actionName)) {
-      Logger.log("Addon OFF. Quitting.");
+      dbgLog("Addon OFF. Quitting.");
       return null;
     }
-    Logger.log(`Running ${actionName}...`);
+    dbgLog(`Running ${actionName}...`);
 
     const ctx = {
       event: e,

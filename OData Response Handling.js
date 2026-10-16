@@ -57,7 +57,7 @@ class ODataConnection{
     let i = 1;
     try{
       while(this.nextPage){
-        // Logger.log(`Reading page ${i++} of ${this.totalPages ?? "unknown"}...`);
+        // dbgLog(`Reading page ${i++} of ${this.totalPages ?? "unknown"}...`);
         if(shCoed) shCoed.switchConnectionControl(true);
         this.fetchHttpResponse(this.nextPage);
         this.readPage();
@@ -82,7 +82,7 @@ class ODataConnection{
     let i = 1;
     try{
       while(this.nextPage){
-        // Logger.log(`Reading page ${i++} of ${this.totalPages ?? "unknown"}...`);
+        // dbgLog(`Reading page ${i++} of ${this.totalPages ?? "unknown"}...`);
         // if(shCoed) shCoed.switchConnectionControl(true);
         this.fetchHttpResponse(this.nextPage);
         this.readPage_test(i++);
@@ -102,7 +102,7 @@ class ODataConnection{
   }
 
   detTotalRows(responseTotalRows){
-    Logger.log(responseTotalRows);
+    dbgLog(responseTotalRows);
     if(responseTotalRows == null) return null;
     if(this.query.getLimit() == "unlimited") return responseTotalRows;
     return Math.min(this.query.getLimit(),responseTotalRows);
@@ -113,7 +113,7 @@ class ODataConnection{
   }
 
   getTotalRows(){
-    // Logger.log("Total rows: "+this.totalRows + ". Average extend: "+ this.averageExtendCount);
+    // dbgLog("Total rows: "+this.totalRows + ". Average extend: "+ this.averageExtendCount);
     return this.totalRows * this.averageExtendCount;
   }
   
@@ -131,7 +131,7 @@ class ODataConnection{
     }
     else this.dataArray.push(...odTable.getDataArray(true));
     
-    // Logger.log(this.dataArray);
+    // dbgLog(this.dataArray);
     return this;
   }
   
@@ -151,7 +151,7 @@ class ODataConnection{
     }
     else this.dataArray.push(...odTable.getDataArray(true));
     
-    // Logger.log(this.dataArray);
+    // dbgLog(this.dataArray);
     return this;
   }
   
@@ -178,7 +178,7 @@ class ODataResponseTable {
   constructor(jsonResponse,headerSeparatorString="."){
     this.debugArray = [];
 
-    // Logger.log(jsonResponse);
+    // dbgLog(jsonResponse);
     this.response = JSON.parse(jsonResponse);
     this.error = this.response.error;
     this.headerSeparator = headerSeparatorString;
@@ -201,10 +201,10 @@ class ODataResponseTable {
     if(!header){
       let array = [];
       Object.keys(this.extendRowCounts).forEach(key => {
-        // Logger.log(key +": " + JSON.stringify(this.extendRowCounts[key]));
+        // dbgLog(key +": " + JSON.stringify(this.extendRowCounts[key]));
         if(key != "value") array.push(...this.extendRowCounts[key]);
       });
-      // Logger.log(average(array) ?? 1);
+      // dbgLog(average(array) ?? 1);
       return average(array) ?? 1;
     }
     if(!this.extendRowCounts[header]) return 0;

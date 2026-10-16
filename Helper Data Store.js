@@ -110,7 +110,7 @@ class HelperDataStore{
     if(typeof(value)!="string") throw new TypeError("Param value must be string or null. Got "+typeof(value)+" instead.");
     // Construct function name. _getServiceFunctionName() also checks if scope is valid.
     let functionName = this._getServiceFunctionName(scope,'properties');
-    // Logger.log(`HelperDataStore: Setting ${scope} property ${key} to ${value}`);
+    // dbgLog(`HelperDataStore: Setting ${scope} property ${key} to ${value}`);
     this._safeRun(
       () => this._getPropertiesService(functionName).setProperty(key,value),
       `Error when setting property in ${functionName.slice(3)}. Tried setting ${JSON.stringify(key)} to ${JSON.stringify(value)}`
@@ -150,7 +150,7 @@ class HelperDataStore{
     if(typeof(key)!="string") throw new TypeError("Param key must be string. Got "+typeof(key)+" instead.");
     // Construct function name. _getServiceFunctionName() also checks if scope is valid.
     let functionName = this._getServiceFunctionName(scope,'properties');
-    // Logger.log(`HelperDataStore Reading ${scope} property ${key}.`);
+    // dbgLog(`HelperDataStore Reading ${scope} property ${key}.`);
     return this._safeRun(
       () => this._getPropertiesService(functionName).getProperty(key),
       `Error when reading property in ${functionName.slice(3)}. Tried reading key ${JSON.stringify(key)}.`

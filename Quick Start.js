@@ -1,5 +1,5 @@
 function onOpen(e) {
-  // Logger.log(e.authMode);
+  // dbgLog(e.authMode);
   // testFunc_errorReporting();
   menuSelector();
   if(e.authMode != ScriptApp.AuthMode.NONE) Controller.run("onOpenAction",onOpenAction,e);
@@ -10,6 +10,7 @@ function onOpenAction(e){
 }
 
 function onEdit(e) {                    
+  agentLog("SIMPLE",null,`onEdit entry point called (add-on status: ${MainSettings.getAddonStatus() ? "ON" : "OFF - the check is skipped"}).`);
   Controller.run("simpleOnEdit",() => checkInstallableAgentRan(e));
 }
 
@@ -20,15 +21,18 @@ function getGlobalSettings(){
 
 function setGlobalSettings(form){
   // throw new Error("Cannot set values: "+form.tenantid+" "+form.environment+" "+form.company);
-  // Logger.log(`Setting ${form.scope} properties to (t/e/c): ${form.tenantid}, ${form.environment}, ${form.company}.`)
+  // dbgLog(`Setting ${form.scope} properties to (t/e/c): ${form.tenantid}, ${form.environment}, ${form.company}.`)
   getGlobalSettings().setAllPropertiesForScope(form.scope,form.tenantid,form.environment,form.company);
 }
 
 function sheetEdit(e){
+  agentLog("INSTALLABLE",null,`sheetEdit entry point called by trigger ${e.triggerUid} (add-on status: ${MainSettings.getAddonStatus() ? "ON" : "OFF - nothing is recorded"}).`);
   Controller.registerInit(() => TriggerWrapper.logTriggerUsed(e.triggerUid));
   Controller.run("sheetEditAction",() => {
     recordInstallableSeen(e);   // before the power check: a powered-off agent that is still alive must be seen
-    if(!StatusManager.checkTriggerPower(e.triggerUid)) return;
+    const powerOn = StatusManager.checkTriggerPower(e.triggerUid);
+    agentLog("INSTALLABLE",fingerprint(e),`Power check of trigger ${e.triggerUid}: ${powerOn ? "ON - running the edit action" : "OFF or not logged - edit action SKIPPED (the edit was still reported to the simple trigger)"}.`);
+    if(!powerOn) return;
     sheetEditAction(e);
   });
 }
@@ -52,7 +56,7 @@ function sheetChange(e){
 }
 
 function sheetChangeAction(e){
-  Logger.log(e.changeType);
+  dbgLog(e.changeType);
   if(e.changeType=="EDIT" || e.changeType=="FORMAT") return;
   updateAfterEdit(e.source.getActiveSheet().getName());
 }
@@ -102,7 +106,7 @@ function getValidImportSettingsSheet(name,ss) {
   const sheet = ss.getSheetByName(name);
   if(!sheet) return name;
   if(verifyIfSheetIsValidImportSettingsSheet(sheet)) return name;
-  Logger.log(`Sheet ${name} is not a valid Import Settings sheet. Trying sheet ${nextName(name)}`);
+  dbgLog(`Sheet ${name} is not a valid Import Settings sheet. Trying sheet ${nextName(name)}`);
   return getValidImportSettingsSheet(nextName(name,ss));
 }
 

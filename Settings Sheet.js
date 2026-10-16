@@ -16,12 +16,12 @@ class SettingsSheet{
     this.refreshFrequency = this.readRefreshFrequency();
     this.lastRefresh = this.readLastRefresh();
     
-    // Logger.log("Sheet list:");
-    // Logger.log(this.sheetList);
-    // Logger.log("Last refresh:");
-    // Logger.log(this.lastRefresh);
-    // Logger.log("Refresh frequency:");
-    // Logger.log(this.refreshFrequency);
+    // dbgLog("Sheet list:");
+    // dbgLog(this.sheetList);
+    // dbgLog("Last refresh:");
+    // dbgLog(this.lastRefresh);
+    // dbgLog("Refresh frequency:");
+    // dbgLog(this.refreshFrequency);
   }
 
   // setImportSheetName(name){
@@ -55,10 +55,10 @@ class SettingsSheet{
   }
 
   sheetEdit(e){
-    Logger.log(isInRange(this.refreshFrequencyPos,4,e.range));
-    Logger.log(isInRange(this.refreshFrequencyPos,5,e.range));
+    dbgLog(isInRange(this.refreshFrequencyPos,4,e.range));
+    dbgLog(isInRange(this.refreshFrequencyPos,5,e.range));
     if(isInRange(this.refreshFrequencyPos,4,e.range) || isInRange(this.refreshFrequencyPos,5,e.range)){
-      Logger.log("refreshFreqency data editted. Setting new time trigger.");
+      dbgLog("refreshFreqency data editted. Setting new time trigger.");
       this.setRefreshTrigger();
     } 
   }
@@ -216,9 +216,9 @@ function autoRefreshHandler(e) {
 }
 
 function autoRefreshContent(e) {
-  Logger.log(`Running autoRefreshHandler. Id = ${e.triggerUid}.`);
+  dbgLog(`Running autoRefreshHandler. Id = ${e.triggerUid}.`);
   let myPermit = MainSettings.getRefreshPermit();
-  if(myPermit) Logger.log(`Permit issued for ${myPermit.issuedFor} (${myPermit.issuedFor !== e.triggerUid ? 'NOT my permit. Removing...' : 'my permit'})`);
+  if(myPermit) dbgLog(`Permit issued for ${myPermit.issuedFor} (${myPermit.issuedFor !== e.triggerUid ? 'NOT my permit. Removing...' : 'my permit'})`);
   // Registry doesn't point at me anymore → delete my own trigger and stop
   if (!myPermit || myPermit.issuedFor !== e.triggerUid) {
     ScriptApp.getProjectTriggers()
@@ -240,15 +240,15 @@ function autoRefresh(e) {
 }
 
 function autoRefreshContentOld(e) {
-  Logger.log(`Running autoRefresh. Id = ${e.triggerUid}.`);
+  dbgLog(`Running autoRefresh. Id = ${e.triggerUid}.`);
   let myPermit = MainSettings.getRefreshPermit();
   // There was no permits for autoRefresh. Reissue my own permit.
   if (!myPermit) {
     MainSettings.setRefreshPermit(e.triggerUid);
     myPermit = MainSettings.getRefreshPermit();
-    Logger.log(`Permit resissued.`)
+    dbgLog(`Permit resissued.`)
   }
-  else Logger.log(`Permit was already available. Permit issued for ${myPermit.issuedFor} (${myPermit.issuedFor !== e.triggerUid ? 'NOT my permit. Removing...' : 'my permit'})`);
+  else dbgLog(`Permit was already available. Permit issued for ${myPermit.issuedFor} (${myPermit.issuedFor !== e.triggerUid ? 'NOT my permit. Removing...' : 'my permit'})`);
   // Registry doesn't point at me anymore → delete my own trigger and stop
   if (myPermit.issuedFor !== e.triggerUid) {
     ScriptApp.getProjectTriggers()

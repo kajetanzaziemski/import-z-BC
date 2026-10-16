@@ -76,34 +76,34 @@ class StatusManager{
 	    const key = `${userState}|${docState}|${scriptState}`;
 	    const actions = ACTION_TABLE[key];
 
-	    Logger.log(`Cleanup for item id ${itemId}. Signature ${key} (U|D|S).`);
-	    Logger.log(`Actions for this item`+JSON.stringify(actions));
+	    dbgLog(`Cleanup for item id ${itemId}. Signature ${key} (U|D|S).`);
+	    dbgLog(`Actions for this item`+JSON.stringify(actions));
 	    
 	    if (!actions) {
 	      // Should never happen — all 18 combinations are covered above.
-	      Logger.log(`No rule found for item ${itemId}, state ${key}`);
+	      dbgLog(`No rule found for item ${itemId}, state ${key}`);
 	      continue;
 	    }
 
 	    if (actions.user === 'Remove') {
-	    	Logger.log(`Removing item with id ${itemId} from user log.`);
+	    	dbgLog(`Removing item with id ${itemId} from user log.`);
 	    	getAgentManager().delete(itemId);
 	    	getUserTriggerLog().deleteEntryWithTriggerId(itemId);
 	    }
 	    if (actions.user === 'Reinstate') {
-	    	Logger.log(`Unlogged trigger found. Creating new user entry with id ${itemId}`);
+	    	dbgLog(`Unlogged trigger found. Creating new user entry with id ${itemId}`);
 	    	TriggerWrapper.logTriggerWithId(itemId);
 	    }
 
 	    if (actions.doc === 'Remove'){ 
-	    	Logger.log(`Removing item with id ${itemId} from document log.`);
+	    	dbgLog(`Removing item with id ${itemId} from document log.`);
 	    	getAgentManager().delete(itemId);
 	    	getDocumentTriggerLog().deleteEntryWithTriggerId(itemId);
 	    }
 	    // (Table never asks to reinstate Document — only User.)
 
 	    if (actions.script === 'Uninstall') {
-	    	Logger.log(`Removing (uninstalling) trigger with id ${itemId} from the project.`);
+	    	dbgLog(`Removing (uninstalling) trigger with id ${itemId} from the project.`);
 	    	TriggerWrapper.deleteTrigger(itemId);
 	    }
 	  }
@@ -133,8 +133,8 @@ class StatusManager{
 
 	static repairStatus(){
 		let editTrigId = getAgentManager().recruitAgent();
-		Logger.log("New agent installed. Edit Trigger Id = "+editTrigId);
-		if(editTrigId) Controller.registerClosing(clearAgentSuspect);
+		dbgLog("New agent installed. Edit Trigger Id = "+editTrigId);
+		if(editTrigId) Controller.registerClosing(() => clearAgentSuspect(null,"agents repaired"));
 		return editTrigId;
 	}
 
@@ -199,19 +199,19 @@ class StatusManager{
 			let docPowerOn = triggersInThisDocument.find(t => t.triggerId == trigger.triggerId)?.powerOn;
 			let usrPowerOn = triggersInThisUser.find(t => t.triggerId == trigger.triggerId)?.powerOn;
 			let scriptPowerOn = triggers.find(t => t.triggerId == trigger.triggerId)?.powerOn;
-			Logger.log(`Table data id=${trigger.triggerId} powerOn: doc = ${docPowerOn == null ? "null" : (docPowerOn ? "ON" : "OFF")}, usr = ${usrPowerOn == null ? "null" : (usrPowerOn ? "ON" : "OFF")}, script = ${scriptPowerOn == null ? "null" : (scriptPowerOn ? "ON" : "OFF")} (current value ${docPowerOn == null ? "null" : (docPowerOn ? "ON" : "OFF")})`);
+			dbgLog(`Table data id=${trigger.triggerId} powerOn: doc = ${docPowerOn == null ? "null" : (docPowerOn ? "ON" : "OFF")}, usr = ${usrPowerOn == null ? "null" : (usrPowerOn ? "ON" : "OFF")}, script = ${scriptPowerOn == null ? "null" : (scriptPowerOn ? "ON" : "OFF")} (current value ${docPowerOn == null ? "null" : (docPowerOn ? "ON" : "OFF")})`);
 			trigger.setField("powerOn",triggersInThisDocument.find(t => t.triggerId == trigger.triggerId)?.powerOn || triggersInThisUser.find(t => t.triggerId == trigger.triggerId)?.powerOn);
 		});
 
 		let res = allTriggers.map(entry => entry.getEntryAsArray());
-		// Logger.log(res);
+		// dbgLog(res);
 
 		res.unshift(ExtTrigInfo.getHeaders());
 		res.forEach((val,i) => val.unshift(i));
 		res[0][0] = "No";
 
-		Logger.log("Return table:");
-		Logger.log(res);
+		dbgLog("Return table:");
+		dbgLog(res);
 		return res;
 	}
 
@@ -243,11 +243,11 @@ function getAgentStatus(){
 
 function forceAgentRefresh(){
   Controller.run("forceAgentRefresh", () => {
-    Logger.log("Running forceAgentRefresh. Powering off all agents...");
+    dbgLog("Running forceAgentRefresh. Powering off all agents...");
     StatusManager.powerOffAllAgentsInFile();
-    Logger.log("Agents powered OFF. Clenup...");
+    dbgLog("Agents powered OFF. Clenup...");
     StatusManager.logCleanUp();
-    Logger.log("Cleanup complete. Repairing status...");
+    dbgLog("Cleanup complete. Repairing status...");
     return StatusManager.repairStatus();
   });
 }

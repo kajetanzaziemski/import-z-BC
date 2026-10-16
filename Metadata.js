@@ -34,10 +34,10 @@ class BCMetadata{
   getTables(schema = this.schema){
     let tables = OptionalDataStore.getDocumentCacheValue(this.getCacheKey("tables"));
     if(tables){
-      // Logger.log("Returning from cache: ");
+      // dbgLog("Returning from cache: ");
       return JSON.parse(tables);
     }
-    // Logger.log("Downloading from the source: ");
+    // dbgLog("Downloading from the source: ");
     tables = this.getEdmxDocument().listEntityTypes(schema);
     OptionalDataStore.setDocumentCacheValue(this.getCacheKey("tables"),JSON.stringify(tables));
     return tables;
@@ -46,10 +46,10 @@ class BCMetadata{
   getTableData(table,schema = this.schema){
     let tableData = OptionalDataStore.getDocumentCacheValue(this.getCacheKey(table));
     if(tableData){
-      // Logger.log("Returning from cache: ");
+      // dbgLog("Returning from cache: ");
       return JSON.parse(tableData);
     }
-    // Logger.log("Downloading from the source: ");
+    // dbgLog("Downloading from the source: ");
     let tableDataFields = this.getEdmxDocument().listPropertiesWithDataTypes(table,schema);
     let tableNavProperties = this.getEdmxDocument().listNavigationProperties(table,schema);
     tableData = {

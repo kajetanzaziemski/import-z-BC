@@ -3,7 +3,7 @@ function listProjectTriggers(){
 }
 
 function logObjectsArray(arrayOfObjects) {
-  Logger.log(arrayOfObjects.map(obj => JSON.stringify(obj)).join('\n'));
+  dbgLog(arrayOfObjects.map(obj => JSON.stringify(obj)).join('\n'));
 }
 
 function rectArray(array,minWidth=0){
@@ -67,26 +67,39 @@ function runFunctionWithLock(action,flag="scriptLocked__"){
   const lock = LockService.getScriptLock();
   lock.tryLock(1000);
   if (lock.hasLock()) { 
-    // Logger.log("Lock received. Applying coedits.");
+    // dbgLog("Lock received. Applying coedits.");
     action();
     HelperDataStore.setDocumentPropertyValue(flag,"no");
-    // Logger.log("Coedits applied. Setting requireCoedit to "+properties.getProperty(flag));
+    // dbgLog("Coedits applied. Setting requireCoedit to "+properties.getProperty(flag));
   } else {
     HelperDataStore.setDocumentPropertyValue(flag,"yes");
-    // Logger.log("Script locked. Setting requireCoedit to "+properties.getProperty(flag)+" and waiting...");
+    // dbgLog("Script locked. Setting requireCoedit to "+properties.getProperty(flag)+" and waiting...");
     lock.tryLock(10000);
     let requireCoedit = HelperDataStore.getDocumentPropertyValue(flag)=="yes";
-    // Logger.log("Lock status: "+lock.hasLock()+". requireCoedit: "+requireCoedit);
+    // dbgLog("Lock status: "+lock.hasLock()+". requireCoedit: "+requireCoedit);
     if (lock.hasLock() && requireCoedit) {
-      // Logger.log("Lock available, coedits required. Applying coedits.");
+      // dbgLog("Lock available, coedits required. Applying coedits.");
       action();
       HelperDataStore.setDocumentPropertyValue(flag,"no");
-      // Logger.log("Additional script finished. Setting requireCoedit to "+properties.getProperty(flag));
+      // dbgLog("Additional script finished. Setting requireCoedit to "+properties.getProperty(flag));
     }
-    // else Logger.log("Quitting.");
+    // else dbgLog("Quitting.");
   }
 }
 
 function average(array){
   return array.length>0 ? array.reduce((a, b) => a + b,0) / array.length : null; 
+}
+/**
+ * General debug log. Currently switched OFF so that only the agent detection log (agentLog() in
+ * "Track onEdit Triggers.js") is visible while that mechanism is being tested.
+ * Flip the return value to true to restore all the logs routed through dbgLog().
+ * A function (not a const) so that it is also safe to call while the project files are still loading.
+ */
+function isDebugLogEnabled(){
+  return false;
+}
+
+function dbgLog(...args){
+  if(isDebugLogEnabled()) Logger.log(...args);
 }

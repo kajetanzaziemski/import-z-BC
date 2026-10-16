@@ -53,8 +53,8 @@ class CoedOption{
       res.push(...this.option.getDataValidationsChain());
     }
     if(this.constructor.name=="CQFOperatorOption"){
-      // Logger.log(res.map(item => item ? item.getDescription() : "(empty)"));
-      // Logger.log(this.option);
+      // dbgLog(res.map(item => item ? item.getDescription() : "(empty)"));
+      // dbgLog(this.option);
     }
     return res;
   }
@@ -187,7 +187,7 @@ class CoedContentTracker{
     this.lines.forEach(line => {
       let row = line.option.getDataValidationsChain();
       row.unshift(null);
-      // Logger.log(row);
+      // dbgLog(row);
       res.push(row);
     });
     return rectArray(res,5);
@@ -218,16 +218,16 @@ class CoedContentTracker{
 
   applyFix(key){
     if(this[key]){ 
-      // Logger.log(`${key} found in CCT`);
+      // dbgLog(`${key} found in CCT`);
       let fixes = this.fixRegister.allEntries(key,true);
       fixes.forEach(fix => this.runKeyFunction(fix));
       this.fixRegister.removeAll(key);
     }
-    // else Logger.log(key+" not found in CCT.");
+    // else dbgLog(key+" not found in CCT.");
   }
 
   runKeyFunction(fix){
-    // Logger.log(`Running ${fix.key} with ${JSON.stringify(fix.params)}, line number: ${fix.rowNumber}`);
+    // dbgLog(`Running ${fix.key} with ${JSON.stringify(fix.params)}, line number: ${fix.rowNumber}`);
     return this[fix.key](...fix.params,fix.rowNumber);
   }
 
@@ -250,7 +250,7 @@ class CoedContentTracker{
           if(displayedArray[i][j]!=null) rules = null;
         }
         else if(referenceArray[i][j].isSameAsSample(displayedArray[i][j])){
-          // Logger.log(`Match found at ${i},${j}`);
+          // dbgLog(`Match found at ${i},${j}`);
         }
         else{
           rules = referenceArray[i][j];
@@ -272,10 +272,10 @@ class CoedContentTracker{
 // -X-#-X-#-X--X-#-X-#-X--X-#-X-#-X-  UNDER CONSTRUCTION  -X-#-X-#-X--X-#-X-#-X--X-#-X-#-X--X-#-X-#-X-
 // Obsolete. Requires updating.
   logContent(){
-    Logger.log("#--- CoedContentTracker contet:");
-    Logger.log(this.lines);
-    Logger.log(this.importantValues);
-    Logger.log("#--- ------------------ ------");
+    dbgLog("#--- CoedContentTracker contet:");
+    dbgLog(this.lines);
+    dbgLog(this.importantValues);
+    dbgLog("#--- ------------------ ------");
   }
 // -X-#-X-#-X--X-#-X-#-X--X-#-X-#-X--X-#-X-#-X--X-#-X-#-X--X-#-X-#-X--X-#-X-#-X--X-#-X-#-X--X-#-X-#-X-
 
@@ -313,7 +313,7 @@ class CCTImportConfig extends CoedContentTracker{
   getQueryArray(queryType){
     let res = [];
     this.fixRegister.allEntries(queryType).forEach(entry => {
-      // Logger.log(entry.key + " _at_ "+entry.rowNumber);
+      // dbgLog(entry.key + " _at_ "+entry.rowNumber);
       res.push(this.lines[entry.rowNumber].option.getLabelChain().slice(1));
     });
     return rectArray(res,4);
@@ -407,15 +407,15 @@ class CCTImportConfig extends CoedContentTracker{
   setupOptions(label,rowNumber){
     if(!this.fixRegister.exists(this.queryOptionLabel(label,"emptyQueryOptionFlag"))){
       // logObjectsArray(this.fixRegister.allEntries(this.queryOptionLabel(label)));
-      // Logger.log(`Insert row after last ${label}, line number: `+this.fixRegister.lastRowNumber(this.queryOptionLabel(label)));
-      // Logger.log(`If no ${label}s, then insert at pos. spec. by setupOptions: `+rowNumber);
+      // dbgLog(`Insert row after last ${label}, line number: `+this.fixRegister.lastRowNumber(this.queryOptionLabel(label)));
+      // dbgLog(`If no ${label}s, then insert at pos. spec. by setupOptions: `+rowNumber);
       this.insertRows.push({
         afterRow: this.fixRegister.lastRowNumber(this.queryOptionLabel(label)) ?? rowNumber,
         rowContent: [this.queryOptionLabel(label)]
       });
     }
     else{
-      // Logger.log(`Empty ${label} available at line number ` + this.fixRegister.firstRowNumber(this.queryOptionLabel(label,"emptyQueryOptionFlag")));
+      // dbgLog(`Empty ${label} available at line number ` + this.fixRegister.firstRowNumber(this.queryOptionLabel(label,"emptyQueryOptionFlag")));
     }
   }
 

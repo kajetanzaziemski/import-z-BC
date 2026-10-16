@@ -16,8 +16,8 @@ class StorageArray{
 	}
 
 	saveArray(){
-		Logger.log(`Saving array ${this.key}.${this.store}. Array reads:`);
-		Logger.log(JSON.stringify(this.getArray()));
+		dbgLog(`Saving array ${this.key}.${this.store}. Array reads:`);
+		dbgLog(JSON.stringify(this.getArray()));
 		HelperDataStore.setPropertyValue(this.store,this.key,JSON.stringify(this.getArray()));
 	}
 
@@ -64,11 +64,11 @@ class StorageObject extends StorageArray{
 		if(this.dirtyKeys.size == 0) return;
 		const lock = LockService.getScriptLock();
 		let locked = false;
-		try{ locked = lock.tryLock(10000); } catch(e) { Logger.log(`StorageObject ${this.key}: could not acquire lock: ${e}`); }
+		try{ locked = lock.tryLock(10000); } catch(e) { dbgLog(`StorageObject ${this.key}: could not acquire lock: ${e}`); }
 		try{
 			const stored = this.recreateFromStore();
 			this.dirtyKeys.forEach(name => stored[name] = this.storageArray[name]);
-			Logger.log(`Saving object ${this.key}.${this.store}. Changed keys: ${[...this.dirtyKeys].join(", ")}`);
+			dbgLog(`Saving object ${this.key}.${this.store}. Changed keys: ${[...this.dirtyKeys].join(", ")}`);
 			HelperDataStore.setPropertyValue(this.store,this.key,JSON.stringify(stored));
 			this.storageArray = stored;
 			this.dirtyKeys.clear();
@@ -82,8 +82,8 @@ class AgentManager{
 	constructor(key,limit=5){
 		this.agentStorage = new StorageArray(key,"user");
 		this.limit = limit;
-		Logger.log(`Array ${key} pulled from store:`);
-		Logger.log(this.agentStorage.storageArray);
+		dbgLog(`Array ${key} pulled from store:`);
+		dbgLog(this.agentStorage.storageArray);
 	}
 
 	checkIfActive(){
@@ -111,23 +111,23 @@ class AgentManager{
 	deleteAll() {
 		let allIds = this.agentStorage.storageArray.map(elem => elem[0]);
 		allIds.forEach(id => {
-			Logger.log(`Trying to delete item with id ${id}`);
+			dbgLog(`Trying to delete item with id ${id}`);
 			this.delete(id);
 		});
 	}
 
 	recruitAgent(){
 		if(this.checkIfActive()) {
-			Logger.log("AgentManager::recruitAgent(): Agent active. No need to recruit.");
+			dbgLog("AgentManager::recruitAgent(): Agent active. No need to recruit.");
 			return getDocumentTriggerLog().getAllOfFunction("sheetEdit",true)[0].triggerId;
 		}
-		Logger.log("AgentManager::recruitAgent(): No of regeistered agents: "+this.agentStorage.storageArray.length);
+		dbgLog("AgentManager::recruitAgent(): No of regeistered agents: "+this.agentStorage.storageArray.length);
 		if(this.agentStorage.storageArray.length >= this.limit) return this.reclaimAgent();
 		return this.installNew();
 	}
 
 	reclaimAgent(){
-		Logger.log(`AgentManager::reclaimAgent() running...`);
+		dbgLog(`AgentManager::reclaimAgent() running...`);
 		return this.deleteOldest().installNew();
 	}
 
@@ -141,18 +141,18 @@ class AgentManager{
 
 	saveToStorageArray(editId,changeId){
 		this.agentStorage.storageArray.push([editId,changeId]);
-		Logger.log(`Saved values [${editId}],[${changeId}]. Array now reads:`);
-		Logger.log(this.agentStorage.storageArray);
+		dbgLog(`Saved values [${editId}],[${changeId}]. Array now reads:`);
+		dbgLog(this.agentStorage.storageArray);
 	}
 
 	delete(editId){
 		let agentIdPair = this.agentStorage.storageArray.find(elem => elem.includes(editId));
 		if(!agentIdPair){
-			Logger.log("No agent with this editId. Quitting.");
+			dbgLog("No agent with this editId. Quitting.");
 			return this;
 		}
 		let changeId = agentIdPair.filter(elem => elem != editId)[0];
-		Logger.log("ChangeId indentified as "+changeId);
+		dbgLog("ChangeId indentified as "+changeId);
 		TriggerWrapper.deleteTrigger(editId).deleteTrigger(changeId);
 		let agentIdPairIndex = this.agentStorage.storageArray.findIndex(elem => elem.includes(editId));
 		this.agentStorage.storageArray.splice(agentIdPairIndex,1);
@@ -161,7 +161,7 @@ class AgentManager{
 
 	deleteOldest(){
 		let trigId = getUserTriggerLog().getOldest(ScriptApp.EventType.ON_EDIT)?.triggerId;
-		Logger.log(`AgentManager::deleteOldest(): Oldest trigger ${trigId ?? 'NULL'}`);
+		dbgLog(`AgentManager::deleteOldest(): Oldest trigger ${trigId ?? 'NULL'}`);
 	  	return this.delete(trigId);
 	}
 }
@@ -210,11 +210,11 @@ class TriggerWrapper{
   	}
 
   	static deleteTrigger(trigId){
-  		Logger.log(`deleteTrigger called with trigId = ${trigId}. Typeof trigId ${typeof(trigId)}.`);
-  		Logger.log(`Project triggers: ` + this.getProjectTriggers().map(trig => trig.getUniqueId()).join('\n'));
+  		dbgLog(`deleteTrigger called with trigId = ${trigId}. Typeof trigId ${typeof(trigId)}.`);
+  		dbgLog(`Project triggers: ` + this.getProjectTriggers().map(trig => trig.getUniqueId()).join('\n'));
   		let trigger = typeof(trigId)=='string' ? this.getProjectTriggers().find(trig => trig.getUniqueId() == trigId) : trigId;
   		if(!trigger){  			
-  			Logger.log("No trigger with id "+trigId+" found. Nothing to delete. Deleting Trigger Log entries and quitting.");
+  			dbgLog("No trigger with id "+trigId+" found. Nothing to delete. Deleting Trigger Log entries and quitting.");
   		}
   		else this._safeRun(
   			() => ScriptApp.deleteTrigger(trigger),
@@ -245,7 +245,7 @@ class TriggerWrapper{
   	static logTriggerWithId(trigId){
   		let trigger = this.getUserTriggers().find(trigger => trigger.getUniqueId() === trigId);
   		if(!trigger){
-  			Logger.log(`Tried to log trigger with id ${trigId}. No such trigger found. Quitting.`);
+  			dbgLog(`Tried to log trigger with id ${trigId}. No such trigger found. Quitting.`);
   			return;
   		}
   		this.logNewTrigger(trigger);
@@ -273,12 +273,12 @@ class TriggerWrapper{
   	}
 
   	static logTriggerUsed(trigId){
-  		Logger.log("Log trigger Used, id = "+trigId);
+  		dbgLog("Log trigger Used, id = "+trigId);
   		if(!trigId) return;
   		getDocumentTriggerLog().markLastUsed(trigId);
-  		Logger.log("Document Trigger Log updated. Now reads:"+getDocumentTriggerLog().getTriggerArray().map(entry => JSON.stringify(entry)));
+  		dbgLog("Document Trigger Log updated. Now reads:"+getDocumentTriggerLog().getTriggerArray().map(entry => JSON.stringify(entry)));
   		getUserTriggerLog().markLastUsed(trigId);
-  		Logger.log("User Trigger Log updated. Now reads:"+getUserTriggerLog().getTriggerArray().map(entry => JSON.stringify(entry)));
+  		dbgLog("User Trigger Log updated. Now reads:"+getUserTriggerLog().getTriggerArray().map(entry => JSON.stringify(entry)));
   	}
 
   	static triggerPowerOff(trigId){
@@ -292,8 +292,8 @@ class TriggerLog{
 	constructor(){
 		this.triggerArray = this.recreateFromStore();
 		Controller.registerClosingOnce(()=>this.saveTriggerLog(),this.constructor.name);
-		Logger.log(`${this.constructor.name} on construction:`);
-    	Logger.log(this.getTriggerArray().map(entry => JSON.stringify(entry)).join("\n"));
+		dbgLog(`${this.constructor.name} on construction:`);
+    	dbgLog(this.getTriggerArray().map(entry => JSON.stringify(entry)).join("\n"));
 	}
 
 	recreateFromStore(){
@@ -314,7 +314,7 @@ class TriggerLog{
 	deleteEntryWithTriggerId(triggerId,returnSuccess=false){
 		let index = this.triggerArray.findIndex(elem => elem.triggerId == triggerId);
 		if(index<0){
-			Logger.log(`No element with Trigger Id ${triggerId} found. Nothing to delete. Quitting.`);
+			dbgLog(`No element with Trigger Id ${triggerId} found. Nothing to delete. Quitting.`);
 			if(returnSuccess) return false;
 			return this;
 		}
@@ -390,8 +390,8 @@ class DocumentTriggerLog extends TriggerLog{
 	saveTriggerLog(){
 		HelperDataStore.setDocumentPropertyValue(DOC_TRIG_ARRAY_KEY,JSON.stringify(this.getTriggerArray()));
 
-		Logger.log("DOC After saving Trigger Log:");
-  		Logger.log(this.triggerArray);
+		dbgLog("DOC After saving Trigger Log:");
+  		dbgLog(this.triggerArray);
 	}
 }
 
@@ -409,8 +409,8 @@ class UserTriggerLog extends TriggerLog{
 	saveTriggerLog(){
 		HelperDataStore.setUserPropertyValue(USR_TRIG_ARRAY_KEY,JSON.stringify(this.getTriggerArray()));
 
-		Logger.log("USR After saving Trigger Log:");
-  		Logger.log(this.triggerArray);
+		dbgLog("USR After saving Trigger Log:");
+  		dbgLog(this.triggerArray);
 	}
 }
 
