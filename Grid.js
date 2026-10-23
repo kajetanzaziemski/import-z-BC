@@ -830,10 +830,14 @@ function colorToApi_(color) {
   return { red: parseInt(h.slice(1, 3), 16) / 255, green: parseInt(h.slice(3, 5), 16) / 255, blue: parseInt(h.slice(5, 7), 16) / 255 };
 }
 
-/** Horizontal alignment as the API names it; 'general' (no explicit alignment) = null, 'general-left' = 'left' (as getHorizontalAlignments returns it). */
+/**
+ * Horizontal alignment as the API names it. 'general', 'general-left' and 'general-right' (what getHorizontalAlignments returns for a
+ * cell without an explicit alignment: text shows left, numbers right) are all "not set" = null: that IS the general alignment,
+ * and it renders the same, so a header read with getHorizontalAlignments can be written back as it was.
+ */
 function alignOf_(a) {
-  const x = String(a).toLowerCase().replace(/^general-?/, '');
-  if (x === '' || x === 'normal') return null;
+  const x = String(a).toLowerCase();
+  if (x === 'normal' || /^general(-left|-right)?$/.test(x)) return null;
   if (x !== 'left' && x !== 'center' && x !== 'right') throw new Error('Grid: unknown horizontal alignment "' + a + '".');
   return x.toUpperCase();
 }
@@ -928,6 +932,7 @@ function sheetsApiAvailable_() {
  *            reset: bool,           the grid starts as the template the sheet is reset from; with the Sheets API the
  *            templateName,          reset is part of the commit's batchUpdate, without it `resetFallback()` resets the
  *            templateAnchor: fn(),  sheet right here and the grid is read afterwards
+ *            window: n,             (optional) read only the first n rows (default: the rows around the anchor and every used row)
  *            sheetAnchor: fn(),     (reset only) the anchor of the sheet as it stands, before the reset
  *            resetFallback: fn }
  */
@@ -959,7 +964,7 @@ function anchorOf_(spec, sheet) { return spec.anchor ? spec.anchor(sheet) : 1; }
 function loadGridViaService_(spec, sheet) {
   const anchorRow = anchorOf_(spec, sheet);
   const maxRows = sheet.getMaxRows();
-  const rows = Math.min(modelRows_(anchorRow, sheet.getLastRow()), maxRows);
+  const rows = Math.min(spec.window || modelRows_(anchorRow, sheet.getLastRow()), maxRows);
   const cols = Math.max(1, sheet.getLastColumn());
   const rng = sheet.getRange(1, 1, rows, cols);
   return new Grid({
@@ -988,7 +993,7 @@ function loadGridViaApi_(spec, fresh) {
   // Spreadsheet service can still report the sizes from before an earlier batch update of the same run
   // (several assortments are loaded one after another) and a window that is too short cuts the lines off.
   let rowsHint = 0;
-  if (!fresh) {
+  if (!fresh && !spec.window) {
     try {
       const dims = Sheets.Spreadsheets.get(ssId, { ranges: [q(spec.sheetName) + '!A1'], fields: 'sheets(properties(title,gridProperties(rowCount)))' });
       rowsHint = dims.sheets[0].properties.gridProperties.rowCount;
@@ -997,7 +1002,7 @@ function loadGridViaApi_(spec, fresh) {
       rowsHint = now ? now.getMaxRows() : 0;
     }
   }
-  const windowRows = modelRows_(anchorRow, rowsHint);
+  const windowRows = spec.window || modelRows_(anchorRow, rowsHint);
   const ranges = [q(from) + '!1:' + windowRows];
   if (fresh) ranges.push(q(spec.sheetName) + '!A1');
   const fields = 'properties(timeZone),sheets(properties(sheetId,title,gridProperties(rowCount,columnCount,frozenRowCount)),merges,rowGroups,' +

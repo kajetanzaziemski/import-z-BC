@@ -1,0 +1,414 @@
+{
+ "size": [
+  1000,
+  26
+ ],
+ "frozen": 0,
+ "merges": [
+  "1,2,1,6",
+  "3,3,3,6"
+ ],
+ "cells": {
+  "1,1": {
+   "v": "",
+   "f": "",
+   "note": "",
+   "dv": null,
+   "fmt": {
+    "bold": false,
+    "bg": "#cccccc",
+    "size": 10,
+    "vAlign": "bottom",
+    "wrap": "OVERFLOW",
+    "color": "#000000"
+   }
+  },
+  "1,2": {
+   "v": "Zapytanie do bazy danych BC",
+   "f": "",
+   "note": "",
+   "dv": null,
+   "fmt": {
+    "bold": true,
+    "bg": "#cccccc",
+    "size": 10,
+    "hAlign": "center",
+    "vAlign": "bottom",
+    "wrap": "OVERFLOW",
+    "color": "#000000"
+   }
+  },
+  "1,3": {
+   "v": "",
+   "f": "",
+   "note": "",
+   "dv": null,
+   "fmt": {
+    "bold": false,
+    "bg": "#ffffff",
+    "size": 10,
+    "vAlign": "bottom",
+    "wrap": "OVERFLOW",
+    "color": "#000000"
+   }
+  },
+  "1,4": {
+   "v": "",
+   "f": "",
+   "note": "",
+   "dv": null,
+   "fmt": {
+    "bold": false,
+    "bg": "#ffffff",
+    "size": 10,
+    "vAlign": "bottom",
+    "wrap": "OVERFLOW",
+    "color": "#000000"
+   }
+  },
+  "1,5": {
+   "v": "",
+   "f": "",
+   "note": "",
+   "dv": null,
+   "fmt": {
+    "bold": false,
+    "bg": "#ffffff",
+    "size": 10,
+    "vAlign": "bottom",
+    "wrap": "OVERFLOW",
+    "color": "#000000"
+   }
+  },
+  "1,6": {
+   "v": "",
+   "f": "",
+   "note": "",
+   "dv": null,
+   "fmt": {
+    "bold": false,
+    "bg": "#ffffff",
+    "size": 10,
+    "vAlign": "bottom",
+    "wrap": "OVERFLOW",
+    "color": "#000000"
+   }
+  },
+  "1,7": {
+   "v": "",
+   "f": "",
+   "note": "",
+   "dv": null,
+   "fmt": {
+    "bold": false,
+    "bg": "#cccccc",
+    "size": 10,
+    "vAlign": "bottom",
+    "wrap": "OVERFLOW",
+    "color": "#808080"
+   }
+  },
+  "2,1": {
+   "v": "",
+   "f": "",
+   "note": "",
+   "dv": null,
+   "fmt": {
+    "bold": false,
+    "bg": "#cccccc",
+    "size": 10,
+    "vAlign": "bottom",
+    "wrap": "WRAP",
+    "color": "#000000"
+   }
+  },
+  "2,2": {
+   "v": "Analiza zapytania",
+   "f": "",
+   "note": "",
+   "dv": null,
+   "fmt": {
+    "bold": false,
+    "bg": "#cccccc",
+    "size": 8,
+    "hAlign": "center",
+    "vAlign": "middle",
+    "wrap": "WRAP",
+    "color": "#999999"
+   }
+  },
+  "2,3": {
+   "v": "Pobieranie z bazy danych",
+   "f": "",
+   "note": "",
+   "dv": null,
+   "fmt": {
+    "bold": false,
+    "bg": "#cccccc",
+    "size": 8,
+    "hAlign": "center",
+    "vAlign": "middle",
+    "wrap": "WRAP",
+    "color": "#999999"
+   }
+  },
+  "2,4": {
+   "v": "Wstawianie danych do arkusza",
+   "f": "",
+   "note": "",
+   "dv": null,
+   "fmt": {
+    "bold": false,
+    "bg": "#cccccc",
+    "size": 8,
+    "hAlign": "center",
+    "vAlign": "bottom",
+    "wrap": "WRAP",
+    "color": "#999999"
+   }
+  },
+  "2,5": {
+   "v": "Szacowana liczba wierszy:",
+   "f": "",
+   "note": "",
+   "dv": null,
+   "fmt": {
+    "bold": false,
+    "bg": "#cccccc",
+    "size": 8,
+    "vAlign": "bottom",
+    "wrap": "WRAP",
+    "color": "#999999"
+   }
+  },
+  "2,6": {
+   "v": "",
+   "f": "",
+   "note": "",
+   "dv": null,
+   "fmt": {
+    "bold": false,
+    "bg": "#cccccc",
+    "size": 10,
+    "vAlign": "bottom",
+    "wrap": "WRAP",
+    "color": "#999999"
+   }
+  },
+  "2,7": {
+   "v": "",
+   "f": "",
+   "note": "",
+   "dv": null,
+   "fmt": {
+    "bold": false,
+    "bg": "#cccccc",
+    "size": 10,
+    "vAlign": "bottom",
+    "wrap": "WRAP",
+    "color": "#000000"
+   }
+  },
+  "3,1": {
+   "v": "",
+   "f": "",
+   "note": "",
+   "dv": null,
+   "fmt": {
+    "bold": false,
+    "bg": "#cccccc",
+    "size": 10,
+    "vAlign": "bottom",
+    "wrap": "OVERFLOW",
+    "color": "#000000"
+   }
+  },
+  "3,2": {
+   "v": "Linie zapytania",
+   "f": "",
+   "note": "",
+   "dv": null,
+   "fmt": {
+    "bold": true,
+    "bg": "#ffffff",
+    "size": 8,
+    "vAlign": "bottom",
+    "wrap": "OVERFLOW",
+    "color": "#000000"
+   }
+  },
+  "3,3": {
+   "v": "Kolejne składowe linii zapytania",
+   "f": "",
+   "note": "",
+   "dv": null,
+   "fmt": {
+    "bold": true,
+    "bg": "#ffffff",
+    "size": 8,
+    "vAlign": "bottom",
+    "wrap": "OVERFLOW",
+    "color": "#000000"
+   }
+  },
+  "3,4": {
+   "v": "",
+   "f": "",
+   "note": "",
+   "dv": null,
+   "fmt": {
+    "bold": false,
+    "bg": "#ffffff",
+    "size": 10,
+    "vAlign": "bottom",
+    "wrap": "OVERFLOW",
+    "color": "#000000"
+   }
+  },
+  "3,5": {
+   "v": "",
+   "f": "",
+   "note": "",
+   "dv": null,
+   "fmt": {
+    "bold": false,
+    "bg": "#ffffff",
+    "size": 10,
+    "vAlign": "bottom",
+    "wrap": "OVERFLOW",
+    "color": "#000000"
+   }
+  },
+  "3,6": {
+   "v": "",
+   "f": "",
+   "note": "",
+   "dv": null,
+   "fmt": {
+    "bold": false,
+    "bg": "#ffffff",
+    "size": 10,
+    "vAlign": "bottom",
+    "wrap": "OVERFLOW",
+    "color": "#000000"
+   }
+  },
+  "3,7": {
+   "v": "",
+   "f": "",
+   "note": "",
+   "dv": null,
+   "fmt": {
+    "bold": false,
+    "bg": "#cccccc",
+    "size": 10,
+    "vAlign": "bottom",
+    "wrap": "OVERFLOW",
+    "color": "#808080"
+   }
+  },
+  "4,1": {
+   "v": "",
+   "f": "",
+   "note": "",
+   "dv": null,
+   "fmt": {
+    "bold": false,
+    "bg": "#cccccc",
+    "size": 10,
+    "vAlign": "bottom",
+    "wrap": "OVERFLOW",
+    "color": "#000000"
+   }
+  },
+  "4,2": {
+   "v": "Opis linii",
+   "f": "",
+   "note": "Skrypt czyta tylko linie z poprawnym opisem. Musi być jedną z wartości: \"table\", \"queryOption\", \"extend\", \"extendOption\". Linie z pustą lub błędną wartością opisu są pomijane.",
+   "dv": null,
+   "fmt": {
+    "bold": true,
+    "bg": "#ffffff",
+    "size": 8,
+    "vAlign": "bottom",
+    "wrap": "OVERFLOW",
+    "color": "#000000"
+   }
+  },
+  "4,3": {
+   "v": 1,
+   "f": "",
+   "note": "",
+   "dv": null,
+   "fmt": {
+    "bold": true,
+    "bg": "#ffffff",
+    "size": 8,
+    "vAlign": "bottom",
+    "wrap": "OVERFLOW",
+    "color": "#000000"
+   }
+  },
+  "4,4": {
+   "v": 2,
+   "f": "",
+   "note": "",
+   "dv": null,
+   "fmt": {
+    "bold": true,
+    "bg": "#ffffff",
+    "size": 8,
+    "vAlign": "bottom",
+    "wrap": "OVERFLOW",
+    "color": "#000000"
+   }
+  },
+  "4,5": {
+   "v": 3,
+   "f": "",
+   "note": "",
+   "dv": null,
+   "fmt": {
+    "bold": true,
+    "bg": "#ffffff",
+    "size": 8,
+    "vAlign": "bottom",
+    "wrap": "OVERFLOW",
+    "color": "#000000"
+   }
+  },
+  "4,6": {
+   "v": 4,
+   "f": "",
+   "note": "",
+   "dv": null,
+   "fmt": {
+    "bold": true,
+    "bg": "#ffffff",
+    "size": 8,
+    "vAlign": "bottom",
+    "wrap": "OVERFLOW",
+    "color": "#000000"
+   }
+  },
+  "4,7": {
+   "v": "",
+   "f": "",
+   "note": "",
+   "dv": null,
+   "fmt": {
+    "bold": false,
+    "bg": "#cccccc",
+    "size": 10,
+    "vAlign": "bottom",
+    "wrap": "OVERFLOW",
+    "color": "#808080"
+   }
+  }
+ },
+ "rowPx": {},
+ "fitted": {
+  "rows": [],
+  "columns": []
+ }
+}

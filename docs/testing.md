@@ -1,0 +1,42 @@
+# Testing the Grid layer and ConfigGrid
+
+Three levels. Only level 3 touches a real spreadsheet; levels 1–2 run offline in a second (`node tests/run.js`, Node ≥ 18, no dependencies).
+
+## 1. Grid unit tests (`tests/run.js`, 77 tests)
+`tests/sim.js` is an in-memory spreadsheet that answers BOTH the Sheets API (`spreadsheets.get/batchUpdate`) and the Spreadsheet service on one store.
+Each scenario runs through both commit paths (`[api]`, `[service]`), and "parity" scenarios assert that the two paths leave identical sheets.
+The sim throws on any request or method it does not know, so `Grid.js` cannot start using a new call unnoticed.
+Architecture rules are tests too (no project words in `Grid.js`, nothing used at load time, only `SpreadsheetApp`/`Sheets`/`Utilities`).
+
+## 2. Golden tests of ConfigGrid (`tests/config-grid.test.js`, 33 tests)
+- `tests/golden/legacy-config-header.js` is a **frozen copy of the pre-Grid code** (`setupConfigHeader`, the four `switch*` methods, `setTotRowsInfo`).
+- The test runs it on the simulated Spreadsheet service and requires `ConfigGrid` (through the API path AND the service path) to leave the same sheet:
+  cells, notes, formats (weight, size, colour, background, alignment, wrap, number format), merges, validation, size.
+- The status switches are compared **after every step** of a whole refresh sequence, both on `ConfigGrid` and through the real `Sheet Coeditor.js`
+  (loaded as Apps Script loads it; only the query model, `CCTImportConfig`, is stubbed).
+- `tests/golden/config-header.snapshot.json` stores the legacy result as a file; if the header is changed on purpose:
+  `UPDATE_GOLDEN=1 node tests/run.js` and review the diff of the JSON.
+- Also asserted: one `batchUpdate` per switch / per sheet creation (the old code made ~40 calls for a new sheet), the status handle reads only rows 1–6,
+  a concurrent edit of another header cell between two switches survives, a missing sheet gives `null` / a clear error.
+- Mutation check done by hand: changing a colour, a merge, the number format, a note, the wired cell or the alignment mapping makes tests fail.
+
+What levels 1–2 can NOT tell: whether Google Sheets itself renders/accepts exactly this. Specific doubts:
+the `'general-left'` / `'general-right'` alignments (Grid now writes them as "not set"), colour strings like `#ff000000`, number format type inferred from the pattern.
+
+## 3. Real-spreadsheet check (do before anything is pushed to the live add-on)
+Production runs the **Spreadsheet-service path** (the Sheets advanced service is not enabled in `appsscript.json`), so that is the path to check.
+1. Push to a **copy** of the script (a second Apps Script project / test spreadsheet, not the Marketplace one): `clasp push` there (`.claspignore` keeps `tests/` out).
+2. Open a spreadsheet that has a config sheet made by the OLD add-on version (e.g. "Konfiguracja 1"; do not edit it).
+3. Script editor → run `testConfigGridHeaderMatchesReference("Konfiguracja 1")`. It creates a sheet with `ConfigGrid`, compares A1:G4 (values, weights, backgrounds,
+   sizes, horizontal/vertical alignments, wraps, notes, font colours, merges) with the reference and logs every difference, then deletes its sheet.
+   Expected: "header matches". A difference in horizontal alignments is the likeliest one – decide then whether `alignOf_` should map `general-*` differently.
+4. Run `testConfigGridStatusSwitches("Konfiguracja 1")` and watch row 2: B2 green, C2 red, E2:F2 black with 1,234,567, D2 red, then all grey. Check the colours
+   change live (the code flushes after each switch) and the sheet is not slowed down noticeably.
+5. In the add-on: add a new import sheet (wizard) → compare with an old one by eye; edit a query line (status B2 flashes green); run "Odśwież" on a small query
+   (C2 red while fetching, F2 shows the estimated rows, D2 red while writing).
+6. Optional: enable the Sheets advanced service in the test copy to exercise the API path; this adds an OAuth scope, so do it only for the test project.
+Record the result (date, spreadsheet, path, pass/fail) in the PR / commit message; nothing in the repo claims real-spreadsheet verification.
+
+## Adding the next adapter (SettingsGrid, ...)
+1. Freeze the old code in `tests/golden/legacy-*.js`. 2. Write the adapter on Grid. 3. Golden test: legacy vs adapter through both paths, step by step.
+4. Move the callers; keep the old public methods as one-line forwarders. 5. Add a manual `test…` function for the real-sheet check.

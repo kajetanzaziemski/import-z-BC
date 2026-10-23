@@ -552,3 +552,59 @@ function testFunc_testTriggerLogging(){
   Logger.log("Trigger "+triggerId+" is "+ (docTL.isTriggerLogged(triggerId) ? "logged." : "NOT logged."));
 
 }
+
+// - - - - - - - - ConfigGrid: checks on a REAL spreadsheet (the offline tests only use a simulation) - - - - - - - -
+
+/**
+ * Creates a config sheet with ConfigGrid and compares its header block (A1:G4) with the header of a config sheet made by the OLD code.
+ * Run it from the script editor after pushing to a COPY of the add-on, with `referenceSheetName` = the name of an existing, untouched
+ * config sheet (e.g. "Konfiguracja 1"). Logs every difference; the temporary sheet is deleted at the end.
+ */
+function testConfigGridHeaderMatchesReference(referenceSheetName){
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ref = ss.getSheetByName(referenceSheetName);
+  if(!ref) throw new Error("Brak arkusza wzorcowego: "+referenceSheetName);
+  const tmpName = "ConfigGrid test";
+  const old = ss.getSheetByName(tmpName);
+  if(old) ss.deleteSheet(old);
+  ConfigGrid.create(tmpName);
+  const tmp = ss.getSheetByName(tmpName);
+  const diffs = [];
+  const colors = r => map2D(r.getFontColorObjects(),x => x.asRgbColor().asHexString());
+  const compare = (what,getter) => {
+    const a = JSON.stringify(getter(ref.getRange(1,1,4,7))), b = JSON.stringify(getter(tmp.getRange(1,1,4,7)));
+    if(a !== b) diffs.push(what+":\n  reference "+a+"\n  ConfigGrid "+b);
+  };
+  compare("values",r => r.getValues());
+  compare("font weights",r => r.getFontWeights());
+  compare("backgrounds",r => r.getBackgrounds());
+  compare("font sizes",r => r.getFontSizes());
+  compare("horizontal alignments",r => r.getHorizontalAlignments());
+  compare("vertical alignments",r => r.getVerticalAlignments());
+  compare("wrap strategies",r => map2D(r.getWrapStrategies(),String));
+  compare("notes",r => r.getNotes());
+  compare("font colors",colors);
+  compare("merged ranges",r => r.getMergedRanges().map(m => m.getA1Notation()).sort());
+  ss.deleteSheet(tmp);
+  const msg = diffs.length ? "ConfigGrid header DIFFERS from "+referenceSheetName+":\n"+diffs.join("\n") : "ConfigGrid header matches "+referenceSheetName+" (values, formats, notes, merges).";
+  Logger.log(msg);
+  return msg;
+}
+
+/**
+ * Walks the status cells of a config sheet through a whole refresh (reading -> connection -> estimate -> writing -> done) with pauses,
+ * so the colours can be watched. The sheet must exist; its status cells are left in the "off" state.
+ */
+function testConfigGridStatusSwitches(configSheetName){
+  const co = new SheetCoeditor(configSheetName,false);
+  const pause = () => Utilities.sleep(800);
+  co.switchReadingControl(true); pause();
+  co.switchReadingControl(false);
+  co.switchConnectionControl(true); pause();
+  co.switchConnectionControl(false);
+  co.setTotRowsInfo(1234567); pause();
+  co.switchDataWritingControl(true); pause();
+  co.switchDataWritingControl(false);
+  co.switchEstimateInfoActive(false);
+  Logger.log("Status switches done on "+configSheetName+". Expected: every status cell grey (#cccccc, text #999999), E2:F2 grey, F2 = 1,234,567.");
+}

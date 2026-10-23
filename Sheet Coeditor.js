@@ -18,25 +18,13 @@ class SheetCoeditor{
   }
   // - - - - - - - - Create new config sheet - - - - - - - -   
   insertNewConfigSheet(sheetName){
-    let sheet = SpreadsheetApp.getActiveSpreadsheet().insertSheet(sheetName);
-    this.setupConfigHeader(sheet);
-    return sheet;
+    ConfigGrid.create(sheetName);            // inserts the sheet and writes the header block (config layout: Config Grid.js)
+    return SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
   }
 
+  /** Rewrites the header block of an existing config sheet (for repairing a sheet by hand, see Test Functions.js). */
   setupConfigHeader(sheet){
-    let range = sheet.getRange(1,1,4,7);
-    // dbgLog(JSON.stringify(map2D(range.getFontColorObjects(),x=>x.asRgbColor().asHexString())));
-    range.setFontWeights([["normal","bold","normal","normal","normal","normal","normal"],["normal","normal","normal","normal","normal","normal","normal"],["normal","bold","bold","normal","normal","normal","normal"],["normal","bold","bold","bold","bold","bold","normal"]]);
-    range.setBackgrounds([["#cccccc","#cccccc","#ffffff","#ffffff","#ffffff","#ffffff","#cccccc"],["#cccccc","#cccccc","#cccccc","#cccccc","#cccccc","#cccccc","#cccccc"],["#cccccc","#ffffff","#ffffff","#ffffff","#ffffff","#ffffff","#cccccc"],["#cccccc","#ffffff","#ffffff","#ffffff","#ffffff","#ffffff","#cccccc"]]);
-    range.setFontSizes([[10,10,10,10,10,10,10],[10,8,8,8,8,10,10],[10,8,8,10,10,10,10],[10,8,8,8,8,8,10]]);
-    range.setHorizontalAlignments([["general","center","general","general","general","general","general"],["general","center","center","center","general-left","general-right","general"],["general","general-left","general-left","general","general","general","general"],["general","general-left","general-right","general-right","general-right","general-right","general"]]);
-    let merge = ["B1:F1","C3:F3"];
-    merge.forEach(r => sheet.getRange(r).merge());
-    range.setNotes([["","","","","","",""],["","","","","","",""],["","","","","","",""],["","Skrypt czyta tylko linie z poprawnym opisem. Musi być jedną z wartości: \"table\", \"queryOption\", \"extend\", \"extendOption\". Linie z pustą lub błędną wartością opisu są pomijane.","","","","",""]]);
-    range.setValues([["","Zapytanie do bazy danych BC","","","","",""],["","Analiza zapytania","Pobieranie z bazy danych","Wstawianie danych do arkusza","Szacowana liczba wierszy:","",""],["","Linie zapytania","Kolejne składowe linii zapytania","","","",""],["","Opis linii",1,2,3,4,""]]);
-    range.setVerticalAlignments([["bottom","bottom","bottom","bottom","bottom","bottom","bottom"],["bottom","middle","middle","bottom","bottom","bottom","bottom"],["bottom","bottom","bottom","bottom","bottom","bottom","bottom"],["bottom","bottom","bottom","bottom","bottom","bottom","bottom"]]);
-    range.setWrapStrategies([[SpreadsheetApp.WrapStrategy.OVERFLOW, SpreadsheetApp.WrapStrategy.OVERFLOW, SpreadsheetApp.WrapStrategy.OVERFLOW, SpreadsheetApp.WrapStrategy.OVERFLOW, SpreadsheetApp.WrapStrategy.OVERFLOW, SpreadsheetApp.WrapStrategy.OVERFLOW, SpreadsheetApp.WrapStrategy.OVERFLOW], [SpreadsheetApp.WrapStrategy.WRAP, SpreadsheetApp.WrapStrategy.WRAP, SpreadsheetApp.WrapStrategy.WRAP, SpreadsheetApp.WrapStrategy.WRAP, SpreadsheetApp.WrapStrategy.WRAP, SpreadsheetApp.WrapStrategy.WRAP, SpreadsheetApp.WrapStrategy.WRAP], [SpreadsheetApp.WrapStrategy.OVERFLOW, SpreadsheetApp.WrapStrategy.OVERFLOW, SpreadsheetApp.WrapStrategy.OVERFLOW, SpreadsheetApp.WrapStrategy.OVERFLOW, SpreadsheetApp.WrapStrategy.OVERFLOW, SpreadsheetApp.WrapStrategy.OVERFLOW, SpreadsheetApp.WrapStrategy.OVERFLOW], [SpreadsheetApp.WrapStrategy.OVERFLOW, SpreadsheetApp.WrapStrategy.OVERFLOW, SpreadsheetApp.WrapStrategy.OVERFLOW, SpreadsheetApp.WrapStrategy.OVERFLOW, SpreadsheetApp.WrapStrategy.OVERFLOW, SpreadsheetApp.WrapStrategy.OVERFLOW, SpreadsheetApp.WrapStrategy.OVERFLOW]]);
-    range.setFontColors([["#ff000000","#ff000000","#ff000000","#ff000000","#ff000000","#ff000000","#808080"],["#ff000000","#999999","#999999","#999999","#999999","#999999","#ff000000"],["#ff000000","#ff000000","#ff000000","#ff000000","#ff000000","#ff000000","#808080"],["#ff000000","#ff000000","#ff000000","#ff000000","#ff000000","#ff000000","#808080"]]);
+    ConfigGrid.resetHeader(sheet.getName());
   }
 
   // - - - - - - - - Get - - - - - - - -   
@@ -170,45 +158,31 @@ class SheetCoeditor{
     this.sheet.getRange(this.startRow,this.startCol,array.length,array[0].length).setDataValidations(array).setNotes(notesArray);
   }
 
+  /** The status cells of this config sheet (Config Grid.js); read once per SheetCoeditor, every switch is one commit. */
+  statusCells(){
+    if(!this.statusGrid) this.statusGrid = ConfigGrid.status(this.sheetName);
+    if(!this.statusGrid) throw new SimpleError("Nie znaleziono arkusza konfiguracji \""+this.sheetName+"\".");
+    return this.statusGrid;
+  }
+
   setTotRowsInfo(totRows){
-    let row = 2;
-    let col = 6;
-    this.sheet.getRange(row,col,1,1).setValue(totRows).setNumberFormat("#,##0");
-    this.switchEstimateInfoActive(true);
+    this.statusCells().setTotalRows(totRows);
   }
 
   switchConnectionControl(active){
-    let row = 2;
-    let col = 3;
-    let cell = this.sheet.getRange(row,col,1,1);
-    if(active) cell.setFontColor("black").setBackground("red");
-    else cell.setFontColor("#999999").setBackground("#cccccc");
-    SpreadsheetApp.flush();
+    this.statusCells().set("connection",active);
   }
 
   switchReadingControl(active){
-    let row = 2;
-    let col = 2;
-    let cell = this.sheet.getRange(row,col,1,1);
-    if(active) cell.setFontColor("black").setBackground("green");
-    else cell.setFontColor("#999999").setBackground("#cccccc");
-    SpreadsheetApp.flush();
+    this.statusCells().set("reading",active);
   }
 
   switchDataWritingControl(active){
-    let row = 2;
-    let col = 4;
-    let cell = this.sheet.getRange(row,col,1,1);
-    if(active) cell.setFontColor("black").setBackground("red");
-    else cell.setFontColor("#999999").setBackground("#cccccc");
-    SpreadsheetApp.flush();
+    this.statusCells().set("writing",active);
   }
 
   switchEstimateInfoActive(active=true){
-    let row = 2;
-    let col = 5;
-    this.sheet.getRange(row,col,1,2).setFontColor(active ? "black" : "#999999");
-    SpreadsheetApp.flush();
+    this.statusCells().setEstimateActive(active);
   }
 
 }

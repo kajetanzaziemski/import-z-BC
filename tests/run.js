@@ -51,10 +51,10 @@ test('colorToApi_: names, #rgb, #rrggbb and #aarrggbb', () => {
   assert.deepStrictEqual(G.colorToApi_('#fff'), { red: 1, green: 1, blue: 1 });
   assert.throws(() => G.colorToApi_('nope'), /unknown colour/);
 });
-test('alignOf_: general = unset, general-left = left', () => {
+test('alignOf_: general, general-left and general-right all mean "not set"', () => {
   assert.strictEqual(G.alignOf_('general'), null);
-  assert.strictEqual(G.alignOf_('general-left'), 'LEFT');
-  assert.strictEqual(G.alignOf_('general-right'), 'RIGHT');
+  assert.strictEqual(G.alignOf_('general-left'), null);
+  assert.strictEqual(G.alignOf_('general-right'), null);
   assert.strictEqual(G.alignOf_('center'), 'CENTER');
   assert.throws(() => G.alignOf_('diagonal'), /unknown horizontal alignment/);
 });
@@ -295,7 +295,7 @@ both('formats: weight, size, colour (name, hex, #aarrggbb), alignments, wrap, nu
   g.commit();
   assert.deepStrictEqual(cellOf(s, 1, 1).fmt, { bold: true, size: 10, color: '#000000', vAlign: 'bottom', wrap: 'OVERFLOW', bg: '#cccccc' });
   assert.deepStrictEqual(cellOf(s, 1, 2).fmt, { bold: false, size: 8, color: '#999999', hAlign: 'center', vAlign: 'middle', wrap: 'WRAP', bg: '#ffffff' });
-  assert.deepStrictEqual(cellOf(s, 1, 3).fmt, { bold: true, size: 8, color: '#008000', hAlign: 'left', vAlign: 'bottom', wrap: 'CLIP', bg: '#ff0000' });
+  assert.deepStrictEqual(cellOf(s, 1, 3).fmt, { bold: true, size: 8, color: '#008000', vAlign: 'bottom', wrap: 'CLIP', bg: '#ff0000' });
   assert.deepStrictEqual([cellOf(s, 2, 1).fmt.numFmt, cellOf(s, 2, 3).fmt.numFmt], ['yyyy-mm-dd hh:mm', '#,##0']);
 });
 
@@ -561,6 +561,9 @@ test('rule: no other platform globals than SpreadsheetApp, Sheets and Utilities'
   const found = new Set((text.match(/\b(SpreadsheetApp|Sheets|Utilities|PropertiesService|CacheService|ScriptApp|Session|Logger|HtmlService|UrlFetchApp|LockService|DriveApp|console)\b/g) || []));
   assert.deepStrictEqual([...found].sort(), ['Sheets', 'SpreadsheetApp', 'Utilities']);
 });
+
+// ---- ConfigGrid and SheetCoeditor (golden tests against the frozen legacy code) ------------------------------------------
+require('./config-grid.test.js')({ test, both, parity, MODES, Grid });
 
 // ---- runner -----------------------------------------------------------------------------------------------------------
 let failed = 0;

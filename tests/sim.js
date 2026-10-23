@@ -21,6 +21,8 @@ const serviceColor = c => {
   if (/^#[0-9a-f]{8}$/i.test(c)) c = '#' + c.slice(3);
   return c.toLowerCase();
 };
+/** 'general', 'general-left', 'general-right' are "no explicit alignment" (the general alignment renders text left, numbers right). */
+const alignCanon = a => (a === null || a === undefined || /^(general(-left|-right)?|normal)$/.test(String(a)) ? null : String(a).toLowerCase());
 const isDateFormat = p => /[yd]/i.test(String(p).replace(/"[^"]*"/g, '')) || /[hs]/i.test(String(p).replace(/"[^"]*"/g, ''));
 
 /** Offset of a time zone at a moment, minutes (Intl based, so a zone with a daylight saving time is simulated for real). */
@@ -214,7 +216,15 @@ class SimBook {
       getName: () => s.title, getSheetId: () => s.id, getMaxRows: () => s.rowCount, getMaxColumns: () => s.colCount,
       getLastRow: () => s.lastRow(), getLastColumn: () => s.lastCol(), getFrozenRows: () => s.frozen,
       setFrozenRows: n => { call(); s.frozen = n; },
-      getRange: (r, c, nr, nc) => book.rangeObj(s, r, c, nr === undefined ? 1 : nr, nc === undefined ? 1 : nc),
+      getRange: (r, c, nr, nc) => {
+        if (typeof r === 'string') {                                   // "B1:F1"
+          const m = r.match(/^([A-Z]+)(\d+)(?::([A-Z]+)(\d+))?$/);
+          if (!m) throw new Error('SimBook: unsupported A1 notation ' + r);
+          const c1 = colNum(m[1]), r1 = Number(m[2]);
+          return book.rangeObj(s, r1, c1, (m[4] ? Number(m[4]) : r1) - r1 + 1, (m[3] ? colNum(m[3]) : c1) - c1 + 1);
+        }
+        return book.rangeObj(s, r, c, nr === undefined ? 1 : nr, nc === undefined ? 1 : nc);
+      },
       insertRowsAfter: (after, n) => { call(); s.insertRows(after, n); },
       insertColumnsAfter: (after, n) => { call(); s.insertCols(after, n); },
       deleteColumns: (from, n) => { call(); s.deleteCols(from, n); },
@@ -248,6 +258,7 @@ class SimBook {
       if (Object.prototype.toString.call(v) === '[object Date]') { s.setValue(rr, cc, book.toSerial(v), ''); }
       else s.setValue(rr, cc, v, '');
     };
+    const rangeAt = (rr, cc) => book.rangeObj(s, rr, cc, 1, 1);
     const self = {
       getRow: () => r, getColumn: () => c, getNumRows: () => nr, getNumColumns: () => nc, getLastRow: () => r + nr - 1, getLastColumn: () => c + nc - 1,
       getA1Notation: () => colName(c) + r + (nr > 1 || nc > 1 ? ':' + colName(c + nc - 1) + (r + nr - 1) : ''),
@@ -271,9 +282,19 @@ class SimBook {
       setFontSize: n => fmtSet('size', n),
       setFontColor: col => fmtSet('color', serviceColor(col)),
       setVerticalAlignment: a => fmtSet('vAlign', a),
-      setHorizontalAlignment: a => fmtSet('hAlign', a),
+      setHorizontalAlignment: a => fmtSet('hAlign', alignCanon(a)),
       setWrapStrategy: w => fmtSet('wrap', w),
       setNumberFormat: p => fmtSet('numFmt', p),
+      setValue: v => { call(); put(r, c, v); return self; },
+      // the array forms (legacy code uses them): a[i][j] goes to cell (i, j)
+      setFontWeights: a => { call(); each((rr, cc, i, j) => rangeAt(rr, cc).setFontWeight(a[i][j])); return self; },
+      setBackgrounds: a => { call(); each((rr, cc, i, j) => rangeAt(rr, cc).setBackground(a[i][j])); return self; },
+      setFontSizes: a => { call(); each((rr, cc, i, j) => rangeAt(rr, cc).setFontSize(a[i][j])); return self; },
+      setHorizontalAlignments: a => { call(); each((rr, cc, i, j) => rangeAt(rr, cc).setHorizontalAlignment(a[i][j])); return self; },
+      setVerticalAlignments: a => { call(); each((rr, cc, i, j) => rangeAt(rr, cc).setVerticalAlignment(a[i][j])); return self; },
+      setWrapStrategies: a => { call(); each((rr, cc, i, j) => rangeAt(rr, cc).setWrapStrategy(a[i][j])); return self; },
+      setFontColors: a => { call(); each((rr, cc, i, j) => rangeAt(rr, cc).setFontColor(a[i][j])); return self; },
+      setNotes: a => { call(); each((rr, cc, i, j) => rangeAt(rr, cc).setNote(a[i][j])); return self; },
       setBorder: (...args) => { call(); s.borders.push({ r1: r, c1: c, r2: r + nr - 1, c2: c + nc - 1, args }); return self; }
     };
     return self;

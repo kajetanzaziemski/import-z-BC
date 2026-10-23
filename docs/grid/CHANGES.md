@@ -14,13 +14,14 @@
 | `grid.autoResizeColumns(from, n)` | Final column numbers; follows inserted columns. |
 | Dates | `Date` values are written in both paths (API: serial number in the spreadsheet's time zone) and read back as `Date` from cells whose number format is DATE / TIME / DATE_TIME. |
 | colours | `'#rrggbb'`, `'#rgb'`, `'#aarrggbb'` (what `getFontColors` returns), basic names (`black`, `green`, `red`...). |
-| horizontal alignment | `'general'` = no explicit alignment, `'general-left'` = left (as `getHorizontalAlignments` returns). |
+| horizontal alignment | `'general'`, `'general-left'`, `'general-right'` (what `getHorizontalAlignments` returns for a cell without an explicit alignment) all mean "not set": the general alignment renders text left and numbers right by itself. |
 
 ## Changed
 - `spec.anchor` is optional (default row 1); `Grid.open` returns `null` for a missing sheet on **both** paths (wyceny threw on the API path).
 - The window **grows**: with `insertRowsAfter` (wyceny cut it back to its old height), and with any write past it. A write to a row past the end of the
   sheet throws; a write past the last column appends columns to the sheet. Notes and validations also reach their cells. (Before, such writes were dropped silently.)
 - `insertRowsAfter(..., { plain: true })` on the service path clears the validation of the **whole** row (before: only up to the window's width).
+- `Grid.open` takes an optional `window` (rows to read): a small grid for a few known cells, e.g. a status row.
 - `Grid.open` on the API path also reads the time zone and the cells' number format type.
 
 ## Not changed, not used by import-z-BC, not tested here

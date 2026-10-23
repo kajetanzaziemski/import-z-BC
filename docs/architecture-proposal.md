@@ -1,6 +1,6 @@
 # Architecture proposal: import-z-BC on top of the Grid layer
 
-Status: proposal; steps 1-3 of the migration plan are done (Grid + helpers + tests + the Grid additions of section 4). Nothing of the add-on uses the grid yet. Branch `refactor-and-grid`.
+Status: proposal; steps 1-4 of the migration plan are done. `ConfigGrid` (`Config Grid.js`) now writes the config sheet header and the status cells; `SheetCoeditor` forwards to it. Nothing else uses the grid yet. Branch `refactor-and-grid`.
 
 ## 1. What was copied
 
@@ -87,8 +87,8 @@ Alternative: collapse the formatting calls into `formatRow`-style `spec` objects
    and the Spreadsheet service, so every scenario runs through both commit paths and a parity test compares the sheets).
    Still open: golden-test the current `SheetCoeditor` output (header block incl. formats) so the refactor can be compared.
 3. Done: Grid extended (section 4), see `docs/grid/CHANGES.md` for the list and the known limits.
-4. Introduce `ConfigGrid`; make `SheetCoeditor.setupConfigHeader` and status switches use it. First real use of Grid,
-   smallest blast radius (new-sheet creation).
+4. Done: `ConfigGrid` (header, status cells); `SheetCoeditor.insertNewConfigSheet/setupConfigHeader/switch*/setTotRowsInfo` forward to it.
+   Golden-tested against the frozen legacy code (`docs/testing.md`); not yet checked on a real spreadsheet.
 5. Move config reading/writing (`loadFromSheet`, `insertRows`, `setDataValidationsToSheet`) onto the grid.
 6. `SettingsGrid`.
 7. `BulkSheet` + extract `RefreshSheet` use case from `Menu.js`.
