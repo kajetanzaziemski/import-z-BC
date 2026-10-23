@@ -101,7 +101,7 @@ function refreshCurrentSheet_script(){
   let mStgs = getMainSettings();
   let configSheet = mStgs.getConfigSheetName(activeSheet);
   // dbgLog("configSheet: "+configSheet);
-  if(configSheet) refreshAllDataForConfigSheet(configSheet);
+  if(configSheet) RefreshSheet.run(configSheet);
   else Controller.registerClosingOnce(()=>SpreadsheetApp.getUi().alert("Wybrany arkusz nie jest arkszuem konfiguracji. \n Zobacz: menu Rozszerzenia -> Import z BC -> Pomoc."),"userAlertNoConfigSheet");
 }
 
@@ -112,8 +112,8 @@ function estimateForCurrentSheet(){
 function estimateForCurrentSheet_script(){
   let activeSheet = SpreadsheetApp.getActive().getActiveSheet().getName();
   let mStgs = getMainSettings();
-  configSheet = mStgs.getConfigSheetName(activeSheet);
-  if(configSheet) estimateResponseSize(configSheet);
+  const configSheet = mStgs.getConfigSheetName(activeSheet);
+  if(configSheet) EstimateSheet.run(configSheet);
 }
 
 /**
@@ -149,90 +149,22 @@ function insertImportWizard(){
 }
 
 function refreshAll(){
-  Controller.run("menuRefreshAll",() => getMainSettings().getSheetList().forEach(cfg => refreshAllDataForConfigSheet(cfg.configSheet,cfg.resultSheet)));
+  Controller.run("menuRefreshAll",() => getMainSettings().getSheetList().forEach(cfg => RefreshSheet.run(cfg.configSheet,cfg.resultSheet)));
 }
 
 function refreshAllTrue(){
   let sList = getMainSettings().getSheetListWithRefreshTrue();
-  if(sList.length) sList.forEach(cfg => refreshAllDataForConfigSheet(cfg.configSheet,cfg.resultSheet));
+  if(sList.length) sList.forEach(cfg => RefreshSheet.run(cfg.configSheet,cfg.resultSheet));
 }
 
+/** Kept under its old name (Test Functions.js, anything that still calls it); the work is in RefreshSheet.js. */
 function refreshAllDataForConfigSheet(configSheetName,resultSheetName){
-  configSheetName = configSheetName ?? getMainSettings().getConfigSheetNames()[0];
-  let shCoed = new SheetCoeditor(configSheetName,true);
-  try{ 
-    if(!shCoed.getTable()){
-      dbgLog("No table in config sheet. Quitting.");
-      shCoed.switchReadingControl(false);
-      return;
-    }
-    
-    var odConnection = new ODataConnection()
-      .setODataQuery(shCoed.getTable(),shCoed.getTableQueryArray(),shCoed.getDataTypes())
-      .setExtendQuery(shCoed.getExtendTable(),shCoed.getExtendQueryArray(),shCoed.getDataTypes())
-      .setupConnection();
-    // odConnection.queryURL = odConnection.queryURL.replace("S.A.","sa");
-    dbgLog(odConnection.queryURL);
-    
-    odConnection.readAllPages(shCoed);
-
-    var columnDataTypes = odConnection.getColumnInfo().map(info => getMetadata().getDataType(info.field,info.table ?? shCoed.getTable()));
-  } catch(e) {
-    shCoed.switchReadingControl(false);
-    throw e;  
-  }
-  shCoed.switchReadingControl(false);
-  shCoed.switchDataWritingControl(true);
-  try{  
-    var table1 = odConnection.getDataArray();
-
-    var sheetName = resultSheetName ?? getMainSettings().getResultSheetName(configSheetName);
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    let sheet = ss.getSheetByName(sheetName);
-    if (!sheet) sheet = ss.insertSheet(sheetName);
-    sheet.getDataRange().clear();
-    dbgLog(columnDataTypes);
-    columnDataTypes.forEach((dataType,index)=>{
-      sheet.getRange(1,index+1,table1.length,1).setNumberFormat(new DataType(dataType).getSpreadsheetNumberFormat()); 
-    });
-    sheet.getRange(1, 1, table1.length, table1[0].length).setValues(table1); 
-  } catch (e) {
-    shCoed.switchDataWritingControl(false);
-    throw e;  
-  }
-  shCoed.switchDataWritingControl(false);
+  return RefreshSheet.run(configSheetName,resultSheetName);
 }
 
+/** Kept under its old name; the work is in EstimateSheet.js. */
 function estimateResponseSize(configSheetName){
-  configSheetName = configSheetName ?? getMainSettings().getConfigSheetNames()[0];
-  var shCoed = new SheetCoeditor(configSheetName,true);
-  try{
-    if(!shCoed.getTable()){
-      dbgLog("No table in config sheet. Quitting.")
-      return;
-    }   
-  } catch(e) {
-    shCoed.switchReadingControl(false);
-    throw e;
-  }
-  shCoed.switchReadingControl(false);
-  shCoed.switchConnectionControl(true);
-  try{
-    var odConnection = new ODataConnection()
-      .setODataQuery(shCoed.getTable(),shCoed.getTableQueryArray(),shCoed.getDataTypes())
-      .setExtendQuery(shCoed.getExtendTable(),shCoed.getExtendQueryArray(),shCoed.getDataTypes())
-      .setupConnection();
-    // odConnection.queryURL = odConnection.queryURL.replace("S.A.","sa");
-    dbgLog(odConnection.queryURL);
-    odConnection.fetchHttpResponse();
-    odConnection.readPage();
-    dbgLog(odConnection.getTotalRows());
-  } catch(e) {
-    shCoed.switchConnectionControl(false);
-    throw e;  
-  }
-  shCoed.switchConnectionControl(false);
-  shCoed.setTotRowsInfo(odConnection.getTotalRows());
+  return EstimateSheet.run(configSheetName);
 }
 
 function getTable(tableName,queryText) {

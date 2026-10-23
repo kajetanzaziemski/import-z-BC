@@ -44,6 +44,11 @@ the refactor** and verify each entry point's outcome in a real spreadsheet. The 
   offline `ConnectionError`); the refactor keeps them on purpose - a finding that disappears or a new `FAIL` is a behaviour change to look at.
   Run the same checks on a copy of the old script (branch `live-test-helpers`) and on this branch, and compare the two reports.
 
+## 2d. Use-case tests (`tests/refresh.test.js`)
+The extracted workflows (`RefreshSheet`, `EstimateSheet`, `ResultSheet`, `ImportQuery`) run with the real `Menu.js` on the simulated spreadsheet; the config reader, the BC connection,
+the metadata and the settings sheet are faked and record their calls, so the tests pin the order of the status-cell switches, the error paths and what is written to the result sheet.
+Written against the old code first. See `docs/use-cases.md`.
+
 ## 3. Real-spreadsheet check (do before anything is pushed to the live add-on)
 Production runs the **Spreadsheet-service path** (the Sheets advanced service is not enabled in `appsscript.json`), so that is the path to check.
 1. Push to a **copy** of the script (a second Apps Script project / test spreadsheet, not the Marketplace one): `clasp push` there (`.claspignore` keeps `tests/` out).

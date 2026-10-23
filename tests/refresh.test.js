@@ -233,10 +233,10 @@ module.exports = function register(t) {
     assert.deepStrictEqual(b.calls(), []);
   });
 
-  test('menu: KNOWN QUIRK pinned - estimateForCurrentSheet leaks an implicit global "configSheet" (bugs-todo #4)', () => {
+  test('menu: estimateForCurrentSheet does not leak a global variable "configSheet" any more (bugs-todo #4; the only intended change of the extraction)', () => {
     const a = scenario({ activeSheet: 'Konfiguracja 1' });
     a.ex.eval(`estimateForCurrentSheet()`);
-    assert.strictEqual(a.ex.eval(`typeof globalThis.configSheet`), 'string');
+    assert.strictEqual(a.ex.eval(`typeof globalThis.configSheet`), 'undefined');
   });
 
   test('menu: refreshAll refreshes every config/result pair of the settings sheet, in order; refreshAllTrue only those ticked', () => {
@@ -256,5 +256,56 @@ module.exports = function register(t) {
   test('menu: the entry points keep their action names for the live check (menuRefreshCurrentSheet, menuRefreshAll, menuEstimateForCurrentSheet)', () => {
     const text = fs.readFileSync(path.join(ROOT, 'Menu.js'), 'utf8');
     ['menuRefreshCurrentSheet', 'menuRefreshAll', 'menuEstimateForCurrentSheet'].forEach(a => assert.ok(text.includes('Controller.run("' + a + '"'), a));
+  });
+
+  // ---- the extracted parts on their own ----------------------------------------------------------------------------------------------
+  test('ResultSheet.write: creates the sheet when missing, writes header + rows, one number format per column by data type', () => {
+    const { book, ex } = scenario();
+    ex.eval(`ResultSheet.write('Nowy', [['a', 'b'], [1, 'x'], [2, 'y']], ['Edm.Int32', 'Edm.Guid'])`);
+    assert.deepStrictEqual(sheetValues(book, 'Nowy', 3, 2), [['a', 'b'], [1, 'x'], [2, 'y']]);
+    assert.deepStrictEqual([1, 2].map(c => book.sheets['Nowy'].cell(3, c).fmt.numFmt), ['#', '@']);
+  });
+
+  test('ResultSheet.write: JS data type names work too, unknown types give General, a column without a type gets no format', () => {
+    const { book, ex } = scenario();
+    ex.eval(`ResultSheet.write('Nowy', [['a', 'b', 'c'], [1, 2, 3]], ['number', 'whatever'])`);
+    const s = book.sheets['Nowy'];
+    assert.deepStrictEqual([1, 2, 3].map(c => (s.cell(2, c) || { fmt: {} }).fmt.numFmt), ['#,##0.00', 'General', undefined]);
+  });
+
+  test('ResultSheet.write: an empty table fails (nothing to write) and leaves no half-written sheet content', () => {
+    const { book, ex } = scenario();
+    assert.throws(() => ex.eval(`ResultSheet.write('Nowy', [], [])`), /Cannot read properties of undefined/);
+  });
+
+  test('ImportQuery.connectionFor: asks the coeditor for table, query lines, extend and types, and sets the connection up (no fetch)', () => {
+    const { ex, calls } = scenario({ extendTable: 'Lines', extendArray: [['select', 'Qty']] });
+    ex.eval(`ImportQuery.connectionFor(new SheetCoeditor('Konfiguracja 1', false))`);
+    assert.deepStrictEqual(names(calls()), ['coed.new', 'conn.new', 'conn.query', 'conn.extend', 'conn.setup']);
+  });
+
+  // ---- rules ----------------------------------------------------------------------------------------------------------------------------
+  const code = f => fs.readFileSync(path.join(ROOT, f), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
+
+  test('rule: the use cases do not touch the spreadsheet themselves (no SpreadsheetApp, no ranges): sheets are reached through SheetCoeditor / ResultSheet', () => {
+    ['RefreshSheet.js', 'EstimateSheet.js', 'Import Query.js'].forEach(f => assert.ok(!/SpreadsheetApp|getRange|getSheetByName|insertSheet/.test(code(f)), f));
+  });
+
+  test('rule: Menu.js builds no connection and reads no config itself - the workflows are in the use cases; the old names are one-line forwarders', () => {
+    const m = code('Menu.js');
+    assert.ok(!/new\s+(ODataConnection|SheetCoeditor)\b/.test(m));
+    assert.ok(/function refreshAllDataForConfigSheet\(configSheetName,resultSheetName\)\{\s*return RefreshSheet\.run\(configSheetName,resultSheetName\);\s*\}/.test(m));
+    assert.ok(/function estimateResponseSize\(configSheetName\)\{\s*return EstimateSheet\.run\(configSheetName\);\s*\}/.test(m));
+  });
+
+  test('rule: only ResultSheet.js writes a result table (clear + setValues of a data range)', () => {
+    const offenders = fs.readdirSync(ROOT).filter(f => /\.js$/.test(f) && f !== 'ResultSheet.js' && !/^(Live Check|Test Functions|Grid)/.test(f))
+      .filter(f => /getDataRange\(\)\.clear\(\)/.test(code(f)));
+    assert.deepStrictEqual(offenders, []);
+  });
+
+  test('rule: the new files load alone, in any order (nothing is used at load time)', () => {
+    const vm = require('vm');
+    ['Import Query.js', 'ResultSheet.js', 'RefreshSheet.js', 'EstimateSheet.js'].forEach(f => vm.runInNewContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), {}));
   });
 };
