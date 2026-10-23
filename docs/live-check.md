@@ -5,7 +5,7 @@ spreadsheet: after clicking a menu item, editing a config sheet or waiting for a
 re-running the work.
 
 * Code: `Live Check.js` (switch, snapshots, recording, reports), `Live Check Verifiers.js` (the expectations) and
-  `Live Check Sidebar.js` / `.html` (the sidebar).
+  `Live Check Sidebar Server.js` / `Live Check Sidebar.html` (the sidebar).
 * **Off by default.** The add-on behaves exactly as before until the switch is turned on, and with the two files removed
   the hooks in `Controller.js` do nothing.
 * A check never throws into the run it checks. A crashing verifier is reported as `FAIL verifier crashed`.
