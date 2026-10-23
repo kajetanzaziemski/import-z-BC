@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <link rel="stylesheet" href="https://ssl.gstatic.com/docs/script/css/add-ons1.css">
+    <style>
+      body { font-family: Arial, sans-serif; font-size: 13px; margin: 0; }
+      #bar { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; border-bottom: 1px solid #ddd; position: sticky; top: 0; background: #fff; }
+      #state { font-weight: bold; }
+      #state.on { color: #1e8e3e; }
+      #state.off { color: #80868b; }
+      #note { color: #80868b; font-style: italic; padding: 6px 10px; }
+      #error { color: #d93025; padding: 6px 10px; }
+      .run { border-bottom: 1px solid #eee; }
+      .head { display: flex; align-items: center; gap: 8px; padding: 6px 10px; cursor: pointer; }
+      .head:hover { background: #f6f8fa; }
+      .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; background: #80868b; }
+      .PASS .dot { background: #1e8e3e; }
+      .FAIL .dot { background: #d93025; }
+      .WARN .dot { background: #f9ab00; }
+      .RUN .dot { background: #1a73e8; animation: pulse 1s infinite; }
+      @keyframes pulse { 50% { opacity: 0.25; } }
+      .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .FAIL .name { color: #d93025; font-weight: bold; }
+      .meta { color: #80868b; white-space: nowrap; font-size: 11px; }
+      .detail { display: none; margin: 0; padding: 6px 10px 10px 28px; white-space: pre-wrap; word-break: break-word; font: 11px/1.4 monospace; background: #fafafa; }
+      .run.open .detail { display: block; }
+    </style>
+  </head>
+  <body>
+    <div id="bar">
+      <span>Live check: <span id="state" class="off">…</span></span>
+      <button id="toggle" class="action" disabled>…</button>
+    </div>
+    <div id="error"></div>
+    <div id="note">Ładowanie…</div>
+    <div id="list"></div>
+
+    <script>
+      var POLL_MS = 3000;
+      var token = null;
+      var rows = [];
+      var open = {};          // key -> true when the details are shown
+      var details = {};       // key -> text last fetched
+      var enabled = false;
+      var timer = null;
+
+      function pad(n) { return n < 10 ? "0" + n : "" + n; }
+      function clock(iso) { var d = new Date(iso); return pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds()); }
+      function duration(r) {
+        var ms = r.s === "RUN" ? Date.now() - Date.parse(r.t) : r.ms;
+        return r.s === "LOST" ? "?" : ms >= 10000 ? Math.round(ms / 1000) + " s" : ms + " ms";
+      }
+
+      function render() {
+        var list = document.getElementById("list");
+        list.textContent = "";
+        document.getElementById("note").textContent = rows.length ? "" : (enabled ? "Brak uruchomień. Użyj dodatku, wyniki pojawią się tutaj." : "Live check jest wyłączony - włącz go, żeby zbierać wyniki.");
+        rows.forEach(function (r) {
+          var run = document.createElement("div");
+          run.className = "run " + r.s + (open[r.k] ? " open" : "");
+          var head = document.createElement("div");
+          head.className = "head";
+          var dot = document.createElement("span"); dot.className = "dot";
+          var name = document.createElement("span"); name.className = "name"; name.textContent = r.a + (r.bad ? "  (" + r.bad + ")" : "");
+          name.title = r.s;
+          var meta = document.createElement("span"); meta.className = "meta"; meta.textContent = clock(r.t) + " · " + duration(r);
+          meta.setAttribute("data-key", r.k);
+          head.appendChild(dot); head.appendChild(name); head.appendChild(meta);
+          var detail = document.createElement("pre"); detail.className = "detail"; detail.textContent = details[r.k] || "…";
+          head.onclick = function () { toggle(r); };
+          run.appendChild(head); run.appendChild(detail);
+          list.appendChild(run);
+        });
+      }
+
+      function toggle(r) {
+        if (open[r.k]) { delete open[r.k]; render(); return; }
+        open[r.k] = true; render(); loadDetail(r.k);
+      }
+
+      function loadDetail(key) {
+        google.script.run
+          .withSuccessHandler(function (text) { details[key] = text; render(); })
+          .withFailureHandler(showError)
+          .liveCheckSidebarDetail(key);
+      }
+
+      function showError(err) { document.getElementById("error").textContent = "Błąd: " + (err && err.message || err); }
+
+      function applyState(on) {
+        enabled = on;
+        var s = document.getElementById("state");
+        s.textContent = on ? "włączony" : "wyłączony"; s.className = on ? "on" : "off";
+        var b = document.getElementById("toggle");
+        b.textContent = on ? "Wyłącz" : "Włącz"; b.disabled = false;
+      }
+
+      function poll() {
+        clearTimeout(timer);
+        if (document.hidden) { timer = setTimeout(poll, POLL_MS); return; }
+        google.script.run
+          .withSuccessHandler(function (data) {
+            document.getElementById("error").textContent = "";
+            applyState(data.enabled);
+            if (data.rows) {
+              var previous = {};
+              rows.forEach(function (r) { previous[r.k] = r.s + r.ms; });
+              rows = data.rows;
+              token = data.token;
+              // details that are open are refreshed when their run changed (e.g. finished)
+              rows.forEach(function (r) { if (open[r.k] && previous[r.k] !== r.s + r.ms) loadDetail(r.k); });
+              render();
+            }
+            timer = setTimeout(poll, POLL_MS);
+          })
+          .withFailureHandler(function (err) { showError(err); timer = setTimeout(poll, POLL_MS * 2); })
+          .liveCheckSidebarData(token);
+      }
+
+      document.getElementById("toggle").onclick = function () {
+        this.disabled = true;
+        google.script.run.withSuccessHandler(function (on) { applyState(on); poll(); }).withFailureHandler(showError).liveCheckSidebarSetEnabled(!enabled);
+      };
+      document.addEventListener("visibilitychange", function () { if (!document.hidden) poll(); });
+      // running scripts show a growing time between polls
+      setInterval(function () { if (rows.some(function (r) { return r.s === "RUN"; })) render(); }, 1000);
+      poll();
+    </script>
+  </body>
+</html>

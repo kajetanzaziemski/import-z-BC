@@ -480,6 +480,11 @@ function buildLiveCheckVerifiers_(){
       verify(c){ lcVerifyNothingChanged_(c); c.skip("sidebar shown","the UI cannot be read back by a script"); }
     },
 
+    requestLiveCheckSidebar: {
+      needs: ["sheets","docProps"],
+      verify(c){ lcVerifyNothingChanged_(c); c.skip("sidebar shown","the UI cannot be read back by a script"); }
+    },
+
     menuInsertImportWizard: {
       needs: ["sheets","settingsSheet"],
       verify(c){

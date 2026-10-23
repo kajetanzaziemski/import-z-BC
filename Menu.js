@@ -41,7 +41,7 @@ function fullMenu() {
       .createAddonMenu()
       .addItem('Autoryzuj', 'startAuthFlow')
       .addItem('Stan konfiguracji','statusCheck')
-      .addItem('Narzędzia programisty','listAllTriggers') 
+      .addSubMenu(devToolsMenu_(ui))
       .addItem('Nowy kreator importu', 'insertImportWizard')
       .addItem('Analizuj zapytanie','checkConfigSheet')
       .addItem('Oszacuj wielkość danych','estimateForCurrentSheet')
@@ -51,6 +51,13 @@ function fullMenu() {
       .addItem('Wyloguj', 'logoutFlow')
       .addItem('Test item','testItem')
       .addToUi();
+}
+
+/** "Narzędzia programisty" submenu. The live check entry exists only while the helper files are in the project. */
+function devToolsMenu_(ui){
+  const menu = ui.createMenu('Narzędzia programisty').addItem('Wszystkie triggery','listAllTriggers');
+  if(typeof liveCheckSidebar === "function") menu.addItem('Live check','liveCheckSidebar');
+  return menu;
 }
 
 function statusCheck(){

@@ -4,7 +4,8 @@ Every entry point of the add-on checks its own outcome once it is done. Meant fo
 spreadsheet: after clicking a menu item, editing a config sheet or waiting for a trigger, the result is judged without
 re-running the work.
 
-* Code: `Live Check.js` (switch, snapshots, recording, reports) and `Live Check Verifiers.js` (the expectations).
+* Code: `Live Check.js` (switch, snapshots, recording, reports), `Live Check Verifiers.js` (the expectations) and
+  `Live Check Sidebar.js` / `.html` (the sidebar).
 * **Off by default.** The add-on behaves exactly as before until the switch is turned on, and with the two files removed
   the hooks in `Controller.js` do nothing.
 * A check never throws into the run it checks. A crashing verifier is reported as `FAIL verifier crashed`.
@@ -31,6 +32,19 @@ Statuses: `PASS`, `FAIL` (the add-on did not do what it should), `WARN` (suspici
 `docs/trigger-management-todo.md`; the line says which), `SKIP` (cannot be checked here, e.g. UI, or simple-trigger
 authorisation limits). The status of a run is its worst check.
 
+## Sidebar
+
+Menu: add-on menu -> **Narzędzia programisty** -> **Live check**. It lists the recent runs (40), newest first, one per line:
+green = `PASS`, red = `FAIL`, amber = `WARN`, grey = `SKIP`, pulsing blue = still running, grey `LOST` = started but no
+result in 10 minutes (aborted, timed out or crashed). The number in brackets is the count of failed / warned checks. A click
+opens the details, exactly as `liveCheckReport()` prints them. The switch in the top bar turns the checks on / off for the
+document.
+
+A run is stored as `RUN` when it starts and overwritten with its result when it ends (one extra property write per checked run).
+The sidebar asks the server every 3 s (not while the sidebar is hidden) and gets only a token back when nothing changed.
+The three server functions it uses (`liveCheckSidebarData`, `liveCheckSidebarDetail`, `liveCheckSidebarSetEnabled`) are
+monitoring tools and are not checked themselves. The submenu entry only appears while the helper files are in the project.
+
 ## What is checked
 
 | Entry point (action name) | Crude check of the outcome |
@@ -45,7 +59,7 @@ authorisation limits). The status of a run is its worst check.
 | `menuEstimateForCurrentSheet` | F2 is a number formatted `#,##0`, estimate info shown, indicators idle |
 | `menuRefreshCurrentSheet`, `menuRefreshAll` | result sheet exists; data rows = estimate in F2 (±5 % warns, approximate when `extend` is used); every column has a header and a uniform number format; formats match the cached data types; indicators idle |
 | `menuAuthFlow`, `menuLogoutFlow`, `authCallback` | nothing changed / OAuth token key removed / stored |
-| `menuConnectionSetup`, `menuTestItem`, `requestStatusCheck`, `requestListAllTriggers` | read-only |
+| `menuConnectionSetup`, `menuTestItem`, `requestStatusCheck`, `requestListAllTriggers`, `requestLiveCheckSidebar` | read-only |
 | `requestAddonStatus`, `requestChangeAddonStatus`, `requestSettingsSheetName`, `requestSetSettingsSheetName`, `requestPermitsInfo` | returned / stored value matches; ON → settings sheet name stored, agents active; a sheet with the chosen name must have the settings signature |
 | `forceAgentRefresh` | one edit + one change trigger installed for this document, returned id matches, both logged ON for document and user, pair in the agent array (≤ 5), no logged trigger missing from the project, suspect flag cleared |
 | `requestDeleteAllAgents` | agent array empty, only the agents' triggers removed, log entries gone |
@@ -91,14 +105,6 @@ ends with `ConnectionError` is a `WARN` ("not authorised"), the parts that need 
 
 ## Found while building this
 
-The checks reported these on the code as it was when the helpers were written (not fixed here):
-
-* **Writes lost in `sheetEdit` / `onEdit`.** `agentLog(... MainSettings.getAddonStatus() ...)` runs before `Controller.run()`,
-  so the `StorageObject` for the import settings is created (and its save is registered, once) before `run()` resets
-  `closingActions`. Every `setProperty()` made later in that execution is never saved. Seen as
-  `FAIL permit issued for the new trigger` after editing the refresh frequency: the time trigger is created but the permit
-  is not stored, so when it fires it deletes itself.
-* **Nested `Controller.run()`** (see `trigger-management-todo.md`): switching the add-on ON installs agents whose logs are
-  not saved. Reported as `WARN` ("known issue").
-* Editing a config sheet after a table is chosen throws `ConnectionError` when there is no authorisation / metadata cache
-  (only the table list is guarded). Reported as `WARN ended with a connection error`.
+Defects the checks reported on the code as it was when the helpers were written are logged in `docs/bugs-todo.md`
+(settings writes lost in `sheetEdit`, nested `Controller.run`, `ConnectionError` while editing a config sheet offline, and
+smaller ones noticed on the way). They are not fixed on this branch.

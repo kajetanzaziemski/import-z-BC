@@ -81,10 +81,14 @@ function liveCheckBegin(actionName){
   if(!liveCheckIsEnabled()) return null;
   try{
     const spec = liveCheckVerifiers()[actionName] ?? null;
+    const startedAt = Date.now();
+    const startedIso = new Date(startedAt).toISOString();
     const frame = {
       actionName: actionName,
       spec: spec,
-      startedAt: Date.now(),
+      startedAt: startedAt,
+      startedIso: startedIso,
+      key: LIVE_CHECK_RESULT_PREFIX + startedIso + ":" + Math.random().toString(36).slice(2,6),
       input: lcInputs[actionName],
       nested: lcStack.length > 0,      // started while another checked action was still running (e.g. from a closing action)
       notes: [],
@@ -92,6 +96,7 @@ function liveCheckBegin(actionName){
     };
     delete lcInputs[actionName];
     (spec?.needs ?? []).forEach(part => frame.before[part] = lcCapture_(part));
+    lcStoreRunning_(frame);
     lcStack.push(frame);
     return frame;
   } catch(err) {
@@ -197,6 +202,8 @@ class LiveCheckContext{
     this.nested = frame.nested;
     this.before = frame.before;
     this.startedAt = frame.startedAt;
+    this.startedIso = frame.startedIso;
+    this.key = frame.key;
     this.durationMs = Date.now() - frame.startedAt;
     this.error = error;
     this.result = result;
@@ -324,13 +331,16 @@ function lcCommonChecks_(c){
 // - - - - - - - - recording - - - - - - - -
 
 function lcFormat_(entry){
+  if(entry.s == "RUN" || entry.s == "LOST"){
+    return `${LIVE_CHECK_TAG} ${entry.s} ${entry.a} (started ${entry.t}${entry.s == "LOST" ? "; no result was ever recorded - the run was aborted, timed out or crashed" : "; still running"})`;
+  }
   const head = `${LIVE_CHECK_TAG} ${entry.s} ${entry.a} (${entry.ms} ms)`;
   return head + entry.c.map(x => `\n    ${x[0]} ${x[1]}${x[2] ? " - " + x[2] : ""}`).join("");
 }
 
 function lcRecord_(c){
   const entry = {
-    t: new Date().toISOString(),
+    t: c.startedIso,
     a: c.actionName,
     s: c.status,
     ms: c.durationMs,
@@ -356,7 +366,7 @@ function lcRecord_(c){
       entry.c = entry.c.slice(0,15);
       stored = JSON.stringify(entry);
     }
-    props.setProperty(LIVE_CHECK_RESULT_PREFIX + entry.t + ":" + Math.random().toString(36).slice(2,6),stored);
+    props.setProperty(c.key,stored);
     lcPrune_(props);
   } catch(err) {
     console.error(`${LIVE_CHECK_TAG} could not store the result: ${err}`);
@@ -380,8 +390,15 @@ function lcPrune_(props){
 function lcStoredResults_(){
   const props = PropertiesService.getDocumentProperties();
   return props.getKeys().filter(k => k.indexOf(LIVE_CHECK_RESULT_PREFIX) == 0).sort().reverse().map(k => {
-    try{ return JSON.parse(props.getProperty(k)); } catch(err) { return null; }
+    try{ const entry = JSON.parse(props.getProperty(k)); entry.k = k; return entry; } catch(err) { return null; }
   }).filter(x => x);
+}
+
+/** A run is on the list from its start, so that the sidebar can show it while it is still going. */
+function lcStoreRunning_(frame){
+  try{
+    PropertiesService.getDocumentProperties().setProperty(frame.key,JSON.stringify({t: frame.startedIso, a: frame.actionName, s: "RUN", ms: 0, c: []}));
+  } catch(err) {}
 }
 
 /** Logs and returns the last results, newest first. onlyBad = true hides what passed. */
@@ -394,7 +411,7 @@ function liveCheckReport(limit=20,onlyBad=false){
 /** One line per entry point: how many times it passed / warned / failed among the stored results. */
 function liveCheckSummary(){
   const counts = {};
-  lcStoredResults_().forEach(e => {
+  lcStoredResults_().filter(e => e.s != "RUN" && e.s != "LOST").forEach(e => {
     counts[e.a] = counts[e.a] ?? {PASS: 0, WARN: 0, FAIL: 0, SKIP: 0};
     counts[e.a][e.s]++;
   });
@@ -430,7 +447,8 @@ const LIVE_CHECK_ENTRY_POINTS = [
   {action: "requestAutoRefesh",               entry: "autoRefreshHandler(e) / autoRefresh(e) - time-based trigger"},
   {action: "menuAuthFlow",                    entry: "menu: Autoryzuj"},
   {action: "requestStatusCheck",              entry: "menu: Stan konfiguracji"},
-  {action: "requestListAllTriggers",          entry: "menu: Narzędzia programisty"},
+  {action: "requestListAllTriggers",          entry: "menu: Narzędzia programisty -> Wszystkie triggery"},
+  {action: "requestLiveCheckSidebar",         entry: "menu: Narzędzia programisty -> Live check"},
   {action: "menuInsertImportWizard",          entry: "menu: Nowy kreator importu"},
   {action: "requestCheckConfigSheet",         entry: "menu: Analizuj zapytanie"},
   {action: "menuEstimateForCurrentSheet",     entry: "menu: Oszacuj wielkość danych"},
