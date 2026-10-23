@@ -567,6 +567,11 @@ require('./config-grid.test.js')({ test, both, parity, MODES, Grid });
 
 // ---- state layer: stores, settings, locks, agent detection state (fresh Apps Script executions on fake platform services) ----------
 require('./state.test.js')({ test });
+// the same suite with the live check helpers loaded (switched off): nothing may change
+require('./state.test.js')({ test, suffix: ' [+live check files]', extraFiles: ['Live Check.js', 'Live Check Verifiers.js', 'Live Check Sidebar Server.js'] });
+
+// ---- the live check helpers (merged from live-test-helpers): pinned, covered, never throwing ----------------------------------
+require('./live-check.test.js')({ test, both });
 
 // ---- runner -----------------------------------------------------------------------------------------------------------
 let failed = 0;

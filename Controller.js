@@ -19,8 +19,34 @@ const Controller = (function () {
     closingActions.push(fn);
   }
 
+  // Live check helpers ("Live Check.js") are optional: without that file all of the below does nothing.
+  function checkBegin(actionName) {
+    return typeof liveCheckBegin === "function" ? liveCheckBegin(actionName) : null;
+  }
+
+  function checkEnd(check, error, result, note) {
+    if(check && typeof liveCheckEnd === "function") liveCheckEnd(check, error, result, note);
+  }
+
+  /** Hands the live check of an action what it was called with (event object, arguments). Call right before the action. */
+  function checkInput(actionName, data) {
+    if(typeof liveCheckInput === "function") liveCheckInput(actionName, data);
+  }
+
+  /** Leaves the live check of the running action a note about a decision taken. */
+  function checkNote(text) {
+    if(typeof liveCheckNote === "function") liveCheckNote(text);
+  }
+
+  /** Live check around an entry point that does not use run(). Passes the result and errors through. */
+  function checked(actionName, actionFn, input) {
+    if(typeof liveCheckGuard !== "function") return actionFn();
+    return liveCheckGuard(actionName, actionFn, input);
+  }
+
   function run(actionName, actionFn, e) {
     closingActions = []; // fresh for this execution
+    const check = checkBegin(actionName);
 
     dbgLog(`Running ${actionName}. Test returns ${/^menu/.test(actionName)}`);
     if(/^menu/.test(actionName)){ 
@@ -29,6 +55,7 @@ const Controller = (function () {
     }
     if(!MainSettings.getAddonStatus() && !/^request/.test(actionName)) {
       dbgLog("Addon OFF. Quitting.");
+      checkEnd(check, undefined, null, "addon-off");
       return null;
     }
     dbgLog(`Running ${actionName}...`);
@@ -55,9 +82,10 @@ const Controller = (function () {
       });
     }
 
+    checkEnd(check, error, result);
     if (error) throw error; // or swallow, depending on how you want entry points to behave
     return result;
   }
 
-  return { registerInit, registerClosing, registerClosingOnce, run };
+  return { registerInit, registerClosing, registerClosingOnce, run, checked, checkInput, checkNote };
 })();

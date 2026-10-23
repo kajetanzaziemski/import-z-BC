@@ -14,9 +14,17 @@ const { FakePlatform } = require('./platform-fakes');
 const BASE_FILES = ['Custom errors.js', 'Helper Data Store.js', 'Store.js', 'Settings.js', 'Main Settings.js', 'Controller.js', 'Trigger Manager.js',
   'Global Add-on Settings.js', 'Quick Start.js', 'functions.js', 'Track onEdit Triggers.js', 'Status Manager.js'];
 
+const LIVE_CHECK_FILES = ['Live Check.js', 'Live Check Verifiers.js', 'Live Check Sidebar Server.js'];
+
+/**
+ * t.suffix / t.extraFiles: the suite is registered a second time with the live check helpers loaded (switch off): they must not change
+ * anything the add-on does. File-scanning rules are registered once (no suffix).
+ */
 module.exports = function register(t) {
-  const { test } = t;
-  const FILES = t.stateFiles || BASE_FILES;
+  const suffix = t.suffix || '';
+  const test = (name, fn) => t.test(name + suffix, fn);
+  const rulesOnly = fn => { if (!suffix) fn(); };
+  const FILES = [...BASE_FILES, ...(t.extraFiles || [])];
 
   /** platform + one execution; `ex.eval('MainSettings.getAddonStatus()')` runs code inside it. */
   function setup(platform) {
@@ -295,7 +303,10 @@ module.exports = function register(t) {
   const ROOT = path.join(__dirname, '..');
   const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
   const codeOnly = f => read(f).replace(/\/\*[\s\S]*?\*\//g, '').split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');   // no comments
-  const ALL_JS = fs.readdirSync(ROOT).filter(f => /\.js$/.test(f) && f !== 'Test Functions.js');   // Test Functions.js: manual tests run by hand in the editor
+  // Exempt from the rules below: Test Functions.js (manual tests run by hand in the editor) and Live Check*.js. The live check verifiers read the
+  // stored data DIRECTLY (PropertiesService / CacheService, literal keys) on purpose: they are the independent judge of what the add-on stored,
+  // so they must not go through Store / Settings - that would make the refactor check itself. See docs/testing.md.
+  const ALL_JS = fs.readdirSync(ROOT).filter(f => /\.js$/.test(f) && f !== 'Test Functions.js' && !/^Live Check/.test(f));
 
   test('store: get / set / remove per scope; null removes; getJson / setJson round trip with a fallback', () => {
     const { p, ex } = setup();
@@ -427,33 +438,35 @@ module.exports = function register(t) {
     assert.deepStrictEqual(plain(p.execution(FILES).eval(`getAgentManager().agentStorage.getArray()`)), [['e1', 'c1']]);
   });
 
+  rulesOnly(() => {
   // ---- rules --------------------------------------------------------------------------------------------------------------------
-  test('rule: only Store.js calls HelperDataStore / OptionalDataStore (Test Functions.js, the manual tests, is exempt)', () => {
-    const offenders = ALL_JS.filter(f => !/^(Helper Data Store|Store)\.js$/.test(f) && /\b(HelperDataStore|OptionalDataStore)\b/.test(codeOnly(f)));
-    assert.deepStrictEqual(offenders, []);
-  });
-
-  test('rule: PropertiesService and CacheService are only used by Helper Data Store.js', () => {
-    const offenders = ALL_JS.filter(f => f !== 'Helper Data Store.js' && /\b(PropertiesService|CacheService)\b/.test(codeOnly(f)));
-    assert.deepStrictEqual(offenders, []);
-  });
-
-  test('rule: StorageObject / StorageArray are created only by Store.js (everybody else asks Store.object / Store.array)', () => {
-    const offenders = ALL_JS.filter(f => f !== 'Store.js' && /new\s+Storage(Object|Array)\s*\(/.test(codeOnly(f)));
-    assert.deepStrictEqual(offenders, []);
-  });
-
-  test('rule: Settings.js is the only place that knows the key of the import settings; MainSettings has no storage of its own', () => {
-    const offenders = ALL_JS.filter(f => f !== 'Settings.js' && /importSettingsArray|IMPORT_SETTINGS_KEY/.test(codeOnly(f)));
-    assert.deepStrictEqual(offenders, []);
-    assert.ok(!/Store\./.test(codeOnly('Main Settings.js')) && !/getFreshProperty/.test(codeOnly('Main Settings.js')));
-  });
-
-  test('rule: Store.js and Settings.js load alone, in any order (nothing is used at load time)', () => {
-    const vm = require('vm');
-    [['Store.js', 'Settings.js'], ['Settings.js', 'Store.js']].forEach(order => {
-      const ctx = vm.createContext({});
-      order.forEach(f => new vm.Script(read(f), { filename: f }).runInContext(ctx));
+    test('rule: only Store.js calls HelperDataStore / OptionalDataStore (Test Functions.js, the manual tests, is exempt)', () => {
+      const offenders = ALL_JS.filter(f => !/^(Helper Data Store|Store)\.js$/.test(f) && /\b(HelperDataStore|OptionalDataStore)\b/.test(codeOnly(f)));
+      assert.deepStrictEqual(offenders, []);
+    });
+  
+    test('rule: PropertiesService and CacheService are only used by Helper Data Store.js', () => {
+      const offenders = ALL_JS.filter(f => f !== 'Helper Data Store.js' && /\b(PropertiesService|CacheService)\b/.test(codeOnly(f)));
+      assert.deepStrictEqual(offenders, []);
+    });
+  
+    test('rule: StorageObject / StorageArray are created only by Store.js (everybody else asks Store.object / Store.array)', () => {
+      const offenders = ALL_JS.filter(f => f !== 'Store.js' && /new\s+Storage(Object|Array)\s*\(/.test(codeOnly(f)));
+      assert.deepStrictEqual(offenders, []);
+    });
+  
+    test('rule: Settings.js is the only place that knows the key of the import settings; MainSettings has no storage of its own', () => {
+      const offenders = ALL_JS.filter(f => f !== 'Settings.js' && /importSettingsArray|IMPORT_SETTINGS_KEY/.test(codeOnly(f)));
+      assert.deepStrictEqual(offenders, []);
+      assert.ok(!/Store\./.test(codeOnly('Main Settings.js')) && !/getFreshProperty/.test(codeOnly('Main Settings.js')));
+    });
+  
+    test('rule: Store.js and Settings.js load alone, in any order (nothing is used at load time)', () => {
+      const vm = require('vm');
+      [['Store.js', 'Settings.js'], ['Settings.js', 'Store.js']].forEach(order => {
+        const ctx = vm.createContext({});
+        order.forEach(f => new vm.Script(read(f), { filename: f }).runInContext(ctx));
+      });
     });
   });
 

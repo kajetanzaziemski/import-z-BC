@@ -232,7 +232,7 @@ class StatusManager{
 
 function getAgentStatus(){
   // let trigInfo = StatusManager.getAgentInfo();
-  return [StatusManager.basicStatusCheck(),MainSettings.getAddonStatus()];
+  return Controller.checked("getAgentStatus",() => [StatusManager.basicStatusCheck(),MainSettings.getAddonStatus()]);
   let res = StatusManager.basicStatusCheck() ? "Agent active <br />" : "Agent NOT active <br />";
   res += "Edit Triggers:<br />";
   res += trigInfo.editTriggers?.length<=0 ? "- <br />" : trigInfo.editTriggers.map(trigInfo => trigInfo.triggerId + " " + (trigInfo.powerOn ? "ON" : "OFF") + "<br />");

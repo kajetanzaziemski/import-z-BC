@@ -29,6 +29,21 @@ switched to "missing" or "throwing") and a loader that puts the **real project f
 Executions can share one fake platform, which models concurrent or consecutive runs (the CLAUDE.md storage rule is tested that way). Part 1 pins the behaviour of the old
 names; part 2 tests `Store` / `Settings` and the moved callers. Mutation check: 13 deliberate breakages of the new code, all caught. See `docs/state.md`.
 
+## 2c. The live check helpers as the judge (merged from `live-test-helpers`)
+`Live Check*.js` (+ `docs/live-check.md`, `docs/bugs-todo.md`) come from the branch `live-test-helpers`. They were written against the add-on **as it was before
+the refactor** and verify each entry point's outcome in a real spreadsheet. The arrangement on this branch:
+- **The refactor must satisfy the helpers, not the other way round.** The helper files are pinned by hash (`tests/golden/live-check.sha256.json`); a changed
+  verifier fails `node tests/run.js` unless it is re-pinned on purpose (`UPDATE_GOLDEN=1`, only together with an intended change of behaviour).
+- **They read stored data directly** (`PropertiesService` / `CacheService`, literal keys `importSettingsArray`, `docTriggerArray`, `usrTriggerArray`, `agentArray`, cache keys), not through
+  `Store` / `Settings`, so they also prove that the refactor kept keys and JSON. The architecture rules about `Store` / `Settings` exempt `Live Check*.js` for that reason.
+- Offline (`tests/live-check.test.js`): every action name the code passes to `Controller.run` / `Controller.checked` has a verifier and no verifier is orphaned (a renamed
+  entry point shows up here); with the helpers loaded and switched off the whole state suite gives the same results; switched on, a check never throws into the run;
+  the verifiers' own copy of the config sheet layout (`LC_CONFIG_HEADER`, idle colours) agrees with what `ConfigGrid` produces.
+- In a real spreadsheet: `liveCheckEnable()`, then use the add-on (menu, edits, triggers) and read the sidebar (add-on menu -> Narzędzia programisty -> Live check) or
+  `liveCheckReport(20, true)`. **Known findings in the old code show as `FAIL` / `WARN`** (see `docs/bugs-todo.md`: settings writes lost in `sheetEdit`, nested `Controller.run`,
+  offline `ConnectionError`); the refactor keeps them on purpose - a finding that disappears or a new `FAIL` is a behaviour change to look at.
+  Run the same checks on a copy of the old script (branch `live-test-helpers`) and on this branch, and compare the two reports.
+
 ## 3. Real-spreadsheet check (do before anything is pushed to the live add-on)
 Production runs the **Spreadsheet-service path** (the Sheets advanced service is not enabled in `appsscript.json`), so that is the path to check.
 1. Push to a **copy** of the script (a second Apps Script project / test spreadsheet, not the Marketplace one): `clasp push` there (`.claspignore` keeps `tests/` out).

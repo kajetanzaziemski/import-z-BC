@@ -71,6 +71,7 @@ function getImportSettingsSheetName(){
 }
 
 function setImportSettingsSheetName(name){
+  Controller.checkInput("requestSetSettingsSheetName",{name});
   return Controller.run("requestSetSettingsSheetName",()=>{
     dbgLog("Changing settings Sheet name to "+name);
     return MainSettings.setSettingsSheetName(name);
@@ -78,6 +79,7 @@ function setImportSettingsSheetName(name){
 }
 
 function changeAddonStatus(newStatus){
+  Controller.checkInput("requestChangeAddonStatus",{newStatus});
   Controller.run("requestChangeAddonStatus",() =>{
     dbgLog(`changeAddonStatus called. Changing to ${newStatus ? "ON" : "OFF"}`);
     MainSettings.setAddonStatus(newStatus);
