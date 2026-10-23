@@ -575,11 +575,11 @@ function testConfigGridHeaderMatchesReference(referenceSheetName){
     const a = JSON.stringify(getter(ref.getRange(1,1,4,7))), b = JSON.stringify(getter(tmp.getRange(1,1,4,7)));
     if(a !== b) diffs.push(what+":\n  reference "+a+"\n  ConfigGrid "+b);
   };
-  compare("values",r => r.getValues());
+  compare("values (F2, the estimated rows, is ignored)",r => { const v = r.getValues(); v[1][5] = ""; return v; });
   compare("font weights",r => r.getFontWeights());
   compare("backgrounds",r => r.getBackgrounds());
   compare("font sizes",r => r.getFontSizes());
-  compare("horizontal alignments",r => r.getHorizontalAlignments());
+  compare("horizontal alignments (F2 holds a number in a used sheet and reads general-right)",r => { const a = r.getHorizontalAlignments(); a[1][5] = ""; return a; });
   compare("vertical alignments",r => r.getVerticalAlignments());
   compare("wrap strategies",r => map2D(r.getWrapStrategies(),String));
   compare("notes",r => r.getNotes());

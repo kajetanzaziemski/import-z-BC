@@ -29,7 +29,7 @@ Production runs the **Spreadsheet-service path** (the Sheets advanced service is
 2. Open a spreadsheet that has a config sheet made by the OLD add-on version (e.g. "Konfiguracja 1"; do not edit it).
 3. Script editor → run `testConfigGridHeaderMatchesReference("Konfiguracja 1")`. It creates a sheet with `ConfigGrid`, compares A1:G4 (values, weights, backgrounds,
    sizes, horizontal/vertical alignments, wraps, notes, font colours, merges) with the reference and logs every difference, then deletes its sheet.
-   Expected: "header matches". A difference in horizontal alignments is the likeliest one – decide then whether `alignOf_` should map `general-*` differently.
+   Expected: "header matches". (F2, the estimated number of rows, is ignored: a used sheet has a number there.) First real run (Konfiguracja 7): only the empty columns A and G differed in the horizontal alignments (`general-left` in the reference, `general` from ConfigGrid) – the old code wrote the string `general`, which Sheets keeps as an explicit alignment; the service path now passes the same strings on. Re-run to confirm.
 4. Run `testConfigGridStatusSwitches("Konfiguracja 1")` and watch row 2: B2 green, C2 red, E2:F2 black with 1,234,567, D2 red, then all grey. Check the colours
    change live (the code flushes after each switch) and the sheet is not slowed down noticeably.
 5. In the add-on: add a new import sheet (wizard) → compare with an old one by eye; edit a query line (status B2 flashes green); run "Odśwież" on a small query

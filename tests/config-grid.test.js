@@ -63,6 +63,23 @@ module.exports = function register(t) {
   // the legacy book installs its own globals: build it, then put this test's book back
   function legacyBookKeep(env) { const l = legacyBook(); env.book.install(globalThis); return l; }
 
+  both('the service path gives the sheet the alignment names the old code gave (general, general-left, general-right stay as they are)', env => {
+    if (env.mode !== 'service') return;
+    ConfigGrid.create('K');
+    const seen = new Set(env.book.alignLog);
+    ['general', 'general-left', 'general-right', 'center'].forEach(a => assert.ok(seen.has(a), a + ' was passed on; saw ' + [...seen].join(',')));
+    assert.ok(!seen.has(null), 'nothing is cleared');
+  });
+
+  both('an alignment set to null clears it', env => {
+    const s = env.sheet('S', 50, 5);
+    s.cell(1, 1, true).fmt.hAlign = 'center';
+    const g = Grid.open({ sheetName: 'S' });
+    g.getRange(1, 1).setHorizontalAlignment(null);
+    g.commit();
+    assert.strictEqual((s.cell(1, 1) || { fmt: {} }).fmt.hAlign, undefined);
+  });
+
   both('golden: ConfigGrid.create costs one batchUpdate on the API path (the old code made about forty calls)', env => {
     if (env.mode !== 'api') return;
     ConfigGrid.create('K');

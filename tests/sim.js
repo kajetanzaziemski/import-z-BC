@@ -131,6 +131,7 @@ class SimBook {
     this.sheets = {}; this.nextId = 1;
     this.requests = [];             // every batchUpdate (arrays of requests)
     this.gets = [];                 // every spreadsheets.get (its options)
+    this.alignLog = [];             // every value the Spreadsheet service was given for a horizontal alignment
     this.serviceCalls = 0;          // calls made through the Spreadsheet service on ranges / sheets (a rough cost)
     this.build();
   }
@@ -282,7 +283,7 @@ class SimBook {
       setFontSize: n => fmtSet('size', n),
       setFontColor: col => fmtSet('color', serviceColor(col)),
       setVerticalAlignment: a => fmtSet('vAlign', a),
-      setHorizontalAlignment: a => fmtSet('hAlign', alignCanon(a)),
+      setHorizontalAlignment: a => { book.alignLog.push(a); return fmtSet('hAlign', alignCanon(a)); },
       setWrapStrategy: w => fmtSet('wrap', w),
       setNumberFormat: p => fmtSet('numFmt', p),
       setValue: v => { call(); put(r, c, v); return self; },

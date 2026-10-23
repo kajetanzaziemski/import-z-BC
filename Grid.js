@@ -640,9 +640,11 @@ class Grid {
 
     // Alignment, borders: one call each.
     const aligns = {};
-    this.aligns.forEach(m => { (aligns[m.a] = aligns[m.a] || []).push(rectA1_(m)); });
+    this.aligns.forEach(m => { const k = m.a === null || m.a === undefined ? '' : String(m.a); (aligns[k] = aligns[k] || []).push(rectA1_(m)); });
     Object.keys(aligns).forEach(a => {
-      const al = alignOf_(a) ? alignOf_(a).toLowerCase() : null;
+      // left / center / right as the service names them; the 'general...' names are passed on as they came (the old code did exactly that and
+      // Sheets keeps them as an explicit "general" alignment); '' = null clears the alignment
+      const al = alignOf_(a) ? alignOf_(a).toLowerCase() : (a === '' ? null : a);
       const list = sheet.getRangeList(aligns[a]);
       if (typeof list.setHorizontalAlignment === 'function') list.setHorizontalAlignment(al);
       else list.getRanges().forEach(r => r.setHorizontalAlignment(al));
@@ -836,6 +838,7 @@ function colorToApi_(color) {
  * and it renders the same, so a header read with getHorizontalAlignments can be written back as it was.
  */
 function alignOf_(a) {
+  if (a === null || a === undefined || a === '') return null;
   const x = String(a).toLowerCase();
   if (x === 'normal' || /^general(-left|-right)?$/.test(x)) return null;
   if (x !== 'left' && x !== 'center' && x !== 'right') throw new Error('Grid: unknown horizontal alignment "' + a + '".');
