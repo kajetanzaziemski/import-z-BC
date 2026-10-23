@@ -12,11 +12,25 @@
 // The one project-shaped idea is the ANCHOR ROW: a row that follows row inserts above it (for the report it is the
 // first price row: the headers are the rows above it). The freeze follows the anchor, see _frozenPlan.
 // A project adapter (reportGrid.js) supplies sheet names and the anchor; it also adds the project's own names.
+//
+// Additions for import-z-BC (everything else is as in wyceny):
+//   - Grid.create(spec): a grid for a sheet that does not exist yet; the sheet is inserted by commit()
+//   - commit() can be called more than once: after a commit the pending changes are cleared and the grid goes on
+//   - the window grows instead of being cut: with the rows inserted, and with writes past it (rows up to the sheet's size,
+//     columns are appended to the sheet); notes and validations reach their cells too
+//   - cell formats: font weight / size / colour, vertical alignment, wrap, number format (+ the array forms)
+//   - data validation: lists and dates (plain specs, or a SpreadsheetApp DataValidation), notes in the array form
+//   - Date values are read and written in both paths (the API path converts to / from serial numbers)
+//   - autoResizeColumns
+// The wyceny "reset from a template" path is kept but nothing in import-z-BC uses it and it has no tests here.
 // ---------------------------------------------------------------------------
 
 const USE_SHEETS_API = true;   // false = always use the Spreadsheet service path
 
 const MODEL_ROWS = 20;      // window: at least rows 1..20; always reaches 3 rows past the anchor row
+
+const NEW_SHEET_ROWS = 1000;    // size of a sheet inserted by SpreadsheetApp (Grid.create counts on it)
+const NEW_SHEET_COLS = 26;
 
 const MODEL_MAX_ROWS = 3000;   // the window never grows past this (it covers every price line, see below)
 
@@ -58,6 +72,11 @@ class Grid {
     this.rowFormats = [];                        // [{ row, spec: { size, color, clearTop, clearBottom } }]: whole rows
     this.active = null;                          // [row, col] to select after the commit
     this.scratch = {};                           // free storage for the services during one session (not written anywhere)
+    this.formats = [];                           // [{ r1, c1, r2, c2, props: { bold, size, color, vAlign, wrap, numFmt } }]
+    this.validations = {};                       // 'row,col' -> spec ({ list, strict, dropdown } / { date: true }) or null (= remove the validation)
+    this.colFits = [];                           // [{ first, count }]: columns fitted to their content at the end of the commit
+    this.tz = init.tz || null;                   // the spreadsheet's time zone (Date <-> serial number); read lazily when needed
+    this.maxCols = init.maxCols || init.cols;    // columns of the sheet (grows with inserts and with writes past the last column)
   }
 
   // --- the Sheet API slice ---------------------------------------------------
@@ -73,6 +92,10 @@ class Grid {
   /** The note look for ONE cell (a used note row: the other cells of the row are the user's); borders are left alone. */
   formatCell(row, col, spec) { this.rowFormats.push({ row: row, col: col, spec: spec }); }
   setActiveRange(range) { this.active = [range.getRow(), range.getColumn()]; }
+
+  /** Fits the columns `from`..`from + n - 1` to their content (at the end of the commit; final column numbers). */
+  autoResizeColumns(from, n) { this.colFits.push({ first: from, count: n }); }
+  getMaxColumns() { return this.maxCols; }
 
   getRangeList(a1List) {
     const self = this;
@@ -91,10 +114,11 @@ class Grid {
     this.maxRows += n;
     if (after < this.anchorRow) this.anchorRow += n;    // rows above the anchor: it moves down with them
     const blank = () => new Array(this.cols).fill('');
+    // The window grows with the inserted rows (wyceny cut it back to its old height: the rows pushed past the end were dropped from
+    // the model; here they are kept, which a grid made by Grid.create needs because the model is all there is of that sheet).
+    while (this.rows < after) { this.v.push(blank()); this.f.push(blank()); this.rows++; }   // inserted past the window's end
     for (let i = 0; i < n; i++) { this.v.splice(after, 0, blank()); this.f.splice(after, 0, blank()); }
-    if (after >= this.rows) this.rows += n;      // inserted past the window's end: the window grows with it
-    this.v.length = this.rows;
-    this.f.length = this.rows;
+    this.rows += n;
     this._shift('r', after, n);
     if (opts && opts.fit) for (let i = 1; i <= n; i++) this.fitRows.push(after + i);
   }
@@ -105,6 +129,7 @@ class Grid {
       for (let i = 0; i < n; i++) { this.v[r].splice(after, 0, ''); this.f[r].splice(after, 0, ''); }
     }
     this.cols += n;
+    this.maxCols += n;
     this._shift('c', after, n);
   }
 
@@ -112,6 +137,7 @@ class Grid {
     this.ops.push({ t: 'dc', at: from, n: n });
     for (let r = 0; r < this.rows; r++) { this.v[r].splice(from - 1, n); this.f[r].splice(from - 1, n); }
     this.cols -= n;
+    this.maxCols -= n;
 
     const dropCols = map => {
       const nd = {};
@@ -125,6 +151,7 @@ class Grid {
     this.dirty = dropCols(this.dirty);
     this.notes = dropCols(this.notes);
     this.checks = dropCols(this.checks);
+    this.validations = dropCols(this.validations);
 
     const cut = m => {                           // merges / alignment rects lose the deleted columns
       if (m.c1 >= from + n) { m.c1 -= n; m.c2 -= n; return m; }
@@ -137,6 +164,7 @@ class Grid {
     this.merges = this.merges.map(cut).filter(Boolean);
     this.aligns = this.aligns.map(cut).filter(Boolean);
     this.fills = this.fills.map(cut).filter(Boolean);
+    this.formats = this.formats.map(cut).filter(Boolean);
   }
 
   // --- internals -------------------------------------------------------------------
@@ -147,6 +175,7 @@ class Grid {
     this.merges.forEach(move);
     this.aligns.forEach(move);
     this.fills.forEach(move);
+    this.formats.forEach(move);
 
     const moveKeys = map => {
       const nd = {};
@@ -161,6 +190,8 @@ class Grid {
     this.dirty = moveKeys(this.dirty);
     this.notes = moveKeys(this.notes);
     this.checks = moveKeys(this.checks);
+    this.validations = moveKeys(this.validations);
+    if (axis === 'c') this.colFits = this.colFits.map(x => (x.first > after ? { first: x.first + n, count: x.count } : x));
     if (axis === 'r') {
       this.fitRows = this.fitRows.map(r => (r > after ? r + n : r));
       const sizes = {};
@@ -182,14 +213,28 @@ class Grid {
   }
 
   /** A checkbox (a BOOLEAN validation) with the value in the cell; clearCheckbox takes it away together with the value. */
-  setCheckbox(r, c, checked) { this._set(r, c, !!checked, ''); this.checks[r + ',' + c] = true; }
-  clearCheckbox(r, c) { this._set(r, c, '', ''); this.checks[r + ',' + c] = false; }
+  setCheckbox(r, c, checked) { this._set(r, c, !!checked, ''); delete this.validations[r + ',' + c]; this.checks[r + ',' + c] = true; }
+  clearCheckbox(r, c) { this._set(r, c, '', ''); delete this.validations[r + ',' + c]; this.checks[r + ',' + c] = false; }
 
   _inWindow(r, c) { return r >= 1 && r <= this.rows && c >= 1 && c <= this.cols; }
   _val(r, c) { return this._inWindow(r, c) ? this.v[r - 1][c - 1] : ''; }
   _form(r, c) { return this._inWindow(r, c) ? this.f[r - 1][c - 1] : ''; }
+  /**
+   * Makes room for a write at (r, c): rows grow up to the sheet's size (past it: insertRowsAfter first), columns are
+   * appended to the sheet when needed. Without this a write past the window would be lost silently.
+   */
+  _ensure(r, c) {
+    if (r < 1 || c < 1) throw new Error('Grid: cell (' + r + ', ' + c + ') does not exist.');
+    if (r > this.maxRows) throw new Error('Grid: row ' + r + ' is past the end of the sheet (' + this.maxRows + ' rows); use insertRowsAfter first.');
+    while (this.rows < r) { this.v.push(new Array(this.cols).fill('')); this.f.push(new Array(this.cols).fill('')); this.rows++; }
+    if (c > this.cols) {
+      if (c > this.maxCols) { this.ops.push({ t: 'ac', n: c - this.maxCols }); this.maxCols = c; }
+      for (let i = 0; i < this.rows; i++) while (this.v[i].length < c) { this.v[i].push(''); this.f[i].push(''); }
+      this.cols = c;
+    }
+  }
   _set(r, c, value, formula) {
-    if (!this._inWindow(r, c)) return;
+    this._ensure(r, c);
     this.v[r - 1][c - 1] = value;
     this.f[r - 1][c - 1] = formula;
     this.dirty[r + ',' + c] = true;
@@ -233,9 +278,41 @@ class Grid {
   commit() {
     this._frozen = this._frozenPlan();
     if (this._frozen.error) throw new Error(this._frozen.error);
+    if (this.source.kind === 'new') this._materialize();
     if (this.source.kind === 'api') this._commitApi();
     else this._commitService();
+    this._settle();
   }
+
+  /** Grid.create: inserts the sheet (Spreadsheet service), then the grid is an ordinary one. */
+  _materialize() {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.insertSheet(this.sheetName);
+    if (sheetsApiAvailable_()) {
+      SpreadsheetApp.flush();                    // the Sheets API has to see the new sheet
+      this.source = { kind: 'api', ssId: ss.getId(), sheetId: sheet.getSheetId(), rowCount: sheet.getMaxRows(), columnCount: sheet.getMaxColumns(), tpl: null, rowGroups: [] };
+    } else {
+      this.source = { kind: 'service', sheet: sheet };
+    }
+    if (sheet.getMaxRows() !== NEW_SHEET_ROWS || sheet.getMaxColumns() !== NEW_SHEET_COLS) {   // the pending operations were counted for a default sheet
+      throw new Error('Grid: the new sheet "' + this.sheetName + '" is ' + sheet.getMaxRows() + 'x' + sheet.getMaxColumns() + ', expected ' + NEW_SHEET_ROWS + 'x' + NEW_SHEET_COLS + '.');
+    }
+  }
+
+  /** After a commit the grid is the sheet as it stands: nothing is pending, the next commit writes only what changes after this one. */
+  _settle() {
+    const S = this.source;
+    if (S.kind === 'api') { S.rowCount = this.maxRows; S.columnCount = this.maxCols; S.tpl = null; S.rowGroups = []; }
+    if (this._frozen && this._frozen.rows !== null && this._frozen.rows !== undefined) this.frozenRows = this._frozen.rows;
+    this.ops = []; this.dirty = {}; this.notes = {}; this.checks = {}; this.validations = {};
+    this.aligns = []; this.fills = []; this.borders = []; this.formats = []; this.rowFormats = []; this.afterOps = [];
+    this.rowSizes = {}; this.fitRows = []; this.colFits = []; this.active = null;
+    this.anchorRow0 = this.anchorRow;
+    this.sheetAnchorRow = this.anchorRow;
+  }
+
+  /** The spreadsheet's time zone, read once. */
+  _tz() { return this.tz || (this.tz = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone()); }
 
   /** The window's final merges that are real merges (more than one cell). */
   _finalMerges() { return this.merges.filter(m => m.r2 > m.r1 || m.c2 > m.c1); }
@@ -332,6 +409,7 @@ class Grid {
         if (op.plain) req.push({ repeatCell: { range: { sheetId: sid, startRowIndex: op.at, endRowIndex: op.at + op.n }, cell: {}, fields: 'dataValidation' } });
       }
       else if (op.t === 'ic') req.push({ insertDimension: { range: { sheetId: sid, dimension: 'COLUMNS', startIndex: op.at, endIndex: op.at + op.n }, inheritFromBefore: true } });
+      else if (op.t === 'ac') req.push({ appendDimension: { sheetId: sid, dimension: 'COLUMNS', length: op.n } });
       else req.push({ deleteDimension: { range: { sheetId: sid, dimension: 'COLUMNS', startIndex: op.at - 1, endIndex: op.at - 1 + op.n } } });
     });
 
@@ -345,6 +423,7 @@ class Grid {
 
     const cellData = c => {
       if (c.f !== '') return { userEnteredValue: { formulaValue: c.f } };
+      if (isDate_(c.v)) return { userEnteredValue: { numberValue: dateToSerial_(c.v, this._tz()) } };
       if (typeof c.v === 'number') return { userEnteredValue: { numberValue: c.v } };
       if (typeof c.v === 'boolean') return { userEnteredValue: { boolValue: c.v } };
       if (c.v === '' || c.v === null || c.v === undefined) return {};              // clears the cell
@@ -378,6 +457,16 @@ class Grid {
       } });
     });
 
+    Object.keys(this.validations).forEach(k => {  // lists and dates (null removes the validation)
+      const p = k.split(',').map(Number);
+      if (!this._inWindow(p[0], p[1])) return;
+      req.push({ updateCells: {
+        rows: [{ values: [this.validations[k] ? { dataValidation: validationToApi_(this.validations[k]) } : {}] }],
+        start: { sheetId: sid, rowIndex: p[0] - 1, columnIndex: p[1] - 1 },
+        fields: 'dataValidation'
+      } });
+    });
+
     this._mergePlan(this._finalMerges()).forEach(m => {
       req.push({ mergeCells: { range: grid(m.r1, m.c1, m.r2, m.c2), mergeType: m.vertical ? 'MERGE_COLUMNS' : 'MERGE_ALL' } });
     });
@@ -385,12 +474,16 @@ class Grid {
     this.aligns.forEach(m => {
       req.push({ repeatCell: {
         range: grid(m.r1, m.c1, m.r2, m.c2),
-        cell: { userEnteredFormat: { horizontalAlignment: String(m.a).toUpperCase() } },
+        cell: alignOf_(m.a) ? { userEnteredFormat: { horizontalAlignment: alignOf_(m.a) } } : {},      // 'general': an empty cell with the field in the mask clears it
         fields: 'userEnteredFormat.horizontalAlignment'
       } });
     });
+    this.formats.forEach(m => {
+      const f = formatToApi_(m.props);
+      req.push({ repeatCell: { range: grid(m.r1, m.c1, m.r2, m.c2), cell: { userEnteredFormat: f.format }, fields: f.fields } });
+    });
     this.fills.forEach(m => {
-      const c = m.color ? { red: parseInt(m.color.slice(1, 3), 16) / 255, green: parseInt(m.color.slice(3, 5), 16) / 255, blue: parseInt(m.color.slice(5, 7), 16) / 255 } : null;
+      const c = m.color ? colorToApi_(m.color) : null;
       req.push({ repeatCell: {
         range: grid(m.r1, m.c1, m.r2, m.c2),
         cell: c ? { userEnteredFormat: { backgroundColor: c } } : {},          // an empty cell with the field in the mask clears the fill
@@ -445,6 +538,7 @@ class Grid {
       properties: { pixelSize: this.rowSizes[r] }, fields: 'pixelSize'
     } }));
     this._fitRuns().forEach(run => req.push({ autoResizeDimensions: { dimensions: { sheetId: sid, dimension: 'ROWS', startIndex: run.first - 1, endIndex: run.first - 1 + run.count } } }));   // after the content is written
+    this.colFits.forEach(x => req.push({ autoResizeDimensions: { dimensions: { sheetId: sid, dimension: 'COLUMNS', startIndex: x.first - 1, endIndex: x.first - 1 + x.count } } }));
 
     if (S.tpl) {                                  // a reset: the rows from the anchor down (the data) fit their content again; the rows above keep the template's heights
       const from = this.anchorRow0 - 1;
@@ -463,8 +557,9 @@ class Grid {
   _commitService() {
     const sheet = this.source.sheet;
     this.ops.forEach(op => {
-      if (op.t === 'ir') { sheet.insertRowsAfter(op.at, op.n); if (op.plain) sheet.getRange(op.at + 1, 1, op.n, Math.max(1, this.cols)).clearDataValidations(); }
+      if (op.t === 'ir') { sheet.insertRowsAfter(op.at, op.n); if (op.plain) sheet.getRange(op.at + 1, 1, op.n, sheet.getMaxColumns()).clearDataValidations(); }   // the whole rows, also right of the window
       else if (op.t === 'ic') sheet.insertColumnsAfter(op.at, op.n);
+      else if (op.t === 'ac') sheet.insertColumnsAfter(sheet.getMaxColumns(), op.n);
       else sheet.deleteColumns(op.at, op.n);
     });
     if (this._frozen && this._frozen.rows !== null && this._frozen.rows !== undefined) sheet.setFrozenRows(this._frozen.rows);
@@ -525,6 +620,12 @@ class Grid {
       if (this.checks[k]) cell.insertCheckboxes(); else cell.removeCheckboxes();
     });
 
+    Object.keys(this.validations).forEach(k => {
+      const p = k.split(',').map(Number);
+      if (!this._inWindow(p[0], p[1])) return;
+      sheet.getRange(p[0], p[1]).setDataValidation(this.validations[k] ? validationToService_(this.validations[k]) : null);
+    });
+
     // Missing merges: columns of equal vertical extent go in one call.
     const singles = missing.filter(m => m.c1 === m.c2).sort((a, b) => a.r1 - b.r1 || a.r2 - b.r2 || a.c1 - b.c1);
     const runs = [];
@@ -541,9 +642,19 @@ class Grid {
     const aligns = {};
     this.aligns.forEach(m => { (aligns[m.a] = aligns[m.a] || []).push(rectA1_(m)); });
     Object.keys(aligns).forEach(a => {
+      const al = alignOf_(a) ? alignOf_(a).toLowerCase() : null;
       const list = sheet.getRangeList(aligns[a]);
-      if (typeof list.setHorizontalAlignment === 'function') list.setHorizontalAlignment(a);
-      else list.getRanges().forEach(r => r.setHorizontalAlignment(a));
+      if (typeof list.setHorizontalAlignment === 'function') list.setHorizontalAlignment(al);
+      else list.getRanges().forEach(r => r.setHorizontalAlignment(al));
+    });
+    this.formats.forEach(m => {
+      const rng = sheet.getRange(m.r1, m.c1, m.r2 - m.r1 + 1, m.c2 - m.c1 + 1), p = m.props;
+      if (p.bold !== undefined) rng.setFontWeight(p.bold ? 'bold' : 'normal');
+      if (p.size !== undefined) rng.setFontSize(p.size);
+      if (p.color !== undefined) rng.setFontColor(p.color);
+      if (p.vAlign !== undefined) rng.setVerticalAlignment(p.vAlign);
+      if (p.wrap !== undefined) rng.setWrapStrategy(SpreadsheetApp.WrapStrategy[p.wrap]);
+      if (p.numFmt !== undefined) rng.setNumberFormat(p.numFmt);
     });
     this.fills.forEach(m => sheet.getRange(m.r1, m.c1, m.r2 - m.r1 + 1, m.c2 - m.c1 + 1).setBackground(m.color));
     this.borders.forEach(b => {
@@ -565,6 +676,7 @@ class Grid {
     });
 
     Object.keys(this.rowSizes).forEach(r => sheet.setRowHeight(Number(r), this.rowSizes[r]));
+    this.colFits.forEach(x => sheet.autoResizeColumns(x.first, x.count));
     if (typeof sheet.autoResizeRows === 'function') this._fitRuns().forEach(run => sheet.autoResizeRows(run.first, run.count));
 
     if (this.active) sheet.setActiveRange(sheet.getRange(this.active[0], this.active[1]));
@@ -610,12 +722,57 @@ class GridRange {
   setFormula(f) { this.m._set(this.r, this.c, '', f); return this; }
   setFormulas(a) { this._each((r, c, i, j) => this.m._set(r, c, '', a[i][j])); return this; }
   clearContent() { this._each((r, c) => this.m._set(r, c, '', '')); return this; }
-  setNote(text) { this._each((r, c) => { this.m.notes[r + ',' + c] = String(text === null || text === undefined ? '' : text); }); return this; }
+  /** Notes and validations are no cell contents: the window is made to reach them (else they would be dropped at the commit). */
+  _reach() { this.m._ensure(this.getLastRow(), this.getLastColumn()); }
+  setNote(text) { this._reach(); this._each((r, c) => { this.m.notes[r + ',' + c] = String(text === null || text === undefined ? '' : text); }); return this; }
   clearNote() { return this.setNote(''); }
   _assign(r, c, x) {                              // a string starting with '=' is a formula, like in setValues
     if (typeof x === 'string' && x.charAt(0) === '=') this.m._set(r, c, '', x);
     else this.m._set(r, c, x === null || x === undefined ? '' : x, '');
   }
+
+  setNotes(a) { this._reach(); this._each((r, c, i, j) => { this.m.notes[r + ',' + c] = a[i][j] === null || a[i][j] === undefined ? '' : String(a[i][j]); }); return this; }
+
+  // --- formats: queued like the fills, written with the commit (a grid does not read formats) ---
+  /** One property for the whole range; entries on the same rectangle are merged. */
+  _fmt(props) {
+    const r1 = this.r, c1 = this.c, r2 = this.getLastRow(), c2 = this.getLastColumn();
+    let e = this.m.formats.find(x => x.r1 === r1 && x.c1 === c1 && x.r2 === r2 && x.c2 === c2);
+    if (!e) { e = { r1: r1, c1: c1, r2: r2, c2: c2, props: {} }; this.m.formats.push(e); }
+    Object.assign(e.props, props);
+    return this;
+  }
+  /** The array form: `a[i][j]` goes to cell (i, j) of the range. */
+  _fmtEach(a, f) { this._each((r, c, i, j) => f(this.getCell(i + 1, j + 1), a[i][j])); return this; }
+
+  setFontWeight(w) { return this._fmt({ bold: String(w).toLowerCase() === 'bold' }); }
+  setFontSize(n) { return this._fmt({ size: n }); }
+  setFontColor(c) { colorToApi_(c); return this._fmt({ color: c }); }       // a bad colour fails now, not at the commit
+  setVerticalAlignment(a) { return this._fmt({ vAlign: String(a).toLowerCase() }); }
+  setWrapStrategy(s) { return this._fmt({ wrap: wrapOf_(s) }); }
+  setNumberFormat(f) { return this._fmt({ numFmt: String(f) }); }
+  setFontWeights(a) { return this._fmtEach(a, (cell, x) => cell.setFontWeight(x)); }
+  setFontSizes(a) { return this._fmtEach(a, (cell, x) => cell.setFontSize(x)); }
+  setFontColors(a) { return this._fmtEach(a, (cell, x) => cell.setFontColor(x)); }
+  setVerticalAlignments(a) { return this._fmtEach(a, (cell, x) => cell.setVerticalAlignment(x)); }
+  setWrapStrategies(a) { return this._fmtEach(a, (cell, x) => cell.setWrapStrategy(x)); }
+  setNumberFormats(a) { return this._fmtEach(a, (cell, x) => cell.setNumberFormat(x)); }
+  setBackgrounds(a) { return this._fmtEach(a, (cell, x) => cell.setBackground(x)); }
+  setHorizontalAlignments(a) { return this._fmtEach(a, (cell, x) => cell.setHorizontalAlignment(x)); }
+
+  /**
+   * A validation for every cell of the range: { list: [...], strict = true, dropdown = true } / { date: true } /
+   * null (removes it) / a SpreadsheetApp DataValidation of the kinds VALUE_IN_LIST and DATE_IS_VALID_DATE.
+   * Checkboxes are set with Grid.setCheckbox.
+   */
+  setDataValidation(dv) {
+    const spec = validationSpec_(dv);
+    this._reach();
+    this._each((r, c) => { delete this.m.checks[r + ',' + c]; this.m.validations[r + ',' + c] = spec; });
+    return this;
+  }
+  setDataValidations(a) { return this._fmtEach(a, (cell, x) => cell.setDataValidation(x)); }
+  clearDataValidations() { return this.setDataValidation(null); }
 
   getMergedRanges() {
     return this._hits().map(x => new GridRange(this.m, x.r1, x.c1, x.r2 - x.r1 + 1, x.c2 - x.c1 + 1));
@@ -640,12 +797,14 @@ class GridRange {
 
   /** Background colour "#rrggbb" (null = no fill), written with the commit. A grid does not read colours: there is no getBackground. */
   setBackground(color) {
+    if (color) colorToApi_(color);
     this.m.fills = this.m.fills.filter(f => !(f.r1 === this.r && f.c1 === this.c && f.r2 === this.getLastRow() && f.c2 === this.getLastColumn()));
     this.m.fills.push({ color: color, r1: this.r, c1: this.c, r2: this.getLastRow(), c2: this.getLastColumn() });
     return this;
   }
 
   setHorizontalAlignment(a) {
+    alignOf_(a);                                  // a bad name fails now, not at the commit
     this.m.aligns.push({ a: a, r1: this.r, c1: this.c, r2: this.getLastRow(), c2: this.getLastColumn() });
     return this;
   }
@@ -653,6 +812,109 @@ class GridRange {
     this.m.borders.push({ a1: [this.getA1Notation()], args: Array.prototype.slice.call(arguments) });
     return this;
   }
+}
+
+// --- helpers of the format / validation / date operations (no spreadsheet access) ----------------------------------
+
+const COLOR_NAMES_ = {
+  black: '#000000', white: '#ffffff', red: '#ff0000', green: '#008000', blue: '#0000ff', yellow: '#ffff00',
+  gray: '#808080', grey: '#808080', orange: '#ffa500', purple: '#800080', cyan: '#00ffff', magenta: '#ff00ff'
+};
+
+/** "#rrggbb" / "#rgb" / "#aarrggbb" (what getFontColors returns; the alpha is dropped) / a basic colour name -> API colour. */
+function colorToApi_(color) {
+  let h = COLOR_NAMES_[String(color).toLowerCase()] || String(color);
+  if (/^#[0-9a-f]{3}$/i.test(h)) h = '#' + h.slice(1).split('').map(x => x + x).join('');
+  if (/^#[0-9a-f]{8}$/i.test(h)) h = '#' + h.slice(3);
+  if (!/^#[0-9a-f]{6}$/i.test(h)) throw new Error('Grid: unknown colour "' + color + '".');
+  return { red: parseInt(h.slice(1, 3), 16) / 255, green: parseInt(h.slice(3, 5), 16) / 255, blue: parseInt(h.slice(5, 7), 16) / 255 };
+}
+
+/** Horizontal alignment as the API names it; 'general' (no explicit alignment) = null, 'general-left' = 'left' (as getHorizontalAlignments returns it). */
+function alignOf_(a) {
+  const x = String(a).toLowerCase().replace(/^general-?/, '');
+  if (x === '' || x === 'normal') return null;
+  if (x !== 'left' && x !== 'center' && x !== 'right') throw new Error('Grid: unknown horizontal alignment "' + a + '".');
+  return x.toUpperCase();
+}
+
+/** SpreadsheetApp.WrapStrategy (or its name) -> 'WRAP' | 'OVERFLOW' | 'CLIP'. */
+function wrapOf_(s) {
+  const x = String(s).toUpperCase();
+  if (x !== 'WRAP' && x !== 'OVERFLOW' && x !== 'CLIP') throw new Error('Grid: unknown wrap strategy "' + s + '".');
+  return x;
+}
+
+/** The API's number format type for a pattern ("#,##0" NUMBER, "yyyy-mm-dd hh:mm" DATE_TIME, "0%" PERCENT, "@" TEXT ...). */
+function numberFormatType_(pattern) {
+  const p = String(pattern).replace(/"[^"]*"|\[[^\]]*\]/g, '');
+  const date = /[yd]/i.test(p), time = /[hs]/i.test(p);
+  if (p === '@') return 'TEXT';
+  if (date && time) return 'DATE_TIME';
+  if (date) return 'DATE';
+  if (time) return 'TIME';
+  if (p.indexOf('%') >= 0) return 'PERCENT';
+  return 'NUMBER';
+}
+
+/** One format entry's props -> { format: userEnteredFormat, fields: mask } for repeatCell. */
+function formatToApi_(p) {
+  const format = {}, fields = [];
+  const text = {};
+  if (p.bold !== undefined) { text.bold = !!p.bold; fields.push('userEnteredFormat.textFormat.bold'); }
+  if (p.size !== undefined) { text.fontSize = p.size; fields.push('userEnteredFormat.textFormat.fontSize'); }
+  if (p.color !== undefined) { text.foregroundColor = colorToApi_(p.color); fields.push('userEnteredFormat.textFormat.foregroundColor'); }
+  if (fields.length) format.textFormat = text;
+  if (p.vAlign !== undefined) { format.verticalAlignment = String(p.vAlign).toUpperCase(); fields.push('userEnteredFormat.verticalAlignment'); }
+  if (p.wrap !== undefined) { format.wrapStrategy = p.wrap === 'OVERFLOW' ? 'OVERFLOW_CELL' : p.wrap; fields.push('userEnteredFormat.wrapStrategy'); }
+  if (p.numFmt !== undefined) { format.numberFormat = { type: numberFormatType_(p.numFmt), pattern: p.numFmt }; fields.push('userEnteredFormat.numberFormat'); }
+  return { format: format, fields: fields.join(',') };
+}
+
+/** A validation as the Grid stores it: { list, strict, dropdown } | { date: true } | null. Accepts a SpreadsheetApp DataValidation. */
+function validationSpec_(dv) {
+  if (dv === null || dv === undefined) return null;
+  if (typeof dv.getCriteriaType !== 'function') {
+    if (Array.isArray(dv.list)) return { list: dv.list.map(String), strict: dv.strict !== false, dropdown: dv.dropdown !== false };
+    if (dv.date) return { date: true };
+    throw new Error('Grid: unsupported data validation ' + JSON.stringify(dv) + '.');
+  }
+  const type = String(dv.getCriteriaType()), vals = dv.getCriteriaValues();
+  if (type === 'VALUE_IN_LIST') return { list: (vals[0] || []).map(String), strict: !dv.getAllowInvalid(), dropdown: vals[1] !== false };
+  if (type === 'DATE_IS_VALID_DATE') return { date: true };
+  throw new Error('Grid: unsupported data validation type ' + type + '.');
+}
+
+function validationToApi_(spec) {
+  if (spec.date) return { condition: { type: 'DATE_IS_VALID' }, strict: true };
+  return { condition: { type: 'ONE_OF_LIST', values: spec.list.map(x => ({ userEnteredValue: x })) }, strict: spec.strict, showCustomUi: spec.dropdown };
+}
+
+function validationToService_(spec) {
+  const b = SpreadsheetApp.newDataValidation();
+  if (spec.date) return b.requireDate().build();
+  return b.requireValueInList(spec.list, spec.dropdown).setAllowInvalid(!spec.strict).build();
+}
+
+function isDate_(x) { return Object.prototype.toString.call(x) === '[object Date]'; }
+
+/** Offset of the time zone from UTC at the given moment, in minutes (Utilities.formatDate "Z" gives "+0900"). */
+function tzOffsetMinutes_(date, tz) {
+  const m = Utilities.formatDate(date, tz, 'Z').match(/^([+-])(\d\d)(\d\d)$/);
+  return (m[1] === '-' ? -1 : 1) * (Number(m[2]) * 60 + Number(m[3]));
+}
+
+/** A moment -> the sheet's serial number (days since 1899-12-30, wall-clock time of the spreadsheet's time zone). */
+function dateToSerial_(date, tz) {
+  return (date.getTime() + tzOffsetMinutes_(date, tz) * 60000) / 86400000 + 25569;
+}
+
+/** The sheet's serial number -> the moment (inverse of dateToSerial_, also around a change of offset). */
+function serialToDate_(serial, tz) {
+  const wall = Math.round((serial - 25569) * 86400000);
+  const d = new Date(wall - tzOffsetMinutes_(new Date(wall), tz) * 60000);
+  const again = new Date(wall - tzOffsetMinutes_(d, tz) * 60000);
+  return again.getTime() === d.getTime() ? d : again;
 }
 
 function sheetsApiAvailable_() {
@@ -671,6 +933,7 @@ function sheetsApiAvailable_() {
  */
 Grid.open = function (spec) {
   const fresh = !!spec.reset;
+  if (!fresh && !SpreadsheetApp.getActiveSpreadsheet().getSheetByName(spec.sheetName)) return null;   // both paths: a missing sheet is null
   if (sheetsApiAvailable_()) return loadGridViaApi_(spec, fresh);
 
   if (fresh && spec.resetFallback) spec.resetFallback();
@@ -678,15 +941,30 @@ Grid.open = function (spec) {
   return sheet ? loadGridViaService_(spec, sheet) : null;
 };
 
+/**
+ * A grid for a sheet that does not exist yet: `spec = { sheetName, rows = 20, cols = 1 }` (the window; it grows with the writes).
+ * commit() inserts the sheet (a default sheet of NEW_SHEET_ROWS x NEW_SHEET_COLS) and writes everything.
+ */
+Grid.create = function (spec) {
+  const rows = spec.rows || 20, cols = spec.cols || 1;
+  const blank = () => Array.from({ length: rows }, () => new Array(cols).fill(''));
+  return new Grid({
+    source: { kind: 'new' }, sheetName: spec.sheetName, maxRows: NEW_SHEET_ROWS, maxCols: NEW_SHEET_COLS,
+    anchorRow: 1, rows: rows, cols: cols, v: blank(), f: blank(), merges: []
+  });
+};
+
+function anchorOf_(spec, sheet) { return spec.anchor ? spec.anchor(sheet) : 1; }       // the anchor is optional
+
 function loadGridViaService_(spec, sheet) {
-  const anchorRow = spec.anchor(sheet);
+  const anchorRow = anchorOf_(spec, sheet);
   const maxRows = sheet.getMaxRows();
   const rows = Math.min(modelRows_(anchorRow, sheet.getLastRow()), maxRows);
   const cols = Math.max(1, sheet.getLastColumn());
   const rng = sheet.getRange(1, 1, rows, cols);
   return new Grid({
     source: { kind: 'service', sheet: sheet }, sheetName: spec.sheetName,
-    maxRows: maxRows, anchorRow: anchorRow, rows: rows, cols: cols,
+    maxRows: maxRows, maxCols: sheet.getMaxColumns(), anchorRow: anchorRow, rows: rows, cols: cols,
     v: rng.getValues(),
     f: rng.getFormulas(),
     merges: rng.getMergedRanges().map(m => parseA1_(m.getA1Notation())),
@@ -704,7 +982,7 @@ function loadGridViaApi_(spec, fresh) {
   const ssId = ss.getId();
   const from = fresh ? spec.templateName : spec.sheetName;
   const sheetAnchor = fresh ? spec.sheetAnchor() : 0;                   // before the reset: the anchor the sheet has now
-  const anchorRow = fresh ? spec.templateAnchor() : spec.anchor();      // the template's when the grid starts as the template
+  const anchorRow = fresh ? spec.templateAnchor() : anchorOf_(spec);      // the template's when the grid starts as the template
   const q = name => "'" + name.replace(/'/g, "''") + "'";
   // The window has to reach every row of the sheet that can hold data. The size comes from the API itself: the
   // Spreadsheet service can still report the sizes from before an earlier batch update of the same run
@@ -722,8 +1000,8 @@ function loadGridViaApi_(spec, fresh) {
   const windowRows = modelRows_(anchorRow, rowsHint);
   const ranges = [q(from) + '!1:' + windowRows];
   if (fresh) ranges.push(q(spec.sheetName) + '!A1');
-  const fields = 'sheets(properties(sheetId,title,gridProperties(rowCount,columnCount,frozenRowCount)),merges,rowGroups,' +
-                 'data(rowData(values(userEnteredValue,effectiveValue)),columnMetadata(pixelSize)))';
+  const fields = 'properties(timeZone),sheets(properties(sheetId,title,gridProperties(rowCount,columnCount,frozenRowCount)),merges,rowGroups,' +
+                 'data(rowData(values(userEnteredValue,effectiveValue,effectiveFormat(numberFormat(type)))),columnMetadata(pixelSize)))';
   const res = Sheets.Spreadsheets.get(ssId, { includeGridData: true, ranges: ranges, fields: fields });
 
   const byTitle = {};
@@ -735,15 +1013,18 @@ function loadGridViaApi_(spec, fresh) {
 
   const rowData = (src.data && src.data[0] && src.data[0].rowData) || [];
   const rows = Math.min(windowRows, src.properties.gridProperties.rowCount);
+  const tz = (res.properties && res.properties.timeZone) || null;
+  const isDateFormat = c => { const t = c.effectiveFormat && c.effectiveFormat.numberFormat && c.effectiveFormat.numberFormat.type; return t === 'DATE' || t === 'TIME' || t === 'DATE_TIME'; };
+  const numberOf = (c, n) => (tz && isDateFormat(c) ? serialToDate_(n, tz) : n);       // dates come back as Date objects, like from the Spreadsheet service
   const cellOf = c => {
     const u = c && c.userEnteredValue;
     if (!u) return { v: '', f: '' };
     if (u.formulaValue !== undefined) {
       const e = c.effectiveValue || {};
-      const v = e.numberValue !== undefined ? e.numberValue : e.stringValue !== undefined ? e.stringValue : e.boolValue !== undefined ? e.boolValue : '';
+      const v = e.numberValue !== undefined ? numberOf(c, e.numberValue) : e.stringValue !== undefined ? e.stringValue : e.boolValue !== undefined ? e.boolValue : '';
       return { v: v, f: u.formulaValue };
     }
-    if (u.numberValue !== undefined) return { v: u.numberValue, f: '' };
+    if (u.numberValue !== undefined) return { v: numberOf(c, u.numberValue), f: '' };
     if (u.stringValue !== undefined) return { v: u.stringValue, f: '' };
     if (u.boolValue !== undefined) return { v: u.boolValue, f: '' };
     return { v: '', f: '' };
@@ -779,7 +1060,7 @@ function loadGridViaApi_(spec, fresh) {
       rowGroups: fresh ? (edited.rowGroups || []) : []           // the groups of the sheet that is being reset: they are removed with it
     },
     sheetName: spec.sheetName,
-    maxRows: Math.max(gp.rowCount, fresh ? src.properties.gridProperties.rowCount : 0),
+    maxRows: Math.max(gp.rowCount, fresh ? src.properties.gridProperties.rowCount : 0), maxCols: gp.columnCount, tz: tz,
     anchorRow: anchorRow, rows: rows, cols: cols, v: v, f: f, merges: merges,
     frozenRows: gp.frozenRowCount || 0,
     sheetAnchorRow: fresh ? sheetAnchor : anchorRow              // a reset: the anchor the sheet has now, not the template's

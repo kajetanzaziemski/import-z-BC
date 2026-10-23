@@ -1,6 +1,6 @@
 # Architecture proposal: import-z-BC on top of the Grid layer
 
-Status: proposal, nothing refactored yet. Branch `refactor-and-grid`.
+Status: proposal; steps 1-3 of the migration plan are done (Grid + helpers + tests + the Grid additions of section 4). Nothing of the add-on uses the grid yet. Branch `refactor-and-grid`.
 
 ## 1. What was copied
 
@@ -75,17 +75,18 @@ Same ethos (one read / one write, no project words) for tall data:
 OAuth/BC/OData classes, `Trigger Manager.js`, `Status Manager.js`, `Track onEdit Triggers.js`, `Helper Data Store.js`:
 no or minimal sheet access, already layered by concern. They move only by being called from use cases instead of `Menu.js`.
 
-## 4. Grid gaps to close (in `Grid.js`, keep it generic)
+## 4. Grid gaps (closed in `Grid.js`, see `docs/grid/CHANGES.md`; kept generic)
 Add to `GridRange`/`Grid`, each queued and flushed in `commit()` like `setBackground`/`setBorder` today:
 `setNumberFormat(s)`, `setFontWeight/Size/Color`, `setVerticalAlignment`, `setWrapStrategy`, `setDataValidation`
 (list / custom), `clear`. Optionally `Grid.create(sheetName, rows, cols)` that adds the sheet (`insertSheet`) at commit.
 Alternative: collapse the formatting calls into `formatRow`-style `spec` objects (already there for rows/cells).
 
 ## 5. Migration plan (each step shippable and behaviour-preserving; the add-on is live)
-1. Done here: Grid + helpers + docs copied, not wired in.
-2. Add a Node test harness for Grid (port `tests/sim.js` from wyceny) and golden-test current `SheetCoeditor` output
-   (header block incl. formats) so the refactor can be compared.
-3. Extend Grid (section 4).
+1. Done: Grid + helpers + docs copied, not wired in.
+2. Done: Node test harness for Grid (`node tests/run.js`, `tests/sim.js`: one simulated spreadsheet behind both the Sheets API
+   and the Spreadsheet service, so every scenario runs through both commit paths and a parity test compares the sheets).
+   Still open: golden-test the current `SheetCoeditor` output (header block incl. formats) so the refactor can be compared.
+3. Done: Grid extended (section 4), see `docs/grid/CHANGES.md` for the list and the known limits.
 4. Introduce `ConfigGrid`; make `SheetCoeditor.setupConfigHeader` and status switches use it. First real use of Grid,
    smallest blast radius (new-sheet creation).
 5. Move config reading/writing (`loadFromSheet`, `insertRows`, `setDataValidationsToSheet`) onto the grid.
