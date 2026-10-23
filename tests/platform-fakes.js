@@ -1,0 +1,91 @@
+// Fakes of the Apps Script platform services the state code uses (PropertiesService, CacheService, LockService, Logger ...)
+// and a loader that puts the project's real files into a FRESH global scope, the way Apps Script starts an execution.
+//
+// One FakePlatform = one document/user/script with its stored data. Several executions (`platform.execution(files)`) can share it,
+// which models concurrent or consecutive runs: the data survives, every global (memoised settings, Controller flags ...) starts new.
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const vm = require('vm');
+
+const ROOT = path.join(__dirname, '..');
+
+class FakePlatform {
+  constructor() {
+    this.now = 1700000000000;                              // ms, the clock of the fake cache / Date.now for the tests that need it
+    this.props = { document: {}, user: {}, script: {} };
+    this.cache = { document: {}, user: {}, script: {} };   // key -> { value, expires }
+    this.calls = [];                                       // ['properties.set document key', ...] for the tests that count
+    this.lockHeld = false;                                 // somebody else holds every lock
+    this.lockFreesAfter = Infinity;                        // the lock becomes free after this many tryLock attempts
+    this.tryLockAttempts = 0;
+    this.broken = {};                                      // { 'cache.document': 'null' | 'throw' }
+  }
+  advance(seconds) { this.now += seconds * 1000; }
+
+  propertiesService(scope) {
+    const p = this, store = this.props[scope];
+    return {
+      getProperty: k => (Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null),
+      setProperty: (k, v) => { p.calls.push('properties.set ' + scope + ' ' + k); store[k] = String(v); },
+      deleteProperty: k => { p.calls.push('properties.delete ' + scope + ' ' + k); delete store[k]; },
+      getProperties: () => Object.assign({}, store)
+    };
+  }
+  cacheService(scope) {
+    const p = this, store = this.cache[scope];
+    return {
+      get: k => { const x = store[k]; if (!x) return null; if (x.expires <= p.now) { delete store[k]; return null; } return x.value; },
+      put: (k, v, ttl) => { p.calls.push('cache.put ' + scope + ' ' + k + ' ttl=' + ttl); store[k] = { value: String(v), expires: p.now + (ttl === undefined ? 600 : ttl) * 1000 }; },
+      remove: k => { p.calls.push('cache.remove ' + scope + ' ' + k); delete store[k]; }
+    };
+  }
+  lock() {
+    const p = this; let mine = false;
+    return {
+      tryLock: ms => {
+        p.tryLockAttempts++;
+        if (p.lockHeld && p.tryLockAttempts <= p.lockFreesAfter) return false;
+        mine = true; p.calls.push('lock.acquired'); return true;
+      },
+      hasLock: () => mine,
+      releaseLock: () => { if (mine) p.calls.push('lock.released'); mine = false; }
+    };
+  }
+  /** What a service getter returns when it is broken on purpose: null ("no document in this scope") or an exception. */
+  guard(kind, scope, make) {
+    const mode = this.broken[kind + '.' + scope];
+    if (mode === 'null') return null;
+    if (mode === 'throw') throw new Error('Simulated ' + kind + ' failure in scope ' + scope);
+    return make();
+  }
+
+  /** The global names a fresh execution gets. */
+  globals() {
+    const p = this;
+    const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+    const g = { Logger: { log() {} }, console: { log() {}, error() {} } };
+    g.PropertiesService = {}; g.CacheService = {};
+    ['document', 'user', 'script'].forEach(scope => {
+      g.PropertiesService['get' + cap(scope) + 'Properties'] = () => p.guard('properties', scope, () => p.propertiesService(scope));
+      g.CacheService['get' + cap(scope) + 'Cache'] = () => p.guard('cache', scope, () => p.cacheService(scope));
+    });
+    g.LockService = { getScriptLock: () => p.lock(), getDocumentLock: () => p.lock(), getUserLock: () => p.lock() };
+    g.Utilities = { sleep: ms => { p.advance(ms / 1000); } };
+    g.SpreadsheetApp = { getActiveSpreadsheet: () => ({ getId: () => 'ss-1', getSheetByName: () => null }), getUi: () => ({ alert() {} }), flush() {} };
+    g.ScriptApp = { AuthMode: { NONE: 'NONE' }, EventType: { ON_EDIT: 'ON_EDIT', ON_CHANGE: 'ON_CHANGE' } };
+    return g;
+  }
+
+  /**
+   * A fresh global scope with the project's files loaded (names relative to the repository root).
+   * Returns { ctx, eval(code), get(name) }. Loading fails the test if any file does something at load time that needs more than these fakes.
+   */
+  execution(files, extraGlobals) {
+    const ctx = vm.createContext(Object.assign(this.globals(), extraGlobals || {}));
+    files.forEach(f => new vm.Script(fs.readFileSync(path.join(ROOT, f), 'utf8'), { filename: f }).runInContext(ctx));
+    return { ctx, eval: code => vm.runInContext(code, ctx), get: name => vm.runInContext(name, ctx) };
+  }
+}
+
+module.exports = { FakePlatform };

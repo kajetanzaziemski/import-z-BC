@@ -565,6 +565,9 @@ test('rule: no other platform globals than SpreadsheetApp, Sheets and Utilities'
 // ---- ConfigGrid and SheetCoeditor (golden tests against the frozen legacy code) ------------------------------------------
 require('./config-grid.test.js')({ test, both, parity, MODES, Grid });
 
+// ---- state layer: stores, settings, locks, agent detection state (fresh Apps Script executions on fake platform services) ----------
+require('./state.test.js')({ test });
+
 // ---- runner -----------------------------------------------------------------------------------------------------------
 let failed = 0;
 tests.forEach(t => {
