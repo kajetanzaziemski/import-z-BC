@@ -1,0 +1,787 @@
+// Copied from kajetanzaziemski/wyceny (grid.js @ e042de5). See docs/grid/ for the reference and docs/architecture-proposal.md for the plan.
+// ---------------------------------------------------------------------------
+// GRID: an in-memory copy of the top rows of ONE sheet, behind a small Sheet-like interface.
+//
+// This file knows nothing about the pricing project (no header names, price rows, notes...): it is the one place
+// that talks to the Sheets API / Spreadsheet service for editing a sheet, and it could serve another project.
+//   1. Grid.open(spec)       - ONE read: values, formulas, merges (and, for a reset, the template to paste)
+//   2. run an operation on the grid instead of the sheet (cells, structure, merges, borders, notes, checkboxes...)
+//   3. grid.commit()         - ONE write: a single batchUpdate with the reset, inserts / deletes, merges, cells,
+//                              alignment, borders, freeze. Without the Sheets advanced service the same grid falls
+//                              back to the Spreadsheet service (a handful of batched calls).
+// The one project-shaped idea is the ANCHOR ROW: a row that follows row inserts above it (for the report it is the
+// first price row: the headers are the rows above it). The freeze follows the anchor, see _frozenPlan.
+// A project adapter (reportGrid.js) supplies sheet names and the anchor; it also adds the project's own names.
+// ---------------------------------------------------------------------------
+
+const USE_SHEETS_API = true;   // false = always use the Spreadsheet service path
+
+const MODEL_ROWS = 20;      // window: at least rows 1..20; always reaches 3 rows past the anchor row
+
+const MODEL_MAX_ROWS = 3000;   // the window never grows past this (it covers every price line, see below)
+
+/**
+ * Rows of the model window: the rows around the anchor at least, and
+ * everything the sheet uses (`lastRow`) so that operations reach every price line; a few spare rows
+ * keep the last lines inside the window when an operation inserts a header row.
+ */
+function modelRows_(anchorRow, lastRow) {
+  return Math.min(MODEL_MAX_ROWS, Math.max(MODEL_ROWS, anchorRow + 3, (lastRow || 0) + 5));
+}
+
+class Grid {
+  /** init = { source, sheetName, maxRows, anchorRow, rows, cols, v, f, merges, frozenRows } - see Grid.open at the bottom. */
+  constructor(init) {
+    this.source = init.source;                   // { kind: 'service', sheet } | { kind: 'api', ... }
+    this.maxRows = init.maxRows;
+    this.sheetName = init.sheetName;
+    this.anchorRow = init.anchorRow;             // follows row inserts above it (see the header comment)
+    this.rows = init.rows;
+    this.cols = init.cols;
+    this.v = init.v;                             // [row - 1][col - 1]
+    this.f = init.f;                             // '' for cells without a formula
+    this.merges = init.merges;                   // [{ r1, c1, r2, c2 }]
+    this.frozenRows = init.frozenRows || 0;      // frozen rows of the sheet when the model was read (see _frozenPlan)
+    this.anchorRow0 = init.anchorRow;            // the anchor the grid started with (a reset starts as the template)
+    this.sheetAnchorRow = init.sheetAnchorRow !== undefined ? init.sheetAnchorRow : init.anchorRow;   // the anchor of the SHEET as it stands now
+
+    this.ops = [];                               // structural changes, in order
+    this.dirty = {};                             // 'row,col' -> true: cells written by the operation
+    this.notes = {};                             // 'row,col' -> text: cell notes set by the operation ('' = remove the note)
+    this.checks = {};                            // 'row,col' -> true (a checkbox) / false (no checkbox any more): set by the operation
+    this.aligns = [];                            // [{ a, r1, c1, r2, c2 }]
+    this.rowSizes = {};                          // row -> pixels: heights set by the operation
+    this.fitRows = [];                           // rows (final numbers) fitted to their content at the end of the commit (inserted with opts.fit)
+    this.fills = [];                             // [{ color, r1, c1, r2, c2 }]: background colours set by the operation (color null = no fill)
+    this.borders = [];                           // [{ a1: [...], args: [...] }]
+    this.afterOps = [];                          // [{ api: sheetId => requests, service: sheet => void }]: run right after the structural changes
+    this.rowFormats = [];                        // [{ row, spec: { size, color, clearTop, clearBottom } }]: whole rows
+    this.active = null;                          // [row, col] to select after the commit
+    this.scratch = {};                           // free storage for the services during one session (not written anywhere)
+  }
+
+  // --- the Sheet API slice ---------------------------------------------------
+  getName() { return this.sheetName; }
+  getMaxRows() { return this.maxRows; }
+  getLastColumn() { return this.cols; }
+  getLastRow() { return this.rows; }              // the window reaches past the last used row
+  getAnchorRow() { return this.anchorRow; }
+  getRange(r, c, nr, nc) { return new GridRange(this, r, c, nr === undefined ? 1 : nr, nc === undefined ? 1 : nc); }
+  /** Sets the height of row `r` in pixels (committed with the rest, after the structural changes). */
+  setRowHeight(r, px) { this.rowSizes[r] = px; return this; }
+  formatRow(row, spec) { this.rowFormats.push({ row: row, spec: spec }); }
+  /** The note look for ONE cell (a used note row: the other cells of the row are the user's); borders are left alone. */
+  formatCell(row, col, spec) { this.rowFormats.push({ row: row, col: col, spec: spec }); }
+  setActiveRange(range) { this.active = [range.getRow(), range.getColumn()]; }
+
+  getRangeList(a1List) {
+    const self = this;
+    return {
+      setBorder() { self.borders.push({ a1: a1List.slice(), args: Array.prototype.slice.call(arguments) }); },
+      getRanges() { return a1List.map(a => { const x = parseA1_(a); return self.getRange(x.r1, x.c1, x.r2 - x.r1 + 1, x.c2 - x.c1 + 1); }); }
+    };
+  }
+
+  /**
+   * `opts.plain`: the new rows do not inherit the look of the row above them in one respect: no data validation (checkboxes, lists).
+   * `opts.fit`: the new rows do not keep the height they inherit: at the end of the commit they are fitted to their content.
+   */
+  insertRowsAfter(after, n, opts) {
+    this.ops.push({ t: 'ir', at: after, n: n, plain: !!(opts && opts.plain) });
+    this.maxRows += n;
+    if (after < this.anchorRow) this.anchorRow += n;    // rows above the anchor: it moves down with them
+    const blank = () => new Array(this.cols).fill('');
+    for (let i = 0; i < n; i++) { this.v.splice(after, 0, blank()); this.f.splice(after, 0, blank()); }
+    if (after >= this.rows) this.rows += n;      // inserted past the window's end: the window grows with it
+    this.v.length = this.rows;
+    this.f.length = this.rows;
+    this._shift('r', after, n);
+    if (opts && opts.fit) for (let i = 1; i <= n; i++) this.fitRows.push(after + i);
+  }
+
+  insertColumnsAfter(after, n) {
+    this.ops.push({ t: 'ic', at: after, n: n });
+    for (let r = 0; r < this.rows; r++) {
+      for (let i = 0; i < n; i++) { this.v[r].splice(after, 0, ''); this.f[r].splice(after, 0, ''); }
+    }
+    this.cols += n;
+    this._shift('c', after, n);
+  }
+
+  deleteColumns(from, n) {
+    this.ops.push({ t: 'dc', at: from, n: n });
+    for (let r = 0; r < this.rows; r++) { this.v[r].splice(from - 1, n); this.f[r].splice(from - 1, n); }
+    this.cols -= n;
+
+    const dropCols = map => {
+      const nd = {};
+      Object.keys(map).forEach(k => {
+        const p = k.split(',').map(Number);
+        if (p[1] >= from && p[1] < from + n) return;
+        nd[p[0] + ',' + (p[1] >= from + n ? p[1] - n : p[1])] = map[k];
+      });
+      return nd;
+    };
+    this.dirty = dropCols(this.dirty);
+    this.notes = dropCols(this.notes);
+    this.checks = dropCols(this.checks);
+
+    const cut = m => {                           // merges / alignment rects lose the deleted columns
+      if (m.c1 >= from + n) { m.c1 -= n; m.c2 -= n; return m; }
+      if (m.c2 < from) return m;
+      const removed = Math.min(m.c2, from + n - 1) - Math.max(m.c1, from) + 1;
+      m.c2 -= removed;
+      if (m.c1 >= from) m.c1 = from;
+      return m.c2 >= m.c1 ? m : null;
+    };
+    this.merges = this.merges.map(cut).filter(Boolean);
+    this.aligns = this.aligns.map(cut).filter(Boolean);
+    this.fills = this.fills.map(cut).filter(Boolean);
+  }
+
+  // --- internals -------------------------------------------------------------------
+  /** Same rule as Sheets: rects after the insertion point move, rects spanning it grow. */
+  _shift(axis, after, n) {
+    const lo = axis === 'r' ? 'r1' : 'c1', hi = axis === 'r' ? 'r2' : 'c2';
+    const move = m => { if (m[lo] > after) { m[lo] += n; m[hi] += n; } else if (m[hi] > after) m[hi] += n; return m; };
+    this.merges.forEach(move);
+    this.aligns.forEach(move);
+    this.fills.forEach(move);
+
+    const moveKeys = map => {
+      const nd = {};
+      Object.keys(map).forEach(k => {
+        const p = k.split(',').map(Number);
+        const i = axis === 'r' ? 0 : 1;
+        if (p[i] > after) p[i] += n;
+        nd[p[0] + ',' + p[1]] = map[k];
+      });
+      return nd;
+    };
+    this.dirty = moveKeys(this.dirty);
+    this.notes = moveKeys(this.notes);
+    this.checks = moveKeys(this.checks);
+    if (axis === 'r') {
+      this.fitRows = this.fitRows.map(r => (r > after ? r + n : r));
+      const sizes = {};
+      Object.keys(this.rowSizes).forEach(r => { sizes[Number(r) > after ? Number(r) + n : Number(r)] = this.rowSizes[r]; });
+      this.rowSizes = sizes;
+    }
+  }
+
+  /** Runs of consecutive rows to fit: [{ first, count }]. */
+  _fitRuns() {
+    const rows = Array.from(new Set(this.fitRows)).sort((a, b) => a - b);
+    const runs = [];
+    rows.forEach(r => {
+      const last = runs[runs.length - 1];
+      if (last && last.first + last.count === r) last.count++;
+      else runs.push({ first: r, count: 1 });
+    });
+    return runs;
+  }
+
+  /** A checkbox (a BOOLEAN validation) with the value in the cell; clearCheckbox takes it away together with the value. */
+  setCheckbox(r, c, checked) { this._set(r, c, !!checked, ''); this.checks[r + ',' + c] = true; }
+  clearCheckbox(r, c) { this._set(r, c, '', ''); this.checks[r + ',' + c] = false; }
+
+  _inWindow(r, c) { return r >= 1 && r <= this.rows && c >= 1 && c <= this.cols; }
+  _val(r, c) { return this._inWindow(r, c) ? this.v[r - 1][c - 1] : ''; }
+  _form(r, c) { return this._inWindow(r, c) ? this.f[r - 1][c - 1] : ''; }
+  _set(r, c, value, formula) {
+    if (!this._inWindow(r, c)) return;
+    this.v[r - 1][c - 1] = value;
+    this.f[r - 1][c - 1] = formula;
+    this.dirty[r + ',' + c] = true;
+  }
+
+  // --- the write-out ---------------------------------------------------------------------
+  /** Writes the whole operation: one batchUpdate through the Sheets API, else batched Spreadsheet-service calls. */
+  /**
+   * What to do about the frozen rows, decided before anything is written:
+   *  - the frozen area reaches the row above the anchor (for the report: all the header rows are frozen):
+   *    it grows with the rows inserted above the anchor, so the new header is frozen too and no merge crosses the boundary -> { rows: n };
+   *  - the freeze cuts through the headers and a merge of this operation would cross it (Sheets refuses to merge over
+   *    the boundary) -> { error } and nothing is written;
+   *  - otherwise nothing to do -> { rows: null }.
+   */
+  _frozenPlan() {
+    const F0 = this.frozenRows;
+    if (!F0) return { rows: null };
+    let F = F0;                                  // the boundary after the row inserts (rows inserted inside the frozen area are frozen)
+    this.ops.forEach(op => { if (op.t === 'ir' && op.at < F) F += op.n; });
+    if (F0 >= this.sheetAnchorRow - 1) {
+      // The boundary keeps its distance from the end of the headers. After a reset the headers are the template's: they may
+      // be shorter than the ones the sheet had (the freeze moves up with them), then every row inserted in the headers
+      // moves it down; rows inserted below the headers but still inside the frozen part are frozen too.
+      const base = F0 + (this.anchorRow0 - this.sheetAnchorRow);          // where it stands once the template's headers are in
+      let pr = this.anchorRow0, B = base;
+      this.ops.forEach(op => {
+        if (op.t !== 'ir') return;
+        if (op.at < pr) { pr += op.n; B += op.n; }
+        else if (op.at < B) B += op.n;
+      });
+      return { rows: B, base: base };
+    }
+    const crossing = this._finalMerges().some(m => m.r1 <= F && F < m.r2);
+    if (!crossing) return { rows: null };
+    return { error: 'Zablokowane wiersze przecinają nagłówki (zablokowano ' + F0 + ', a nagłówki kończą się w wierszu ' + (this.sheetAnchorRow - 1) +
+                    '), więc nie da się połączyć komórek nagłówka. Nic nie zmieniono. Zmień blokadę (Widok > Zablokuj) tak, by obejmowała '+
+                    'wszystkie wiersze nagłówka albo żadnego, i spróbuj ponownie.' };
+  }
+
+  commit() {
+    this._frozen = this._frozenPlan();
+    if (this._frozen.error) throw new Error(this._frozen.error);
+    if (this.source.kind === 'api') this._commitApi();
+    else this._commitService();
+  }
+
+  /** The window's final merges that are real merges (more than one cell). */
+  _finalMerges() { return this.merges.filter(m => m.r2 > m.r1 || m.c2 > m.c1); }
+
+  /** Dirty cells as horizontal runs [{ row, col, cells: [{v, f}] }]; non-top-left cells of merges are skipped. */
+  _dirtyRuns() {
+    const hidden = {};
+    this._finalMerges().forEach(m => {
+      for (let r = m.r1; r <= m.r2; r++)
+        for (let c = m.c1; c <= m.c2; c++) if (r !== m.r1 || c !== m.c1) hidden[r + ',' + c] = true;
+    });
+    const byRow = {};
+    Object.keys(this.dirty).forEach(k => {
+      if (hidden[k]) return;
+      const p = k.split(',').map(Number);
+      if (this._inWindow(p[0], p[1])) (byRow[p[0]] = byRow[p[0]] || []).push(p[1]);
+    });
+    const runs = [];
+    Object.keys(byRow).map(Number).sort((a, b) => a - b).forEach(r => {
+      const cols = byRow[r].sort((a, b) => a - b);
+      let start = 0;
+      for (let i = 1; i <= cols.length; i++) {
+        if (i < cols.length && cols[i] === cols[i - 1] + 1) continue;
+        const run = cols.slice(start, i);
+        runs.push({ row: r, col: run[0], cells: run.map(c => ({ v: this.v[r - 1][c - 1], f: this.f[r - 1][c - 1] })) });
+        start = i;
+      }
+    });
+    return runs;
+  }
+
+  /** Missing merges as [{r1,c1,r2,c2,vertical}]: columns of equal vertical extent become one MERGE_COLUMNS run. */
+  _mergePlan(list) {
+    const singles = list.filter(m => m.c1 === m.c2).sort((a, b) => a.r1 - b.r1 || a.r2 - b.r2 || a.c1 - b.c1);
+    const plan = [];
+    singles.forEach(m => {
+      const last = plan[plan.length - 1];
+      if (last && last.vertical && last.r1 === m.r1 && last.r2 === m.r2 && last.c2 === m.c1 - 1) last.c2 = m.c1;
+      else plan.push({ r1: m.r1, r2: m.r2, c1: m.c1, c2: m.c2, vertical: true });
+    });
+    list.filter(m => m.c1 !== m.c2).forEach(m => plan.push({ r1: m.r1, c1: m.c1, r2: m.r2, c2: m.c2, vertical: false }));
+    return plan;
+  }
+
+  /** ONE batchUpdate. Nothing is read: the window is unmerged and the final merges are made again. */
+  _commitApi() {
+    const S = this.source;
+    const sid = S.sheetId;
+    const grid = (r1, c1, r2, c2, sheetId) => ({
+      sheetId: sheetId === undefined ? sid : sheetId,
+      startRowIndex: r1 - 1, endRowIndex: r2, startColumnIndex: c1 - 1, endColumnIndex: c2
+    });
+    const black = { style: 'SOLID', color: { red: 0, green: 0, blue: 0 } };
+    const req = [];
+
+    if (S.tpl) {                                 // "Zacznij od nowa": clear the sheet, paste the template
+      // Row groups first: collapsed ones are opened (so their rows are visible again), then all are removed, deepest first.
+      (S.rowGroups || []).slice().sort((a, b) => (b.depth || 1) - (a.depth || 1)).forEach(g => {
+        const range = { sheetId: sid, dimension: 'ROWS', startIndex: g.range.startIndex, endIndex: g.range.endIndex };
+        if (g.collapsed) req.push({ updateDimensionGroup: { dimensionGroup: { range: range, depth: g.depth || 1, collapsed: false }, fields: 'collapsed' } });
+        req.push({ deleteDimensionGroup: { range: range } });
+      });
+      req.push({ unmergeCells: { range: { sheetId: sid } } });
+      req.push({ updateCells: { range: { sheetId: sid }, fields: '*' } });
+      if (this._frozen && this._frozen.base !== undefined) {   // after the old merges are gone (a freeze may not cut a merge) and before the template's are pasted
+        req.push({ updateSheetProperties: { properties: { sheetId: sid, gridProperties: { frozenRowCount: this._frozen.base } }, fields: 'gridProperties.frozenRowCount' } });
+      }
+      if (S.rowCount < S.tpl.rowCount) req.push({ appendDimension: { sheetId: sid, dimension: 'ROWS', length: S.tpl.rowCount - S.rowCount } });
+      if (S.columnCount < S.tpl.columnCount) req.push({ appendDimension: { sheetId: sid, dimension: 'COLUMNS', length: S.tpl.columnCount - S.columnCount } });
+      req.push({ copyPaste: {
+        source: grid(1, 1, S.tpl.rowCount, S.tpl.columnCount, S.tpl.sheetId),
+        destination: grid(1, 1, S.tpl.rowCount, S.tpl.columnCount),
+        pasteType: 'PASTE_NORMAL'
+      } });
+      // The column widths are not part of a normal paste (and the API has no paste type for them): set one run of equal widths at a time.
+      const widths = S.tpl.columnWidths || [];
+      for (let i = 0; i < widths.length; ) {
+        let j = i + 1;
+        while (j < widths.length && widths[j] === widths[i]) j++;
+        if (widths[i]) req.push({ updateDimensionProperties: {
+          range: { sheetId: sid, dimension: 'COLUMNS', startIndex: i, endIndex: j },
+          properties: { pixelSize: widths[i] }, fields: 'pixelSize'
+        } });
+        i = j;
+      }
+    }
+
+    let rowCount = Math.max(S.rowCount || 0, S.tpl ? S.tpl.rowCount : 0);
+    this.ops.forEach(op => {
+      if (op.t === 'ir' && op.at >= rowCount) { req.push({ appendDimension: { sheetId: sid, dimension: 'ROWS', length: op.n } }); rowCount += op.n; }   // past the last row
+      else if (op.t === 'ir') {
+        rowCount += op.n;
+        req.push({ insertDimension: { range: { sheetId: sid, dimension: 'ROWS', startIndex: op.at, endIndex: op.at + op.n }, inheritFromBefore: true } });
+        if (op.plain) req.push({ repeatCell: { range: { sheetId: sid, startRowIndex: op.at, endRowIndex: op.at + op.n }, cell: {}, fields: 'dataValidation' } });
+      }
+      else if (op.t === 'ic') req.push({ insertDimension: { range: { sheetId: sid, dimension: 'COLUMNS', startIndex: op.at, endIndex: op.at + op.n }, inheritFromBefore: true } });
+      else req.push({ deleteDimension: { range: { sheetId: sid, dimension: 'COLUMNS', startIndex: op.at - 1, endIndex: op.at - 1 + op.n } } });
+    });
+
+    if (this._frozen && this._frozen.rows !== null && this._frozen.rows !== undefined) {      // the freeze follows the headers, before any merge is made
+      req.push({ updateSheetProperties: { properties: { sheetId: sid, gridProperties: { frozenRowCount: this._frozen.rows } }, fields: 'gridProperties.frozenRowCount' } });
+    }
+
+    this.afterOps.forEach(f => f.api(sid).forEach(r => req.push(r)));          // e.g. a new price line copied from the template
+
+    req.push({ unmergeCells: { range: grid(1, 1, this.rows, this.cols) } });
+
+    const cellData = c => {
+      if (c.f !== '') return { userEnteredValue: { formulaValue: c.f } };
+      if (typeof c.v === 'number') return { userEnteredValue: { numberValue: c.v } };
+      if (typeof c.v === 'boolean') return { userEnteredValue: { boolValue: c.v } };
+      if (c.v === '' || c.v === null || c.v === undefined) return {};              // clears the cell
+      return { userEnteredValue: { stringValue: String(c.v) } };
+    };
+    this._dirtyRuns().forEach(run => {
+      req.push({ updateCells: {
+        rows: [{ values: run.cells.map(cellData) }],
+        start: { sheetId: sid, rowIndex: run.row - 1, columnIndex: run.col - 1 },
+        fields: 'userEnteredValue'
+      } });
+    });
+
+    Object.keys(this.notes).forEach(k => {        // cell notes (an empty text removes the note)
+      const p = k.split(',').map(Number);
+      if (!this._inWindow(p[0], p[1])) return;
+      req.push({ updateCells: {
+        rows: [{ values: [{ note: this.notes[k] }] }],
+        start: { sheetId: sid, rowIndex: p[0] - 1, columnIndex: p[1] - 1 },
+        fields: 'note'
+      } });
+    });
+
+    Object.keys(this.checks).forEach(k => {       // checkboxes: the validation (the value is among the written cells)
+      const p = k.split(',').map(Number);
+      if (!this._inWindow(p[0], p[1])) return;
+      req.push({ updateCells: {
+        rows: [{ values: [this.checks[k] ? { dataValidation: { condition: { type: 'BOOLEAN' } } } : {}] }],
+        start: { sheetId: sid, rowIndex: p[0] - 1, columnIndex: p[1] - 1 },
+        fields: 'dataValidation'
+      } });
+    });
+
+    this._mergePlan(this._finalMerges()).forEach(m => {
+      req.push({ mergeCells: { range: grid(m.r1, m.c1, m.r2, m.c2), mergeType: m.vertical ? 'MERGE_COLUMNS' : 'MERGE_ALL' } });
+    });
+
+    this.aligns.forEach(m => {
+      req.push({ repeatCell: {
+        range: grid(m.r1, m.c1, m.r2, m.c2),
+        cell: { userEnteredFormat: { horizontalAlignment: String(m.a).toUpperCase() } },
+        fields: 'userEnteredFormat.horizontalAlignment'
+      } });
+    });
+    this.fills.forEach(m => {
+      const c = m.color ? { red: parseInt(m.color.slice(1, 3), 16) / 255, green: parseInt(m.color.slice(3, 5), 16) / 255, blue: parseInt(m.color.slice(5, 7), 16) / 255 } : null;
+      req.push({ repeatCell: {
+        range: grid(m.r1, m.c1, m.r2, m.c2),
+        cell: c ? { userEnteredFormat: { backgroundColor: c } } : {},          // an empty cell with the field in the mask clears the fill
+        fields: 'userEnteredFormat.backgroundColor'
+      } });
+    });
+    this.borders.forEach(b => {
+      const a = b.args;                           // top, left, bottom, right, vertical, horizontal, color, style
+      b.a1.forEach(a1 => {
+        const x = parseA1_(a1);
+        const r = { updateBorders: { range: grid(x.r1, x.c1, x.r2, x.c2) } };
+        ['top', 'left', 'bottom', 'right', 'innerVertical', 'innerHorizontal'].forEach((side, i) => {
+          if (a[i]) r.updateBorders[side] = black;
+          else if (a[i] === false) r.updateBorders[side] = { style: 'NONE' };      // false removes the border, null leaves it
+        });
+        req.push(r);
+      });
+    });
+
+    this.rowFormats.forEach(f => {                // note rows: font, and no borders but the edges shared with the price rows
+      const range = { sheetId: sid, startRowIndex: f.row - 1, endRowIndex: f.row };
+      if (f.col) { range.startColumnIndex = f.col - 1; range.endColumnIndex = f.col; }
+      const gray = parseInt(f.spec.color.slice(1, 3), 16) / 255;
+      req.push({ repeatCell: {                    // first every format but the borders is cleared (an empty cell + a field mask)
+        range: range,
+        cell: {},
+        fields: ['backgroundColor', 'backgroundColorStyle', 'textFormat', 'horizontalAlignment', 'verticalAlignment',
+                 'wrapStrategy', 'numberFormat', 'textRotation', 'padding', 'hyperlinkDisplayType']
+                .map(x => 'userEnteredFormat.' + x).join(',')
+      } });
+      req.push({ repeatCell: {
+        range: range,
+        cell: { userEnteredFormat: { verticalAlignment: String(f.spec.vAlign || 'top').toUpperCase(), textFormat: { fontSize: f.spec.size, foregroundColor: { red: gray, green: gray, blue: gray } } } },
+        fields: 'userEnteredFormat.verticalAlignment,userEnteredFormat.textFormat.fontSize,userEnteredFormat.textFormat.foregroundColor'
+      } });
+      if (f.spec.wrap) req.push({ repeatCell: { range: range, cell: { userEnteredFormat: { wrapStrategy: 'WRAP' } }, fields: 'userEnteredFormat.wrapStrategy' } });
+      if (f.spec.numberFormat) req.push({ repeatCell: {
+        range: range,
+        cell: { userEnteredFormat: { numberFormat: { type: 'NUMBER', pattern: f.spec.numberFormat } } },
+        fields: 'userEnteredFormat.numberFormat'
+      } });
+      if (f.col) return;                          // one cell: its borders are not ours to change
+      const none = { style: 'NONE' };
+      const b = { range: range, left: none, right: none, innerVertical: none };
+      if (f.spec.clearTop) b.top = none;
+      if (f.spec.clearBottom) b.bottom = none;
+      req.push({ updateBorders: b });
+    });
+
+    Object.keys(this.rowSizes).forEach(r => req.push({ updateDimensionProperties: {
+      range: { sheetId: sid, dimension: 'ROWS', startIndex: Number(r) - 1, endIndex: Number(r) },
+      properties: { pixelSize: this.rowSizes[r] }, fields: 'pixelSize'
+    } }));
+    this._fitRuns().forEach(run => req.push({ autoResizeDimensions: { dimensions: { sheetId: sid, dimension: 'ROWS', startIndex: run.first - 1, endIndex: run.first - 1 + run.count } } }));   // after the content is written
+
+    if (S.tpl) {                                  // a reset: the rows from the anchor down (the data) fit their content again; the rows above keep the template's heights
+      const from = this.anchorRow0 - 1;
+      if (rowCount > from) req.push({ autoResizeDimensions: { dimensions: { sheetId: sid, dimension: 'ROWS', startIndex: from, endIndex: rowCount } } });
+    }
+
+    Sheets.Spreadsheets.batchUpdate({ requests: req }, S.ssId);
+
+    if (this.active) {                            // the selection is not part of the API
+      const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(this.sheetName);
+      sheet.setActiveRange(sheet.getRange(this.active[0], this.active[1]));
+    }
+  }
+
+  /** Spreadsheet-service fallback: structure first, then merges, cell runs, alignment, borders. */
+  _commitService() {
+    const sheet = this.source.sheet;
+    this.ops.forEach(op => {
+      if (op.t === 'ir') { sheet.insertRowsAfter(op.at, op.n); if (op.plain) sheet.getRange(op.at + 1, 1, op.n, Math.max(1, this.cols)).clearDataValidations(); }
+      else if (op.t === 'ic') sheet.insertColumnsAfter(op.at, op.n);
+      else sheet.deleteColumns(op.at, op.n);
+    });
+    if (this._frozen && this._frozen.rows !== null && this._frozen.rows !== undefined) sheet.setFrozenRows(this._frozen.rows);
+    this.afterOps.forEach(f => f.service(sheet));
+
+    // Merges: leave the ones that are already right, break the stale ones, make the missing ones.
+    const key = m => m.r1 + ',' + m.c1 + ',' + m.r2 + ',' + m.c2;
+    const want = this.merges.filter(m => m.r2 > m.r1 || m.c2 > m.c1);
+    const wantSet = {};
+    want.forEach(m => { wantSet[key(m)] = true; });
+    const real = sheet.getRange(1, 1, this.rows, this.cols).getMergedRanges().map(r => parseA1_(r.getA1Notation()));
+    const realSet = {};
+    real.forEach(m => { realSet[key(m)] = true; });
+    const stale = real.filter(m => !wantSet[key(m)]);
+    const missing = want.filter(m => !realSet[key(m)]);
+    if (stale.length) sheet.getRangeList(stale.map(rectA1_)).breakApart();
+
+    // Cell contents: written cells only, as horizontal runs.
+    const hidden = {};                           // non-top-left cells of merges stay untouched
+    want.forEach(m => {
+      for (let r = m.r1; r <= m.r2; r++)
+        for (let c = m.c1; c <= m.c2; c++) if (r !== m.r1 || c !== m.c1) hidden[r + ',' + c] = true;
+    });
+    const byRow = {};
+    const blanks = [];                           // cells the operation emptied: one clearContent call
+    Object.keys(this.dirty).forEach(k => {
+      if (hidden[k]) return;
+      const p = k.split(',').map(Number);
+      if (!this._inWindow(p[0], p[1])) return;
+      const v = this.v[p[0] - 1][p[1] - 1], f = this.f[p[0] - 1][p[1] - 1];
+      if (f === '' && (v === '' || v === null)) blanks.push(rectA1_({ r1: p[0], c1: p[1], r2: p[0], c2: p[1] }));
+      else (byRow[p[0]] = byRow[p[0]] || []).push(p[1]);
+    });
+    if (blanks.length) sheet.getRangeList(blanks).clearContent();
+    Object.keys(byRow).map(Number).sort((a, b) => a - b).forEach(r => {
+      const cols = byRow[r].sort((a, b) => a - b);
+      const isF = c => this.f[r - 1][c - 1] !== '';
+      let start = 0;
+      for (let i = 1; i <= cols.length; i++) {      // a run = adjacent cells of the same kind (formula / value)
+        if (i < cols.length && cols[i] === cols[i - 1] + 1 && isF(cols[i]) === isF(cols[start])) continue;
+        const run = cols.slice(start, i);
+        const rng = sheet.getRange(r, run[0], 1, run.length);
+        if (isF(run[0])) rng.setFormulas([run.map(c => this.f[r - 1][c - 1])]);
+        else rng.setValues([run.map(c => this.v[r - 1][c - 1])]);
+        start = i;
+      }
+    });
+
+    Object.keys(this.notes).forEach(k => {
+      const p = k.split(',').map(Number);
+      if (this._inWindow(p[0], p[1])) sheet.getRange(p[0], p[1]).setNote(this.notes[k]);
+    });
+
+    Object.keys(this.checks).forEach(k => {
+      const p = k.split(',').map(Number);
+      if (!this._inWindow(p[0], p[1])) return;
+      const cell = sheet.getRange(p[0], p[1]);
+      if (this.checks[k]) cell.insertCheckboxes(); else cell.removeCheckboxes();
+    });
+
+    // Missing merges: columns of equal vertical extent go in one call.
+    const singles = missing.filter(m => m.c1 === m.c2).sort((a, b) => a.r1 - b.r1 || a.r2 - b.r2 || a.c1 - b.c1);
+    const runs = [];
+    singles.forEach(m => {
+      const last = runs[runs.length - 1];
+      if (last && last.r1 === m.r1 && last.r2 === m.r2 && last.c2 === m.c1 - 1) last.c2 = m.c1;
+      else runs.push({ r1: m.r1, r2: m.r2, c1: m.c1, c2: m.c2 });
+    });
+    runs.forEach(m => sheet.getRange(m.r1, m.c1, m.r2 - m.r1 + 1, m.c2 - m.c1 + 1).mergeVertically());
+    missing.filter(m => m.c1 !== m.c2).forEach(m =>
+      sheet.getRange(m.r1, m.c1, m.r2 - m.r1 + 1, m.c2 - m.c1 + 1).merge());
+
+    // Alignment, borders: one call each.
+    const aligns = {};
+    this.aligns.forEach(m => { (aligns[m.a] = aligns[m.a] || []).push(rectA1_(m)); });
+    Object.keys(aligns).forEach(a => {
+      const list = sheet.getRangeList(aligns[a]);
+      if (typeof list.setHorizontalAlignment === 'function') list.setHorizontalAlignment(a);
+      else list.getRanges().forEach(r => r.setHorizontalAlignment(a));
+    });
+    this.fills.forEach(m => sheet.getRange(m.r1, m.c1, m.r2 - m.r1 + 1, m.c2 - m.c1 + 1).setBackground(m.color));
+    this.borders.forEach(b => {
+      const list = sheet.getRangeList(b.a1);
+      if (typeof list.setBorder === 'function') list.setBorder.apply(list, b.args);
+      else list.getRanges().forEach(r => r.setBorder.apply(r, b.args));
+    });
+    this.rowFormats.forEach(f => {
+      if (f.col) {                                  // one cell: the look only, no borders
+        const cell = sheet.getRange(f.row, f.col).clearFormat().setFontSize(f.spec.size).setFontColor(f.spec.color).setVerticalAlignment(f.spec.vAlign || 'top');
+        if (f.spec.wrap) cell.setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP);
+        if (f.spec.numberFormat) cell.setNumberFormat(f.spec.numberFormat);
+        return;
+      }
+      sheet.getRange(f.row + ':' + f.row).clearFormat().setFontSize(f.spec.size).setFontColor(f.spec.color).setVerticalAlignment(f.spec.vAlign || 'top')
+        .setBorder(f.spec.clearTop ? false : null, false, f.spec.clearBottom ? false : null, false, false, false);
+      if (f.spec.wrap) sheet.getRange(f.row + ':' + f.row).setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP);
+      if (f.spec.numberFormat) sheet.getRange(f.row + ':' + f.row).setNumberFormat(f.spec.numberFormat);
+    });
+
+    Object.keys(this.rowSizes).forEach(r => sheet.setRowHeight(Number(r), this.rowSizes[r]));
+    if (typeof sheet.autoResizeRows === 'function') this._fitRuns().forEach(run => sheet.autoResizeRows(run.first, run.count));
+
+    if (this.active) sheet.setActiveRange(sheet.getRange(this.active[0], this.active[1]));
+  }
+}
+
+class GridRange {
+  constructor(model, r, c, nr, nc) { this.m = model; this.r = r; this.c = c; this.nr = nr; this.nc = nc; }
+
+  getSheet() { return this.m; }
+  getRow() { return this.r; }
+  getColumn() { return this.c; }
+  getLastRow() { return this.r + this.nr - 1; }
+  getLastColumn() { return this.c + this.nc - 1; }
+  getNumRows() { return this.nr; }
+  getNumColumns() { return this.nc; }
+  getCell(i, j) { return new GridRange(this.m, this.r + i - 1, this.c + j - 1, 1, 1); }
+  getA1Notation() { return rectA1_({ r1: this.r, c1: this.c, r2: this.getLastRow(), c2: this.getLastColumn() }); }
+
+  _map(f) {
+    const out = [];
+    for (let i = 0; i < this.nr; i++) {
+      out.push([]);
+      for (let j = 0; j < this.nc; j++) out[i].push(f(this.r + i, this.c + j));
+    }
+    return out;
+  }
+  _each(f) { for (let i = 0; i < this.nr; i++) for (let j = 0; j < this.nc; j++) f(this.r + i, this.c + j, i, j); }
+  _hits() {
+    return this.m.merges.filter(x =>
+      x.r1 <= this.getLastRow() && x.r2 >= this.r && x.c1 <= this.getLastColumn() && x.c2 >= this.c);
+  }
+
+  getValues() { return this._map((r, c) => this.m._val(r, c)); }
+  getDisplayValues() { return this._map((r, c) => String(this.m._val(r, c))); }
+  getFormulas() { return this._map((r, c) => this.m._form(r, c)); }
+  getValue() { return this.m._val(this.r, this.c); }
+  getDisplayValue() { return String(this.m._val(this.r, this.c)); }
+  getFormula() { return this.m._form(this.r, this.c); }
+
+  setValue(x) { this._assign(this.r, this.c, x); return this; }
+  setValues(a) { this._each((r, c, i, j) => this._assign(r, c, a[i][j])); return this; }
+  setFormula(f) { this.m._set(this.r, this.c, '', f); return this; }
+  setFormulas(a) { this._each((r, c, i, j) => this.m._set(r, c, '', a[i][j])); return this; }
+  clearContent() { this._each((r, c) => this.m._set(r, c, '', '')); return this; }
+  setNote(text) { this._each((r, c) => { this.m.notes[r + ',' + c] = String(text === null || text === undefined ? '' : text); }); return this; }
+  clearNote() { return this.setNote(''); }
+  _assign(r, c, x) {                              // a string starting with '=' is a formula, like in setValues
+    if (typeof x === 'string' && x.charAt(0) === '=') this.m._set(r, c, '', x);
+    else this.m._set(r, c, x === null || x === undefined ? '' : x, '');
+  }
+
+  getMergedRanges() {
+    return this._hits().map(x => new GridRange(this.m, x.r1, x.c1, x.r2 - x.r1 + 1, x.c2 - x.c1 + 1));
+  }
+  breakApart() {
+    const hits = this._hits();
+    this.m.merges = this.m.merges.filter(x => hits.indexOf(x) < 0);
+    return this;
+  }
+  merge() {                                       // keeps the upper-left value
+    this.breakApart();
+    if (this.nr * this.nc > 1) {
+      this.m.merges.push({ r1: this.r, c1: this.c, r2: this.getLastRow(), c2: this.getLastColumn() });
+      this._each((r, c) => { if (r !== this.r || c !== this.c) this.m._set(r, c, '', ''); });
+    }
+    return this;
+  }
+  mergeVertically() {                             // every column on its own
+    for (let j = 0; j < this.nc; j++) this.m.getRange(this.r, this.c + j, this.nr, 1).merge();
+    return this;
+  }
+
+  /** Background colour "#rrggbb" (null = no fill), written with the commit. A grid does not read colours: there is no getBackground. */
+  setBackground(color) {
+    this.m.fills = this.m.fills.filter(f => !(f.r1 === this.r && f.c1 === this.c && f.r2 === this.getLastRow() && f.c2 === this.getLastColumn()));
+    this.m.fills.push({ color: color, r1: this.r, c1: this.c, r2: this.getLastRow(), c2: this.getLastColumn() });
+    return this;
+  }
+
+  setHorizontalAlignment(a) {
+    this.m.aligns.push({ a: a, r1: this.r, c1: this.c, r2: this.getLastRow(), c2: this.getLastColumn() });
+    return this;
+  }
+  setBorder() {
+    this.m.borders.push({ a1: [this.getA1Notation()], args: Array.prototype.slice.call(arguments) });
+    return this;
+  }
+}
+
+function sheetsApiAvailable_() {
+  return USE_SHEETS_API && typeof Sheets !== 'undefined' && !!Sheets && !!Sheets.Spreadsheets;
+}
+
+/**
+ * Opens a grid on a sheet, or returns null when the sheet is missing. One read either way.
+ *   spec = { sheetName,             the sheet to edit
+ *            anchor: fn(sheet?),    the anchor row (see the header comment); given the sheet on the service path
+ *            reset: bool,           the grid starts as the template the sheet is reset from; with the Sheets API the
+ *            templateName,          reset is part of the commit's batchUpdate, without it `resetFallback()` resets the
+ *            templateAnchor: fn(),  sheet right here and the grid is read afterwards
+ *            sheetAnchor: fn(),     (reset only) the anchor of the sheet as it stands, before the reset
+ *            resetFallback: fn }
+ */
+Grid.open = function (spec) {
+  const fresh = !!spec.reset;
+  if (sheetsApiAvailable_()) return loadGridViaApi_(spec, fresh);
+
+  if (fresh && spec.resetFallback) spec.resetFallback();
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(spec.sheetName);
+  return sheet ? loadGridViaService_(spec, sheet) : null;
+};
+
+function loadGridViaService_(spec, sheet) {
+  const anchorRow = spec.anchor(sheet);
+  const maxRows = sheet.getMaxRows();
+  const rows = Math.min(modelRows_(anchorRow, sheet.getLastRow()), maxRows);
+  const cols = Math.max(1, sheet.getLastColumn());
+  const rng = sheet.getRange(1, 1, rows, cols);
+  return new Grid({
+    source: { kind: 'service', sheet: sheet }, sheetName: spec.sheetName,
+    maxRows: maxRows, anchorRow: anchorRow, rows: rows, cols: cols,
+    v: rng.getValues(),
+    f: rng.getFormulas(),
+    merges: rng.getMergedRanges().map(m => parseA1_(m.getA1Notation())),
+    frozenRows: typeof sheet.getFrozenRows === 'function' ? sheet.getFrozenRows() : 0
+  });
+}
+
+/**
+ * One spreadsheets.get: the window of the sheet (or of the template), all merges, sheet ids, row groups, column widths.
+ * With `ranges` the API returns only the sheets those ranges point at, so the edited sheet gets a tiny range when the
+ * template is the window.
+ */
+function loadGridViaApi_(spec, fresh) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ssId = ss.getId();
+  const from = fresh ? spec.templateName : spec.sheetName;
+  const sheetAnchor = fresh ? spec.sheetAnchor() : 0;                   // before the reset: the anchor the sheet has now
+  const anchorRow = fresh ? spec.templateAnchor() : spec.anchor();      // the template's when the grid starts as the template
+  const q = name => "'" + name.replace(/'/g, "''") + "'";
+  // The window has to reach every row of the sheet that can hold data. The size comes from the API itself: the
+  // Spreadsheet service can still report the sizes from before an earlier batch update of the same run
+  // (several assortments are loaded one after another) and a window that is too short cuts the lines off.
+  let rowsHint = 0;
+  if (!fresh) {
+    try {
+      const dims = Sheets.Spreadsheets.get(ssId, { ranges: [q(spec.sheetName) + '!A1'], fields: 'sheets(properties(title,gridProperties(rowCount)))' });
+      rowsHint = dims.sheets[0].properties.gridProperties.rowCount;
+    } catch (err) {
+      const now = ss.getSheetByName(spec.sheetName);
+      rowsHint = now ? now.getMaxRows() : 0;
+    }
+  }
+  const windowRows = modelRows_(anchorRow, rowsHint);
+  const ranges = [q(from) + '!1:' + windowRows];
+  if (fresh) ranges.push(q(spec.sheetName) + '!A1');
+  const fields = 'sheets(properties(sheetId,title,gridProperties(rowCount,columnCount,frozenRowCount)),merges,rowGroups,' +
+                 'data(rowData(values(userEnteredValue,effectiveValue)),columnMetadata(pixelSize)))';
+  const res = Sheets.Spreadsheets.get(ssId, { includeGridData: true, ranges: ranges, fields: fields });
+
+  const byTitle = {};
+  (res.sheets || []).forEach(sh => { byTitle[sh.properties.title] = sh; });
+  const edited = byTitle[spec.sheetName];
+  const src = byTitle[from];
+  if (!edited) throw new Error('Brak arkusza "' + spec.sheetName + '" (API zwróciło: ' + Object.keys(byTitle).join(', ') + ').');
+  if (!src) throw new Error('Brak arkusza "' + from + '" (API zwróciło: ' + Object.keys(byTitle).join(', ') + ').');
+
+  const rowData = (src.data && src.data[0] && src.data[0].rowData) || [];
+  const rows = Math.min(windowRows, src.properties.gridProperties.rowCount);
+  const cellOf = c => {
+    const u = c && c.userEnteredValue;
+    if (!u) return { v: '', f: '' };
+    if (u.formulaValue !== undefined) {
+      const e = c.effectiveValue || {};
+      const v = e.numberValue !== undefined ? e.numberValue : e.stringValue !== undefined ? e.stringValue : e.boolValue !== undefined ? e.boolValue : '';
+      return { v: v, f: u.formulaValue };
+    }
+    if (u.numberValue !== undefined) return { v: u.numberValue, f: '' };
+    if (u.stringValue !== undefined) return { v: u.stringValue, f: '' };
+    if (u.boolValue !== undefined) return { v: u.boolValue, f: '' };
+    return { v: '', f: '' };
+  };
+
+  const merges = (src.merges || []).map(m => ({
+    r1: m.startRowIndex + 1, c1: m.startColumnIndex + 1, r2: m.endRowIndex, c2: m.endColumnIndex
+  }));
+  let cols = 1;
+  for (let r = 0; r < rows; r++) {
+    const vals = (rowData[r] && rowData[r].values) || [];
+    vals.forEach((c, i) => { const x = cellOf(c); if (x.v !== '' || x.f !== '') cols = Math.max(cols, i + 1); });
+  }
+  merges.forEach(m => { if (m.r1 <= rows) cols = Math.max(cols, m.c2); });
+
+  const v = [], f = [];
+  for (let r = 0; r < rows; r++) {
+    const vals = (rowData[r] && rowData[r].values) || [];
+    v.push([]); f.push([]);
+    for (let c = 0; c < cols; c++) {
+      const x = cellOf(vals[c]);
+      v[r].push(x.v); f[r].push(x.f);
+    }
+  }
+
+  const gp = edited.properties.gridProperties;
+  return new Grid({
+    source: {
+      kind: 'api', ssId: ssId, sheetId: edited.properties.sheetId,
+      rowCount: gp.rowCount, columnCount: gp.columnCount,
+      tpl: fresh ? { sheetId: src.properties.sheetId, rowCount: src.properties.gridProperties.rowCount, columnCount: src.properties.gridProperties.columnCount,
+                     columnWidths: ((src.data && src.data[0] && src.data[0].columnMetadata) || []).map(c => (c && c.pixelSize) || 0) } : null,
+      rowGroups: fresh ? (edited.rowGroups || []) : []           // the groups of the sheet that is being reset: they are removed with it
+    },
+    sheetName: spec.sheetName,
+    maxRows: Math.max(gp.rowCount, fresh ? src.properties.gridProperties.rowCount : 0),
+    anchorRow: anchorRow, rows: rows, cols: cols, v: v, f: f, merges: merges,
+    frozenRows: gp.frozenRowCount || 0,
+    sheetAnchorRow: fresh ? sheetAnchor : anchorRow              // a reset: the anchor the sheet has now, not the template's
+  });
+}
