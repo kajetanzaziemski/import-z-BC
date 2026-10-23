@@ -29,7 +29,8 @@ class FakePlatform {
       getProperty: k => (Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null),
       setProperty: (k, v) => { p.calls.push('properties.set ' + scope + ' ' + k); store[k] = String(v); },
       deleteProperty: k => { p.calls.push('properties.delete ' + scope + ' ' + k); delete store[k]; },
-      getProperties: () => Object.assign({}, store)
+      getProperties: () => Object.assign({}, store),
+      getKeys: () => Object.keys(store)
     };
   }
   cacheService(scope) {

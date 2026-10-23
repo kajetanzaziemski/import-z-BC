@@ -24,6 +24,14 @@
       .FAIL .name { color: #d93025; font-weight: bold; }
       .meta { color: #80868b; white-space: nowrap; font-size: 11px; }
       .detail { display: none; margin: 0; padding: 6px 10px 10px 28px; white-space: pre; overflow-x: auto; font: 11px/1.4 monospace; background: #fafafa; }
+      /* one block per line; the bad ones are coloured (min-width keeps the colour under the whole line when the details scroll sideways) */
+      .detail .l { display: block; min-width: max-content; padding: 0 4px; border-left: 3px solid transparent; }
+      .detail .l.FAIL { color: #a50e0e; background: #fce8e6; border-left-color: #d93025; font-weight: bold; }
+      .detail .l.WARN { color: #7a4f01; background: #fef3c7; border-left-color: #f9ab00; }
+      .detail .l.PASS { color: #5f6368; }
+      .detail .l.SKIP { color: #80868b; font-style: italic; }
+      .detail .l.RUN { color: #1a73e8; }
+      .detail .l.LOST { color: #80868b; font-style: italic; }
       .run.open .detail { display: block; }
     </style>
   </head>
@@ -52,6 +60,23 @@
         return r.s === "LOST" ? "?" : ms >= 10000 ? Math.round(ms / 1000) + " s" : ms + " ms";
       }
 
+      // The status a line of the details is about: the first line is "[LIVE-CHECK] <status> <entry point> (...)", the others "    <status> <check> - <detail>".
+      function lineStatus(line) {
+        var m = /^\[LIVE-CHECK\] (PASS|FAIL|WARN|SKIP|RUN|LOST)\b/.exec(line) || /^\s+(PASS|FAIL|WARN|SKIP)\b/.exec(line);
+        return m ? m[1] : "";
+      }
+
+      // Puts the details into the <pre>, one coloured block per line (text only, nothing is interpreted as HTML).
+      function showDetail(pre, text) {
+        pre.textContent = "";
+        String(text).split("\n").forEach(function (line) {
+          var span = document.createElement("span");
+          span.className = "l " + lineStatus(line);
+          span.textContent = line === "" ? " " : line;
+          pre.appendChild(span);
+        });
+      }
+
       function render() {
         var list = document.getElementById("list");
         list.textContent = "";
@@ -67,7 +92,7 @@
           var meta = document.createElement("span"); meta.className = "meta"; meta.textContent = clock(r.t) + " · " + duration(r);
           meta.setAttribute("data-key", r.k);
           head.appendChild(dot); head.appendChild(name); head.appendChild(meta);
-          var detail = document.createElement("pre"); detail.className = "detail"; detail.textContent = details[r.k] || "…";
+          var detail = document.createElement("pre"); detail.className = "detail"; showDetail(detail, details[r.k] || "…");
           head.onclick = function () { toggle(r); };
           run.appendChild(head); run.appendChild(detail);
           list.appendChild(run);

@@ -608,3 +608,20 @@ function testConfigGridStatusSwitches(configSheetName){
   co.switchEstimateInfoActive(false);
   Logger.log("Status switches done on "+configSheetName+". Expected: every status cell grey (#cccccc, text #999999), E2:F2 grey, F2 = 1,234,567.");
 }
+
+/**
+ * Prints what a script reads from the three activity indicators (B2:D2) and the estimate cells (E2:F2) of a config sheet - the same
+ * reads the live check makes - so that "all controls look off" can be compared with the exact colours. Idle = background #cccccc, font #999999.
+ */
+function testConfigGridIndicators(configSheetName){
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(configSheetName);
+  if(!sheet) throw new Error("Brak arkusza: "+configSheetName);
+  const lines = ["B2 reading","C2 connection","D2 data writing","E2 estimate label","F2 estimate"].map(label => {
+    const cell = sheet.getRange(label.split(" ")[0]);
+    const idle = cell.getBackground() === "#cccccc" && cell.getFontColor() === "#999999";
+    return `${label}: background ${cell.getBackground()}, font ${cell.getFontColor()}${idle ? " (idle)" : ""}`;
+  });
+  const text = configSheetName+"\n"+lines.join("\n");
+  Logger.log(text);
+  return text;
+}

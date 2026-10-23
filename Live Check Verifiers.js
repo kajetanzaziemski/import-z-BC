@@ -148,11 +148,33 @@ function lcSheetNames_(snapshot){
 /** B2 / C2 / D2 of a config sheet show what the add-on is doing; after any run they must be back to idle. */
 function lcVerifyIdleIndicators_(c,sheet,tag){
   const labels = {B2: "reading", C2: "connection", D2: "data writing"};
-  const stuck = Object.keys(labels).filter(a1 => {
+  const lit = [];
+  Object.keys(labels).forEach(a1 => {
     const cell = sheet.getRange(a1);
-    return cell.getBackground() !== LC_IDLE_BACKGROUND || cell.getFontColor() !== LC_IDLE_FONT;
-  }).map(a1 => labels[a1]);
-  c.expect(`${tag} activity indicators back to idle`,stuck.length == 0,`still showing activity: ${stuck.join(", ")}`);
+    const background = cell.getBackground(), font = cell.getFontColor();
+    if(background !== LC_IDLE_BACKGROUND || font !== LC_IDLE_FONT) lit.push({a1, label: labels[a1], background, font});
+  });
+  const name = `${tag} activity indicators back to idle`;
+  if(!lit.length){ c.expect(name,true); return; }
+  // What was seen, so that "all controls are actually off" can be compared with what the script read.
+  const seen = lit.map(x => `${x.label} (${x.a1}: background ${x.background}, font ${x.font})`).join(", ");
+  const others = lcOtherRunsInProgress_(c);
+  // Another checked run that has started and not ended may be the one that lights the cell right now (a refresh writes for a long
+  // time, and a trigger of the same document can run its check meanwhile): that is not a stuck indicator, but worth a look.
+  if(others.length) c.warn(name,`still showing activity: ${seen}; another run is in progress and may be lighting it: ${others.join(", ")}`);
+  else c.expect(name,false,`still showing activity: ${seen}; no other checked run is in progress`);
+}
+
+/** Checked runs of OTHER executions that have started and have no result yet (nested runs of this execution do not count). */
+function lcOtherRunsInProgress_(c){
+  try{
+    const mine = lcStack.map(f => f.key);
+    return lcStoredResults_()
+      .filter(e => e.s == "RUN" && e.k !== c.key && mine.indexOf(e.k) < 0 && Date.now() - Date.parse(e.t) < 10 * 60 * 1000)
+      .map(e => `${e.a} since ${String(e.t).slice(11,19)} UTC`);
+  } catch(err) {
+    return [];
+  }
 }
 
 /** Header of a config sheet that was created by the add-on. */

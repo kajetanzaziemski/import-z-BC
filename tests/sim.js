@@ -265,6 +265,9 @@ class SimBook {
       getRow: () => r, getColumn: () => c, getNumRows: () => nr, getNumColumns: () => nc, getLastRow: () => r + nr - 1, getLastColumn: () => c + nc - 1,
       getA1Notation: () => colName(c) + r + (nr > 1 || nc > 1 ? ':' + colName(c + nc - 1) + (r + nr - 1) : ''),
       getValues: () => { call(); return grid((rr, cc) => valueOf(s.cell(rr, cc))); },
+      getBackground: () => { call(); const x = s.cell(r, c); return (x && x.fmt.bg) || '#ffffff'; },
+      getFontColor: () => { call(); const x = s.cell(r, c); return (x && x.fmt.color) || '#000000'; },
+      getFontColors: () => { call(); return grid((rr, cc) => { const x = s.cell(rr, cc); return (x && x.fmt.color) || '#000000'; }); },
       getFormulas: () => { call(); return grid((rr, cc) => { const x = s.cell(rr, cc); return x ? x.f : ''; }); },
       getMergedRanges: () => { call(); return s.merges.filter(m => m.r1 <= r + nr - 1 && m.r2 >= r && m.c1 <= c + nc - 1 && m.c2 >= c)
         .map(m => ({ getA1Notation: () => colName(m.c1) + m.r1 + ':' + colName(m.c2) + m.r2 })); },
