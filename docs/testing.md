@@ -23,6 +23,12 @@ Architecture rules are tests too (no project words in `Grid.js`, nothing used at
 What levels 1–2 can NOT tell: whether Google Sheets itself renders/accepts exactly this. Specific doubts:
 the `'general-left'` / `'general-right'` alignments (Grid now writes them as "not set"), colour strings like `#ff000000`, number format type inferred from the pattern.
 
+## 2b. State-layer tests (`tests/state.test.js`, `tests/platform-fakes.js`)
+Fake `PropertiesService` / `CacheService` / `LockService` (cache lifetimes with a fake clock, a lock that can be busy or free up while waiting, services that can be
+switched to "missing" or "throwing") and a loader that puts the **real project files** into a **fresh global scope per execution**, like a new Apps Script run.
+Executions can share one fake platform, which models concurrent or consecutive runs (the CLAUDE.md storage rule is tested that way). Part 1 pins the behaviour of the old
+names; part 2 tests `Store` / `Settings` and the moved callers. Mutation check: 13 deliberate breakages of the new code, all caught. See `docs/state.md`.
+
 ## 3. Real-spreadsheet check (do before anything is pushed to the live add-on)
 Production runs the **Spreadsheet-service path** (the Sheets advanced service is not enabled in `appsscript.json`), so that is the path to check.
 1. Push to a **copy** of the script (a second Apps Script project / test spreadsheet, not the Marketplace one): `clasp push` there (`.claspignore` keeps `tests/` out).

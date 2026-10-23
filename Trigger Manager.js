@@ -1,86 +1,6 @@
-class StorageArray{
-	constructor(key,store){
-		if(!(store=="document"||store=="user"||store=="script")) throw new SimpleError("Storage Array store argument must be 'document','user' or 'script'");
-		this.key = key;
-		this.store = store;
-		this.storageArray = this.recreateFromStore();
-		Controller.registerClosingOnce(()=>this.saveArray(),key+store);
-	}
-
-	getArray(){
-		return this.storageArray;
-	}
-
-	recreateFromStore(){
-		return JSON.parse(HelperDataStore.getPropertyValue(this.store,this.key) || "[]");
-	}
-
-	saveArray(){
-		dbgLog(`Saving array ${this.key}.${this.store}. Array reads:`);
-		dbgLog(JSON.stringify(this.getArray()));
-		HelperDataStore.setPropertyValue(this.store,this.key,JSON.stringify(this.getArray()));
-	}
-
-	clearStorage(){
-		HelperDataStore.deleteProperty(this.store,this.key);
-	}
-}
-
-class StorageObject extends StorageArray{
-	constructor(key,store){
-		super(key,store);
-		this.dirtyKeys = new Set();
-	}
-
-	recreateFromStore(){
-		return JSON.parse(HelperDataStore.getPropertyValue(this.store,this.key) || "{}");
-	}
-
-	setProperty(name,value){
-		this.storageArray[name]=value;
-		this.dirtyKeys.add(name);
-		return this;
-	}
-
-	getProperty(name){
-		return this.storageArray[name];
-	}
-
-	/**
-	 * Reads a property straight from the store, ignoring the snapshot taken when this object was created.
-	 * Use it when a decision must be made on the current value (e.g. a permit that may have been reissued
-	 * by another execution while this one was running).
-	 */
-	getFreshProperty(name){
-		return this.recreateFromStore()[name];
-	}
-
-	/**
-	 * Saves only the keys changed through setProperty(), merged into the current stored object.
-	 * Several executions can run concurrently (onEdit + onChange + time triggers) and each holds a snapshot
-	 * taken at its start; writing the whole snapshot back would revert changes made meanwhile by the others.
-	 */
-	saveArray(){
-		if(this.dirtyKeys.size == 0) return;
-		const lock = LockService.getScriptLock();
-		let locked = false;
-		try{ locked = lock.tryLock(10000); } catch(e) { dbgLog(`StorageObject ${this.key}: could not acquire lock: ${e}`); }
-		try{
-			const stored = this.recreateFromStore();
-			this.dirtyKeys.forEach(name => stored[name] = this.storageArray[name]);
-			dbgLog(`Saving object ${this.key}.${this.store}. Changed keys: ${[...this.dirtyKeys].join(", ")}`);
-			HelperDataStore.setPropertyValue(this.store,this.key,JSON.stringify(stored));
-			this.storageArray = stored;
-			this.dirtyKeys.clear();
-		} finally {
-			if(locked) lock.releaseLock();
-		}
-	}
-}
-
 class AgentManager{
 	constructor(key,limit=5){
-		this.agentStorage = new StorageArray(key,"user");
+		this.agentStorage = Store.array(key,"user");
 		this.limit = limit;
 		dbgLog(`Array ${key} pulled from store:`);
 		dbgLog(this.agentStorage.storageArray);
@@ -384,11 +304,11 @@ const DOC_TRIG_ARRAY_KEY = "docTriggerArray";
 
 class DocumentTriggerLog extends TriggerLog{
 	recreateFromStore(){
-		return JSON.parse(HelperDataStore.getDocumentPropertyValue(DOC_TRIG_ARRAY_KEY) || "[]");
+		return Store.getJson("document",DOC_TRIG_ARRAY_KEY,[]);
 	}
 
 	saveTriggerLog(){
-		HelperDataStore.setDocumentPropertyValue(DOC_TRIG_ARRAY_KEY,JSON.stringify(this.getTriggerArray()));
+		Store.setJson("document",DOC_TRIG_ARRAY_KEY,this.getTriggerArray());
 
 		dbgLog("DOC After saving Trigger Log:");
   		dbgLog(this.triggerArray);
@@ -403,11 +323,11 @@ const USR_TRIG_ARRAY_KEY = "usrTriggerArray";
 
 class UserTriggerLog extends TriggerLog{
 	recreateFromStore(){
-		return JSON.parse(HelperDataStore.getUserPropertyValue(USR_TRIG_ARRAY_KEY) || "[]");
+		return Store.getJson("user",USR_TRIG_ARRAY_KEY,[]);
 	}
 
 	saveTriggerLog(){
-		HelperDataStore.setUserPropertyValue(USR_TRIG_ARRAY_KEY,JSON.stringify(this.getTriggerArray()));
+		Store.setJson("user",USR_TRIG_ARRAY_KEY,this.getTriggerArray());
 
 		dbgLog("USR After saving Trigger Log:");
   		dbgLog(this.triggerArray);

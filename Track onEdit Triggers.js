@@ -79,8 +79,8 @@ function recordInstallableSeen(e){
   agentLog("INSTALLABLE",fp,`Installable edit trigger ${e.triggerUid} fired. Recording this fact so the simple trigger can find it.`);
   withDocumentLock(() => {
     // A counter, not a flag: two quick edits of the same cell must each be matched by their own simple trigger.
-    const n = Number(HelperDataStore.getDocumentCacheValue(key) || 0);
-    HelperDataStore.setDocumentCacheValue(key,String(n+1),TRACE_TTL_S);
+    const n = Number(Store.cache.get("document",key) || 0);
+    Store.cache.set("document",key,String(n+1),TRACE_TTL_S);
     agentLog("INSTALLABLE",fp,`Record written: counter ${n} -> ${n+1} (expires in ${TRACE_TTL_S} s if nobody consumes it).`);
     clearAgentSuspect(fp,"installable trigger is alive");
   }, true, undefined, "record installable event", fp);
@@ -108,7 +108,7 @@ function waitForInstallable(fp,maxMs){
   do{
     polls++;
     // Cheap unlocked peek; the lock is only taken when there is something to consume.
-    const peek = HelperDataStore.getDocumentCacheValue(key);
+    const peek = Store.cache.get("document",key);
     if(polls == 1) agentLog("SIMPLE",fp,`Poll #1 (${Date.now()-start} ms): installable record ${peek ? "already present (counter " + peek + ")" : "not there yet"}.`);
     if(peek) {
       agentLog("SIMPLE",fp,`Poll #${polls} (${Date.now()-start} ms): installable record present (counter ${peek}). Trying to consume it.`);
@@ -123,13 +123,13 @@ function waitForInstallable(fp,maxMs){
 
 function consumeInstallableTrace(key,fp){
   return withDocumentLock(() => {
-    const n = Number(HelperDataStore.getDocumentCacheValue(key) || 0);
+    const n = Number(Store.cache.get("document",key) || 0);
     if(n <= 0) {
       agentLog("SIMPLE",fp,`Consume: counter is ${n}, another simple trigger took the record first.`);
       return false;
     }
-    if(n == 1) HelperDataStore.deleteDocumentCache(key);
-    else HelperDataStore.setDocumentCacheValue(key,String(n-1),TRACE_TTL_S);
+    if(n == 1) Store.cache.remove("document",key);
+    else Store.cache.set("document",key,String(n-1),TRACE_TTL_S);
     agentLog("SIMPLE",fp,`Consume: counter ${n} -> ${n-1}${n==1 ? " (record deleted)" : ""}.`);
     return true;
   }, false, false, "consume installable record", fp);
@@ -161,18 +161,18 @@ function raiseAgentAlarm(fp){
 }
 
 function getAgentSuspect(){
-  const value = HelperDataStore.getDocumentPropertyValue(AGENT_SUSPECT_KEY);
+  const value = Store.get("document",AGENT_SUSPECT_KEY);
   return value ? JSON.parse(value) : null;
 }
 
 function setAgentSuspect(fp){
-  HelperDataStore.setDocumentPropertyValue(AGENT_SUSPECT_KEY,JSON.stringify({fp:fp,time:new Date().toISOString()}));
+  Store.set("document",AGENT_SUSPECT_KEY,JSON.stringify({fp:fp,time:new Date().toISOString()}));
   agentLog("SHARED",fp,"Suspect flag SET.");
 }
 
 function clearAgentSuspect(fp=null,reason="no reason given"){
-  const value = HelperDataStore.getDocumentPropertyValue(AGENT_SUSPECT_KEY);
+  const value = Store.get("document",AGENT_SUSPECT_KEY);
   if(value == null) return;
-  HelperDataStore.deleteProperty("document",AGENT_SUSPECT_KEY);
+  Store.remove("document",AGENT_SUSPECT_KEY);
   agentLog("SHARED",fp,`Suspect flag CLEARED (${reason}). It had been set by: ${value}`);
 }

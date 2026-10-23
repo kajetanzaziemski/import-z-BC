@@ -14,9 +14,8 @@ function onEdit(e) {
   Controller.run("simpleOnEdit",() => checkInstallableAgentRan(e));
 }
 
-gStgs = null;
 function getGlobalSettings(){
-  return gStgs ?? (gStgs = new GlobalSettings());
+  return Settings.bc();
 }
 
 function setGlobalSettings(form){
@@ -43,7 +42,7 @@ function sheetEdit(e){
  *
  **/
 function sheetEditAction(e){
-  if(e.source.getActiveSheet().getName() == getImportSettings().getArray().importSheetName) getMainSettings().sheetEdit(e);
+  if(e.source.getActiveSheet().getName() == MainSettings.getSettingsSheetName()) getMainSettings().sheetEdit(e);
   updateAfterEdit(e.source.getActiveSheet().getName(),e);  
 }
 

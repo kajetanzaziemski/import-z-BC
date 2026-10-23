@@ -32,19 +32,19 @@ class BCMetadata{
   }
 
   getTables(schema = this.schema){
-    let tables = OptionalDataStore.getDocumentCacheValue(this.getCacheKey("tables"));
+    let tables = Store.optional.getCache("document",this.getCacheKey("tables"));
     if(tables){
       // dbgLog("Returning from cache: ");
       return JSON.parse(tables);
     }
     // dbgLog("Downloading from the source: ");
     tables = this.getEdmxDocument().listEntityTypes(schema);
-    OptionalDataStore.setDocumentCacheValue(this.getCacheKey("tables"),JSON.stringify(tables));
+    Store.optional.setCache("document",this.getCacheKey("tables"),JSON.stringify(tables));
     return tables;
   }
 
   getTableData(table,schema = this.schema){
-    let tableData = OptionalDataStore.getDocumentCacheValue(this.getCacheKey(table));
+    let tableData = Store.optional.getCache("document",this.getCacheKey(table));
     if(tableData){
       // dbgLog("Returning from cache: ");
       return JSON.parse(tableData);
@@ -56,7 +56,7 @@ class BCMetadata{
       fields: tableDataFields,
       navProperties: tableNavProperties
     };
-    OptionalDataStore.setDocumentCacheValue(this.getCacheKey(table),JSON.stringify(tableData));
+    Store.optional.setCache("document",this.getCacheKey(table),JSON.stringify(tableData));
     return tableData;
   }
 

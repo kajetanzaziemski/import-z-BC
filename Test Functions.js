@@ -375,7 +375,7 @@ function testFunc_modalDialog(counter=0){
 function testFunc_errorReporting(){
   // userSafe(() =>    Logger.log(HelperDataStore.checkAvailability()));
   Logger.log(`Reading script property value for ${TENTANT_KEY_}`);
-  userSafe(() => Logger.log(HelperDataStore.getScriptPropertyValue(TENTANT_KEY_)));
+  userSafe(() => Logger.log(Store.get("script",TENTANT_KEY_)));
   // userSafe(() =>           (HelperDataStore.deleteUserCache('testKey')));
   // userSafe(() => Logger.log(HelperDataStore.getUserCacheValue('testKey')));
 }

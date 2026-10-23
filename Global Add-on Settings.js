@@ -1,4 +1,4 @@
-// Requires HelperDataStore.checkAvailability() (ie. full access)
+// Requires Store.available() (ie. full access). Use it through Settings.bc().
 
 const TENTANT_KEY_ = "bc-tenant-id";
 const ENVIRONMENT_KEY_ = "bc-environment";
@@ -41,13 +41,13 @@ class GlobalSettings{
   }
 
   setProperty(key,scope,value){
-    HelperDataStore.setPropertyValue(scope,key,value == "" ? null : value);
+    Store.set(scope,key,value == "" ? null : value);
     this.propertiesCache[scope][key] = value;
     return this;
   }
 
   deleteProperty(key,scope){
-    HelperDataStore.deleteProperty(scope,key);
+    Store.remove(scope,key);
     this.propertiesCache[scope][key] = undefined; 
     return this;
   }
@@ -58,7 +58,7 @@ class GlobalSettings{
   }
   
   getPropertyFromPropService(key,scope){
-    return HelperDataStore.getPropertyValue(scope,key);
+    return Store.get(scope,key);
   }
 
   getActiveProperty(key){

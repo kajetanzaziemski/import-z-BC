@@ -1,32 +1,38 @@
 const IMPORT_SETTINGS_SHEET_NAME_KEY = "importSettingsSheetName";
-const IMPORT_SETTINGS_KEY = "importSettingsArray";
-imStgs = null;
+
+/** The StorageObject behind the import settings (see Settings.js). */
 function getImportSettings(){
-  return imStgs ?? (imStgs = new StorageObject(IMPORT_SETTINGS_KEY,"document"));
+  return Settings.store();
 }
 
+/**
+ * The old entry to the import settings. The values live in Settings.js; what stays here is what happens AROUND them:
+ * "on"/"off" are understood, turning the add-on on needs a settings sheet name and schedules a status check for the end of the run.
+ */
 class MainSettings{
   static getProperty(name){
-    return getImportSettings().getProperty(name);
+    return Settings.get(name);
   }
 
   static setProperty(name,value){
-    getImportSettings().setProperty(name,value);
+    Settings.set(name,value);
     return this;
   }
 
   static getSettingsSheetName(){
-    return this.getProperty("importSheetName");
+    return Settings.settingsSheetName();
   }
 
   static setSettingsSheetName(name){
     if(!name) name = getValidImportSettingsSheet();
-    return this.setProperty("importSheetName",name)
+    Settings.setSettingsSheetName(name);
+    return this;
   }
 
   static getAddonStatus(){
-    dbgLog("getAddonStatus returning "+(this.getProperty("addonStatus") ?? false)?'true':'false');
-    return this.getProperty("addonStatus") ?? false;
+    const status = Settings.addonStatus();
+    dbgLog("getAddonStatus returning "+(status ? 'true' : 'false'));
+    return status;
   }
 
   static setAddonStatus(statusOn){
@@ -34,36 +40,26 @@ class MainSettings{
     if(statusOn == "off" || statusOn == "OFF") statusOn = false;
     if(statusOn && !this.getSettingsSheetName()) this.setSettingsSheetName();
     if(statusOn) Controller.registerClosingOnce(() => StatusManager.fullStatusCheck(),"status check")
-    return this.setProperty("addonStatus",statusOn);
+    Settings.setAddonStatus(statusOn);
+    return this;
   }
 
   static setRefreshPermit(issuedForId,intervalHoursValue){
-    let permit = {
-      issuedFor: issuedForId,
-      lastRefresh: Date.now(),
-      intervalHours: intervalHoursValue
-    }
-    return this.setProperty("refreshPermit",permit)
+    Settings.issueRefreshPermit(issuedForId,intervalHoursValue);
+    return this;
   }
 
   static updateRefreshPermit(permit){
-    return this.setProperty("refreshPermit",permit)
+    Settings.updateRefreshPermit(permit);
+    return this;
   }
 
-  /**
-   * Records the run time on the permit, but only if it is still issued for the given trigger.
-   * The permit is re-read from the store, as it could have been reissued while the refresh was running.
-   */
   static touchRefreshPermit(triggerUid){
-    let current = getImportSettings().getFreshProperty("refreshPermit");
-    if(!current || current.issuedFor !== triggerUid) return false;
-    current.lastRun = Date.now();
-    this.updateRefreshPermit(current);
-    return true;
+    return Settings.touchRefreshPermit(triggerUid);
   }
 
   static getRefreshPermit() {
-    return this.getProperty("refreshPermit");
+    return Settings.refreshPermit();
   }
 }
 

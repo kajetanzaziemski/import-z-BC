@@ -45,8 +45,8 @@ function getBCService_(){
       .setCallbackFunction('authCallback')
 
       // Set the property store where authorized tokens should be persisted.
-      .setPropertyStore(HelperDataStore.getUserProperties())
-      .setCache(HelperDataStore.getUserCache())
+      .setPropertyStore(Store.service("user","properties"))
+      .setCache(Store.service("user","cache"))
       .setLock(LockService.getUserLock()) // - - - \ | / - - \ | / - - \ | / - Unprotected access to external services! LOCK SERVICE
 
       // Set the scopes to request 

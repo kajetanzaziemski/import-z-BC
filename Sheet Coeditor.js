@@ -68,12 +68,7 @@ class SheetCoeditor{
   }
 
   loadFromStore(){
-    return null;
-    const cache = CacheService.getDocumentCache();
-    let valuesArray = JSON.parse(cache.get("configSheet_"+this.sheetName));
-    if(!valuesArray) return null;
-    // this.sheet.getRange(this.startRow,this.startCol+6,valuesArray.length,valuesArray[0].length).setValues(valuesArray);
-    return new CCTImportConfig(valuesArray);
+    return null;   // the config is always read from the sheet; the cache-based variant was removed (unreachable code, see git history)
   }
 
   // - - - - - - - - Handle events - - - - - - - - 
@@ -99,38 +94,9 @@ class SheetCoeditor{
 
   // - - - - - - - - Modify sheet - - - - - - - -     
   applyCoeditsWithLock(){
-    this.applyCoedits();
-    return;
-    const lock = LockService.getScriptLock();
-    const properties = PropertiesService.getDocumentProperties();
-    lock.tryLock(1000);
-    if (lock.hasLock()) { 
-      dbgLog("Lock received. Applying coedits.");
-      this.applyCoedits();
-      properties.setProperty("requireCoedit","no");
-      dbgLog("Coedits applied. Setting requireCoedit to "+properties.getProperty("requireCoedit"));
-    } else {
-      properties.setProperty("requireCoedit","yes");
-      dbgLog("Script locked. Setting requireCoedit to "+properties.getProperty("requireCoedit")+" and waiting...");
-      lock.tryLock(10000);
-      let requireCoedit = properties.getProperty("requireCoedit")=="yes";
-      dbgLog("Lock status: "+lock.hasLock()+". requireCoedit: "+requireCoedit);
-      if (lock.hasLock() && requireCoedit) {
-        dbgLog("Lock available, coedits required. Applying coedits.");
-        this.cct = this.loadFromSheet();
-        this.applyCoedits();
-        properties.setProperty("requireCoedit","no");
-        dbgLog("Additional script finished. Setting requireCoedit to "+properties.getProperty("requireCoedit"));
-      }
-      else dbgLog("Quitting.");
-    }
-
-    // // Insert options cascade representation to sheet for debugging.
-    // let sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Konfiguracja 2");
-    // let optRep = this.cct.arrayRepresentation();
-    // sheet.getRange(2,8,optRep.length,optRep[0].length).setValues(optRep);
+    this.applyCoedits();   // the lock-and-retry variant was unreachable code and is gone; runFunctionWithLock (functions.js) does that job
   }
-  
+
   applyCoedits(){
     this.switchEstimateInfoActive(false);
     if(this.insertRows()>0) this.cct = this.loadFromSheet();

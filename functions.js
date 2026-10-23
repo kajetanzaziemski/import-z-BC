@@ -69,18 +69,18 @@ function runFunctionWithLock(action,flag="scriptLocked__"){
   if (lock.hasLock()) { 
     // dbgLog("Lock received. Applying coedits.");
     action();
-    HelperDataStore.setDocumentPropertyValue(flag,"no");
+    Store.set("document",flag,"no");
     // dbgLog("Coedits applied. Setting requireCoedit to "+properties.getProperty(flag));
   } else {
-    HelperDataStore.setDocumentPropertyValue(flag,"yes");
+    Store.set("document",flag,"yes");
     // dbgLog("Script locked. Setting requireCoedit to "+properties.getProperty(flag)+" and waiting...");
     lock.tryLock(10000);
-    let requireCoedit = HelperDataStore.getDocumentPropertyValue(flag)=="yes";
+    let requireCoedit = Store.get("document",flag)=="yes";
     // dbgLog("Lock status: "+lock.hasLock()+". requireCoedit: "+requireCoedit);
     if (lock.hasLock() && requireCoedit) {
       // dbgLog("Lock available, coedits required. Applying coedits.");
       action();
-      HelperDataStore.setDocumentPropertyValue(flag,"no");
+      Store.set("document",flag,"no");
       // dbgLog("Additional script finished. Setting requireCoedit to "+properties.getProperty(flag));
     }
     // else dbgLog("Quitting.");

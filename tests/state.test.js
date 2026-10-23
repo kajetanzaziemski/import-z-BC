@@ -11,7 +11,7 @@ const assert = require('assert');
 const { FakePlatform } = require('./platform-fakes');
 
 // Order does not matter (Apps Script gives no promise either); nothing may be used at load time.
-const BASE_FILES = ['Custom errors.js', 'Helper Data Store.js', 'Main Settings.js', 'Controller.js', 'Trigger Manager.js',
+const BASE_FILES = ['Custom errors.js', 'Helper Data Store.js', 'Store.js', 'Settings.js', 'Main Settings.js', 'Controller.js', 'Trigger Manager.js',
   'Global Add-on Settings.js', 'Quick Start.js', 'functions.js', 'Track onEdit Triggers.js', 'Status Manager.js'];
 
 module.exports = function register(t) {
@@ -286,4 +286,175 @@ module.exports = function register(t) {
     assert.strictEqual(q.ex.eval(`__n`), 0);
     assert.strictEqual(q.p.props.document.flagC, 'yes', 'whoever holds the lock sees that a re-run is needed');
   });
+
+  // =====================================================================================================================
+  // Part 2: the Store / Settings facade, and the callers that were moved onto it
+  // =====================================================================================================================
+  const fs = require('fs');
+  const path = require('path');
+  const ROOT = path.join(__dirname, '..');
+  const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
+  const codeOnly = f => read(f).replace(/\/\*[\s\S]*?\*\//g, '').split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');   // no comments
+  const ALL_JS = fs.readdirSync(ROOT).filter(f => /\.js$/.test(f) && f !== 'Test Functions.js');   // Test Functions.js: manual tests run by hand in the editor
+
+  test('store: get / set / remove per scope; null removes; getJson / setJson round trip with a fallback', () => {
+    const { p, ex } = setup();
+    ex.eval(`Store.set('document','a','1'); Store.set('user','a','2'); Store.set('script','a','3')`);
+    assert.deepStrictEqual(['document', 'user', 'script'].map(s => ex.eval(`Store.get('${s}','a')`)), ['1', '2', '3']);
+    assert.strictEqual(p.props.user.a, '2');
+    ex.eval(`Store.set('user','a',null)`); ex.eval(`Store.remove('script','a')`);
+    assert.deepStrictEqual([ex.eval(`Store.get('user','a')`), ex.eval(`Store.get('script','a')`), ex.eval(`Store.get('document','a')`)], [null, null, '1']);
+    assert.deepStrictEqual(plain(ex.eval(`Store.getJson('document','missing',[])`)), []);
+    assert.strictEqual(ex.eval(`Store.getJson('document','missing',null)`), null);
+    ex.eval(`Store.setJson('document','j',{ x: [1, 2] })`);
+    assert.strictEqual(p.props.document.j, '{"x":[1,2]}');
+    assert.deepStrictEqual(plain(ex.eval(`Store.getJson('document','j',null)`)), { x: [1, 2] });
+    assert.throws(() => ex.eval(`Store.get('nowhere','a')`), /Param scope can only be/);
+    assert.throws(() => ex.eval(`Store.set('document','a',5)`), /Param value must be string or null/);
+  });
+
+  test('store: cache get / set with a lifetime / remove; optional cache never throws', () => {
+    const { p, ex } = setup();
+    ex.eval(`Store.cache.set('document','c','v',20)`);
+    assert.ok(p.calls.includes('cache.put document c ttl=20'));
+    assert.strictEqual(ex.eval(`Store.cache.get('document','c')`), 'v');
+    p.advance(21);
+    assert.strictEqual(ex.eval(`Store.cache.get('document','c')`), null);
+    ex.eval(`Store.cache.set('user','c','v')`); ex.eval(`Store.cache.remove('user','c')`);
+    assert.strictEqual(ex.eval(`Store.cache.get('user','c')`), null);
+    p.broken['cache.document'] = 'null';
+    assert.throws(() => ex.eval(`Store.cache.get('document','c')`), /CacheService returned empty result/);
+    assert.strictEqual(ex.eval(`Store.optional.getCache('document','c')`), null);
+    assert.doesNotThrow(() => ex.eval(`Store.optional.setCache('document','c','v')`));
+    assert.strictEqual(ex.eval(`Store.available('cache','document')`), false);
+  });
+
+  test('store: object() is one StorageObject per key and scope in a run; array() is a new StorageArray', () => {
+    const { p, ex } = setup();
+    assert.strictEqual(ex.eval(`Store.object('k','document') === Store.object('k','document')`), true);
+    assert.strictEqual(ex.eval(`Store.object('k','document') === Store.object('k','user')`), false);
+    assert.strictEqual(ex.eval(`Store.object('k','document') instanceof StorageObject`), true);
+    assert.strictEqual(ex.eval(`Store.array('a','user') === Store.array('a','user')`), false);
+    ex.eval(`Store.object('k','document').setProperty('x', 1); Store.object('k','document').saveArray()`);
+    assert.deepStrictEqual(stored(p, 'document', 'k'), { x: 1 });
+  });
+
+  test('store: service() gives the platform service of the scope (for the OAuth2 library)', () => {
+    const { p, ex } = setup();
+    ex.eval(`Store.service('user','properties').setProperty('tok','abc')`);
+    assert.strictEqual(p.props.user.tok, 'abc');
+    ex.eval(`Store.service('user','cache').put('ck','cv',10)`);
+    assert.strictEqual(p.cache.user.ck.value, 'cv');
+    assert.throws(() => (p.broken['properties.user'] = 'null', ex.eval(`Store.service('user','properties')`)), /PropertiesService returned empty result/);
+  });
+
+  test('settings: the typed accessors read and write exactly what MainSettings does (same key, same JSON), in both directions, across runs', () => {
+    const p = new FakePlatform();
+    const a = p.execution(FILES), b = p.execution(FILES);
+    a.eval(`Settings.setAddonStatus(true); Settings.setSettingsSheetName('Ustawienia'); Settings.issueRefreshPermit('trigA', 6); getImportSettings().saveArray()`);
+    assert.deepStrictEqual([b.eval(`MainSettings.getAddonStatus()`), b.eval(`MainSettings.getSettingsSheetName()`), b.eval(`MainSettings.getRefreshPermit().issuedFor`)], [true, 'Ustawienia', 'trigA']);
+    b.eval(`MainSettings.setProperty('addonStatus', false); MainSettings.setRefreshPermit('trigB', 3); getImportSettings().saveArray()`);
+    const c = p.execution(FILES);
+    assert.deepStrictEqual([c.eval(`Settings.addonStatus()`), c.eval(`Settings.refreshPermit().issuedFor`), c.eval(`Settings.refreshPermit().intervalHours`)], [false, 'trigB', 3]);
+    assert.deepStrictEqual(Object.keys(stored(p, 'document', 'importSettingsArray')).sort(), ['addonStatus', 'importSheetName', 'refreshPermit']);
+  });
+
+  test('settings: getImportSettings() is Settings.store() (one object per run); get / set cover the other keys', () => {
+    const { p, ex } = setup();
+    assert.strictEqual(ex.eval(`getImportSettings() === Settings.store()`), true);
+    ex.eval(`Settings.set('custom', { n: 1 })`);
+    assert.deepStrictEqual(plain(ex.eval(`MainSettings.getProperty('custom')`)), { n: 1 });
+    assert.strictEqual(ex.eval(`Settings.addonStatus()`), false, 'default off');
+  });
+
+  test('settings: touchRefreshPermit through Settings is the same guarded re-read as before', () => {
+    const { p, ex } = setup();
+    ex.eval(`Settings.issueRefreshPermit('A', 1); getImportSettings().saveArray()`);
+    p.execution(FILES).eval(`Settings.issueRefreshPermit('B', 2); getImportSettings().saveArray()`);
+    assert.strictEqual(ex.eval(`Settings.touchRefreshPermit('A')`), false);
+    assert.strictEqual(ex.eval(`Settings.touchRefreshPermit('B')`), true);
+    assert.strictEqual(ex.eval(`Settings.refreshPermit().lastRun > 0`), true);
+  });
+
+  test('settings: bc() is the one GlobalSettings of the run, and getGlobalSettings() returns it', () => {
+    const { p, ex } = setup();
+    assert.strictEqual(ex.eval(`Settings.bc() === getGlobalSettings()`), true);
+    assert.strictEqual(ex.eval(`Settings.bc() instanceof GlobalSettings`), true);
+    ex.eval(`Settings.bc().setAllPropertiesForScope('document','T','E','C')`);
+    assert.strictEqual(p.props.document['bc-tenant-id'], 'T');
+    assert.strictEqual(ex.eval(`getGlobalSettings().getODataURL()`), 'https://api.businesscentral.dynamics.com/v2.0/T/E/ODataV4/');
+  });
+
+  test('moved callers: the BC metadata cache goes through the optional document cache, and works without it', () => {
+    const p = new FakePlatform();
+    const ex = p.execution([...FILES, 'Metadata.js']);
+    ex.eval(`getGlobalSettings().setAllPropertiesForScope('document','T','E','C');
+      globalThis.__downloads = 0;
+      BCMetadata.prototype.getEdmxDocument = function () { __downloads++; return { listEntityTypes: () => ['Customers', 'Items'] }; };`);
+    assert.deepStrictEqual(plain(ex.eval(`new BCMetadata().getTables()`)), ['Customers', 'Items']);
+    assert.deepStrictEqual(plain(ex.eval(`new BCMetadata().getTables()`)), ['Customers', 'Items']);
+    assert.strictEqual(ex.eval(`__downloads`), 1, 'second time from the document cache');
+    assert.ok(Object.keys(p.cache.document).some(k => /_tables$/.test(k)));
+    p.broken['cache.document'] = 'null';
+    assert.deepStrictEqual(plain(ex.eval(`new BCMetadata().getTables()`)), ['Customers', 'Items']);
+    assert.strictEqual(ex.eval(`__downloads`), 2, 'no cache: it downloads again instead of failing');
+  });
+
+  test('moved callers: the OAuth2 service keeps its tokens in the USER properties and user cache, under the BC tenant name', () => {
+    const p = new FakePlatform();
+    const ex = p.execution([...FILES, 'Autoryzacja BC.js']);
+    ex.eval(`globalThis.CLIENT_ID_ = 'id'; globalThis.CLIENT_SECRET_ = 'secret'; globalThis.SCOPE_ = 'scope';
+      globalThis.__oauth = {};
+      const chain = new Proxy({}, { get: (t, name) => (name === 'then' ? undefined : (...args) => { __oauth[name] = args; return chain; }) });
+      globalThis.OAuth2 = { createService: name => { __oauth.createService = name; return chain; } };
+      getGlobalSettings().setAllPropertiesForScope('document','tenant-1','Env','Firma');
+      getBCService_();`);
+    assert.strictEqual(ex.eval(`__oauth.createService`), 'tenant-1');
+    ex.eval(`__oauth.setPropertyStore[0].setProperty('oauth2.tenant-1', 'token')`);
+    assert.strictEqual(p.props.user['oauth2.tenant-1'], 'token', 'tokens are in the user properties, not the document ones');
+    assert.strictEqual(p.props.document['oauth2.tenant-1'], undefined);
+    ex.eval(`__oauth.setCache[0].put('ck', 'cv', 10)`);
+    assert.strictEqual(p.cache.user.ck.value, 'cv');
+    assert.strictEqual(ex.eval(`__oauth.setAuthorizationBaseUrl[0]`), 'https://login.microsoftonline.com/tenant-1/oauth2/v2.0/authorize');
+    assert.strictEqual(ex.eval(`__oauth.setTokenUrl[0]`), 'https://login.microsoftonline.com/tenant-1/oauth2/v2.0/token');
+  });
+
+  test('moved callers: the agent pairs (AgentManager) are kept in the user property "agentArray" and saved when the run closes', () => {
+    const { p, ex } = setup();
+    ex.eval(`MainSettings.setProperty('addonStatus', true)`);
+    ex.eval(`Controller.run('requestAgent', () => { getAgentManager().saveToStorageArray('e1','c1'); })`);
+    assert.deepStrictEqual(stored(p, 'user', 'agentArray'), [['e1', 'c1']]);
+    assert.deepStrictEqual(plain(p.execution(FILES).eval(`getAgentManager().agentStorage.getArray()`)), [['e1', 'c1']]);
+  });
+
+  // ---- rules --------------------------------------------------------------------------------------------------------------------
+  test('rule: only Store.js calls HelperDataStore / OptionalDataStore (Test Functions.js, the manual tests, is exempt)', () => {
+    const offenders = ALL_JS.filter(f => !/^(Helper Data Store|Store)\.js$/.test(f) && /\b(HelperDataStore|OptionalDataStore)\b/.test(codeOnly(f)));
+    assert.deepStrictEqual(offenders, []);
+  });
+
+  test('rule: PropertiesService and CacheService are only used by Helper Data Store.js', () => {
+    const offenders = ALL_JS.filter(f => f !== 'Helper Data Store.js' && /\b(PropertiesService|CacheService)\b/.test(codeOnly(f)));
+    assert.deepStrictEqual(offenders, []);
+  });
+
+  test('rule: StorageObject / StorageArray are created only by Store.js (everybody else asks Store.object / Store.array)', () => {
+    const offenders = ALL_JS.filter(f => f !== 'Store.js' && /new\s+Storage(Object|Array)\s*\(/.test(codeOnly(f)));
+    assert.deepStrictEqual(offenders, []);
+  });
+
+  test('rule: Settings.js is the only place that knows the key of the import settings; MainSettings has no storage of its own', () => {
+    const offenders = ALL_JS.filter(f => f !== 'Settings.js' && /importSettingsArray|IMPORT_SETTINGS_KEY/.test(codeOnly(f)));
+    assert.deepStrictEqual(offenders, []);
+    assert.ok(!/Store\./.test(codeOnly('Main Settings.js')) && !/getFreshProperty/.test(codeOnly('Main Settings.js')));
+  });
+
+  test('rule: Store.js and Settings.js load alone, in any order (nothing is used at load time)', () => {
+    const vm = require('vm');
+    [['Store.js', 'Settings.js'], ['Settings.js', 'Store.js']].forEach(order => {
+      const ctx = vm.createContext({});
+      order.forEach(f => new vm.Script(read(f), { filename: f }).runInContext(ctx));
+    });
+  });
+
 };
