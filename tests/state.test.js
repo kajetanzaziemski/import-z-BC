@@ -78,6 +78,17 @@ module.exports = function register(t) {
     assert.ok(p.calls.includes('lock.acquired') && p.calls.includes('lock.released'), 'under a lock');
   });
 
+  test('state: StorageObject never reverts a key it did not change (a stale snapshot is not written back)', () => {
+    const p = new FakePlatform();
+    p.props.document.settings = json({ q: 'old', keep: 1 });
+    const a = p.execution(FILES), b = p.execution(FILES);
+    a.eval(`var so = new StorageObject('settings','document')`);                 // A's snapshot: q = old
+    b.eval(`var so = new StorageObject('settings','document'); so.setProperty('q','new'); so.saveArray()`);
+    a.eval(`so.setProperty('x', 1); so.saveArray()`);
+    assert.deepStrictEqual(stored(p, 'document', 'settings'), { q: 'new', keep: 1, x: 1 });
+    assert.strictEqual(a.eval(`so.getProperty('q')`), 'new', 'and A\'s own view is refreshed by the save');
+  });
+
   test('state: StorageObject without changes does not write or lock; getFreshProperty ignores the snapshot', () => {
     const { p, ex } = setup();
     ex.eval(`var so = new StorageObject('settings','document')`);
