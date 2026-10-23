@@ -216,6 +216,7 @@ class SimBook {
     return {
       getName: () => s.title, getSheetId: () => s.id, getMaxRows: () => s.rowCount, getMaxColumns: () => s.colCount,
       getLastRow: () => s.lastRow(), getLastColumn: () => s.lastCol(), getFrozenRows: () => s.frozen,
+      getDataRange: () => book.rangeObj(s, 1, 1, s.lastRow() || 1, s.lastCol() || 1),
       setFrozenRows: n => { call(); s.frozen = n; },
       getRange: (r, c, nr, nc) => {
         if (typeof r === 'string') {                                   // "B1:F1"
@@ -269,6 +270,7 @@ class SimBook {
         .map(m => ({ getA1Notation: () => colName(m.c1) + m.r1 + ':' + colName(m.c2) + m.r2 })); },
       setValues: a => { call(); each((rr, cc, i, j) => put(rr, cc, a[i][j])); return self; },
       setFormulas: a => { call(); each((rr, cc, i, j) => s.setValue(rr, cc, 'formula-result', a[i][j])); return self; },
+      clear: () => { call(); each((rr, cc) => { delete s.cells[key(rr, cc)]; }); return self; },     // content, notes, validation and formats
       clearContent: () => { call(); each((rr, cc) => { const x = s.cell(rr, cc); if (x) { x.v = ''; x.f = ''; s.prune(rr, cc); } }); return self; },
       setNote: t => { call(); each((rr, cc) => { const x = s.cell(rr, cc, true); x.note = t === null ? '' : String(t); s.prune(rr, cc); }); return self; },
       insertCheckboxes: () => { call(); each((rr, cc) => { const x = s.cell(rr, cc, true); x.dv = 'checkbox'; if (x.v === '') x.v = false; }); return self; },
