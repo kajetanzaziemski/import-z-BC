@@ -30,6 +30,7 @@ const AGENT_LOG_EXEC_ID = Math.random().toString(36).slice(2,6);   // new for ev
  * @param msg {String} What happens / has been decided, in plain words.
  */
 function agentLog(side,fp,msg){
+  Controller.checkNote(`${side}${fp ? " " + fp : ""}: ${msg}`);   // the live check reads the decisions from here
   if(!AGENT_LOG_ENABLED) return;
   const time = new Date().toISOString().slice(11,23);   // HH:mm:ss.SSS (UTC), Logger's own timestamp has no milliseconds
   Logger.log(`[AGENT-CHECK ${time} #${AGENT_LOG_EXEC_ID}] ${side}${fp ? " " + fp : ""}: ${msg}`);

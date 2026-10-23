@@ -212,6 +212,7 @@ function autoRefreshFunction(e){
 }
 
 function autoRefreshHandler(e) {
+  Controller.checkInput("requestAutoRefesh",{e,legacy:false});
   Controller.run("requestAutoRefesh",()=>autoRefreshContent(e));
 }
 
@@ -236,6 +237,7 @@ function autoRefreshContent(e) {
  * This function only serves legacy version. Older triggers run autoRefresh() rather than autoRefreshHandler(e). 
  */
 function autoRefresh(e) {
+  Controller.checkInput("requestAutoRefesh",{e,legacy:true});
   Controller.run("requestAutoRefesh",()=>autoRefreshContentOld(e));
 }
 
