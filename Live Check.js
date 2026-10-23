@@ -167,7 +167,18 @@ const LC_CAPTURE = {
     ss: t.getTriggerSourceId()
   })).sort((a,b) => a.id < b.id ? -1 : 1),
   settings: () => lcImportSettings_(),
-  settingsSheet: () => lcReadSettingsSheet_()
+  settingsSheet: () => lcReadSettingsSheet_(),
+  // How the activity indicators (B2:D2) of every config sheet look before a run, so that a cell somebody edited by hand is not blamed on the run.
+  indicators: () => {
+    const settings = lcReadSettingsSheet_();
+    const out = {};
+    if(!settings.exists) return out;
+    settings.configs.forEach(x => {
+      const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(x.config);
+      if(sheet) out[x.config] = lcIndicatorLook_(sheet);
+    });
+    return out;
+  }
 };
 
 function lcCapture_(part){

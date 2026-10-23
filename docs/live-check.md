@@ -32,8 +32,8 @@ Statuses: `PASS`, `FAIL` (the add-on did not do what it should), `WARN` (suspici
 `docs/trigger-management-todo.md`; the line says which), `SKIP` (cannot be checked here, e.g. UI, or simple-trigger
 authorisation limits). The status of a run is its worst check.
 
-(On `refactor-and-grid`: an activity indicator that is still lit while *another* checked run is in progress is a `WARN` naming that run, not a `FAIL`, and its detail lists the colours that were read.
-In the sidebar's detail view `FAIL` lines are red and `WARN` lines amber.)
+(On `refactor-and-grid`: the activity indicators (B2:D2) are judged against the state before the run - a cell the run does not work with must look as before, a hand-edited cell is
+not blamed on the run; a cell lit while *another* checked run is in progress is a `WARN` naming that run; the detail lists the colours that were read. In the sidebar's detail view `FAIL` lines are red and `WARN` lines amber.)
 
 ## Sidebar
 

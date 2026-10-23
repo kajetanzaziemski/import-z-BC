@@ -145,24 +145,54 @@ function lcSheetNames_(snapshot){
 
 // - - - - - - - - shared checks - - - - - - - -
 
-/** B2 / C2 / D2 of a config sheet show what the add-on is doing; after any run they must be back to idle. */
-function lcVerifyIdleIndicators_(c,sheet,tag){
-  const labels = {B2: "reading", C2: "connection", D2: "data writing"};
-  const lit = [];
-  Object.keys(labels).forEach(a1 => {
-    const cell = sheet.getRange(a1);
-    const background = cell.getBackground(), font = cell.getFontColor();
-    if(background !== LC_IDLE_BACKGROUND || font !== LC_IDLE_FONT) lit.push({a1, label: labels[a1], background, font});
-  });
+const LC_INDICATORS = {B2: "reading", C2: "connection", D2: "data writing"};
+
+/** Background and font colour of B2:D2 of a config sheet. */
+function lcIndicatorLook_(sheet){
+  const range = sheet.getRange("B2:D2");
+  const backgrounds = range.getBackgrounds()[0], fonts = range.getFontColors()[0];
+  const look = {};
+  Object.keys(LC_INDICATORS).forEach((a1,i) => look[a1] = {background: backgrounds[i], font: fonts[i]});
+  return look;
+}
+
+/**
+ * B2 / C2 / D2 of a config sheet show what the add-on is doing. After a run:
+ *  - a cell the run works with (`touches`: the code lights it and puts it back) must be idle;
+ *  - every other cell must look exactly as it did before the run (c.before.indicators). If it was not idle before (e.g. edited by hand) and is
+ *    still the same, that is not the run's doing: it passes, and the detail says so. If the run changed it and left it not idle, it fails.
+ * Without a "before" for the sheet (new sheet, part not captured) every cell is expected to be idle.
+ * @param touches {String[]} Cells the run is supposed to reset; default all three.
+ */
+function lcVerifyIdleIndicators_(c,sheet,tag,touches){
+  touches = touches ?? Object.keys(LC_INDICATORS);
   const name = `${tag} activity indicators back to idle`;
-  if(!lit.length){ c.expect(name,true); return; }
-  // What was seen, so that "all controls are actually off" can be compared with what the script read.
-  const seen = lit.map(x => `${x.label} (${x.a1}: background ${x.background}, font ${x.font})`).join(", ");
+  const now = lcIndicatorLook_(sheet);
+  const snapshot = c.before && c.before.indicators;
+  const before = snapshot && !snapshot.__unavailable ? snapshot[sheet.getName()] : undefined;
+  const isIdle = look => look.background === LC_IDLE_BACKGROUND && look.font === LC_IDLE_FONT;
+  const show = look => `background ${look.background}, font ${look.font}`;
+
+  const changed = [], asFound = [];
+  Object.keys(LC_INDICATORS).forEach(a1 => {
+    const look = now[a1];
+    if(isIdle(look)) return;
+    const was = before && before[a1];
+    const untouched = touches.indexOf(a1) < 0;
+    if(untouched && was && was.background === look.background && was.font === look.font) asFound.push(`${LC_INDICATORS[a1]} (${a1}: ${show(look)})`);
+    else changed.push(`${LC_INDICATORS[a1]} (${a1}: ${show(look)}${was ? `; before the run: ${show(was)}` : "; no state before the run known"})`);
+  });
+
+  if(!changed.length){
+    if(asFound.length) c.pass(name,`not idle, but not touched by this run and the same as before it: ${asFound.join(", ")}`);
+    else c.pass(name);
+    return;
+  }
   const others = lcOtherRunsInProgress_(c);
   // Another checked run that has started and not ended may be the one that lights the cell right now (a refresh writes for a long
   // time, and a trigger of the same document can run its check meanwhile): that is not a stuck indicator, but worth a look.
-  if(others.length) c.warn(name,`still showing activity: ${seen}; another run is in progress and may be lighting it: ${others.join(", ")}`);
-  else c.expect(name,false,`still showing activity: ${seen}; no other checked run is in progress`);
+  if(others.length) c.warn(name,`still showing activity: ${changed.join(", ")}; another run is in progress and may be lighting it: ${others.join(", ")}`);
+  else c.fail(name,`still showing activity: ${changed.join(", ")}; no other checked run is in progress`);
 }
 
 /** Checked runs of OTHER executions that have started and have no result yet (nested runs of this execution do not count). */
@@ -196,7 +226,7 @@ function lcVerifyConfigCoedit_(c,name){
   const cfg = lcReadConfigSheet_(name);
   if(!c.expect(`${tag} config sheet exists`,cfg)) return;
 
-  lcVerifyIdleIndicators_(c,cfg.sheet,tag);
+  lcVerifyIdleIndicators_(c,cfg.sheet,tag,["B2"]);                 // a co-edit lights the reading cell and puts it back
   c.expectEqual(`${tag} header intact (B1, B4)`,[cfg.sheet.getRange("B1").getValue(),cfg.sheet.getRange("B4").getValue()],[LC_CONFIG_HEADER.values[0][1],"Opis linii"]);
   c.expect(`${tag} estimate info greyed out`,cfg.sheet.getRange("E2:F2").getFontColors()[0].every(col => col === LC_IDLE_FONT),"E2:F2 font is not grey");
 
@@ -257,7 +287,7 @@ function lcVerifyResultSheet_(c,configName,resultName){
   const tag = `[${configName}]`;
   const cfg = lcReadConfigSheet_(configName);
   if(!cfg) return c.fail(`${tag} config sheet exists`,"the sheet is listed in the settings sheet but missing");
-  lcVerifyIdleIndicators_(c,cfg.sheet,tag);
+  lcVerifyIdleIndicators_(c,cfg.sheet,tag,["B2","C2","D2"]);      // a refresh works with all three
 
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(resultName);
   if(!c.expect(`${tag} result sheet "${resultName}" exists`,sheet,"refresh did not create / keep the result sheet")) return;
@@ -414,17 +444,17 @@ function buildLiveCheckVerifiers_(){
     },
 
     sheetEditAction: {
-      needs: ["sheets","docProps","settingsSheet"],
+      needs: ["sheets","docProps","settingsSheet","indicators"],
       verify(c){ lcVerifyAgentRun_(c,"edit"); }
     },
 
     sheetChangeAction: {
-      needs: ["sheets","docProps","settingsSheet"],
+      needs: ["sheets","docProps","settingsSheet","indicators"],
       verify(c){ lcVerifyAgentRun_(c,"change"); }
     },
 
     requestAutoRefesh: {
-      needs: ["sheets","settings","settingsSheet","triggers"],
+      needs: ["sheets","settings","settingsSheet","triggers","indicators"],
       verify(c){
         const e = c.input.e;
         const uid = e && e.triggerUid;
@@ -543,7 +573,7 @@ function buildLiveCheckVerifiers_(){
     },
 
     requestCheckConfigSheet: {
-      needs: ["sheets","activeSheet","settingsSheet"],
+      needs: ["sheets","activeSheet","settingsSheet","indicators"],
       verify(c){
         const settings = c.now("settingsSheet");
         const active = c.before.activeSheet;
@@ -556,7 +586,7 @@ function buildLiveCheckVerifiers_(){
     },
 
     menuEstimateForCurrentSheet: {
-      needs: ["sheets","activeSheet","settingsSheet"],
+      needs: ["sheets","activeSheet","settingsSheet","indicators"],
       verify(c){
         const settings = c.now("settingsSheet");
         const active = c.before.activeSheet;
@@ -564,7 +594,7 @@ function buildLiveCheckVerifiers_(){
         if(!entry){ lcVerifyOnlySettingsSheetAdded_(c,settings,"not a config sheet: nothing changed"); return; }
         const cfg = lcReadConfigSheet_(entry.config);
         if(!c.expect(`[${entry.config}] config sheet exists`,cfg)) return;
-        lcVerifyIdleIndicators_(c,cfg.sheet,`[${entry.config}]`);
+        lcVerifyIdleIndicators_(c,cfg.sheet,`[${entry.config}]`,["B2","C2"]);     // an estimate: reading and connection
         if(c.error) return;
         if(!cfg.table){ c.pass("no table in the config sheet: estimate skipped"); return; }
         const cell = cfg.sheet.getRange("F2");
@@ -577,7 +607,7 @@ function buildLiveCheckVerifiers_(){
     },
 
     menuRefreshCurrentSheet: {
-      needs: ["sheets","activeSheet","settingsSheet"],
+      needs: ["sheets","activeSheet","settingsSheet","indicators"],
       verify(c){
         const settings = c.now("settingsSheet");
         const active = c.before.activeSheet;
@@ -592,7 +622,7 @@ function buildLiveCheckVerifiers_(){
     },
 
     menuRefreshAll: {
-      needs: ["sheets","settingsSheet"],
+      needs: ["sheets","settingsSheet","indicators"],
       verify(c){
         const settings = c.now("settingsSheet");
         if(!settings.configs.length){ c.pass("no config sheets listed: nothing to refresh"); return; }
@@ -788,7 +818,7 @@ function lcVerifyRefreshedConfig_(c,entry){
   const cfg = lcReadConfigSheet_(entry.config);
   if(!c.expect(`${tag} config sheet exists`,cfg)) return;
   if(c.error || !cfg.table){
-    lcVerifyIdleIndicators_(c,cfg.sheet,tag);
+    lcVerifyIdleIndicators_(c,cfg.sheet,tag,c.error ? ["B2","C2"] : ["B2"]);     // stopped early: reading (and connection), never the writing cell
     if(!c.error) c.expect(`${tag} no table: no result sheet created`,!lcAddedSheets_(c).includes(entry.result),`${entry.result} was created`);
     return;
   }

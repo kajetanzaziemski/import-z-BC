@@ -182,6 +182,8 @@ class SimBook {
     const book = this;
     return {
       getId: () => 'ss', getSpreadsheetTimeZone: () => book.tz,
+      getSheets: () => Object.values(book.sheets).map(x => book.sheetObj(x)),
+      getActiveSheet: () => book.sheetObj(book.sheets[book.activeName] || Object.values(book.sheets)[0]),
       getSheetByName: n => (book.sheets[n] ? book.sheetObj(book.sheets[n]) : null),
       insertSheet: n => {
         if (book.sheets[n]) throw new Error('A sheet with the name "' + n + '" already exists. Please enter another name.');
@@ -266,6 +268,7 @@ class SimBook {
       getA1Notation: () => colName(c) + r + (nr > 1 || nc > 1 ? ':' + colName(c + nc - 1) + (r + nr - 1) : ''),
       getValues: () => { call(); return grid((rr, cc) => valueOf(s.cell(rr, cc))); },
       getBackground: () => { call(); const x = s.cell(r, c); return (x && x.fmt.bg) || '#ffffff'; },
+      getBackgrounds: () => { call(); return grid((rr, cc) => { const x = s.cell(rr, cc); return (x && x.fmt.bg) || '#ffffff'; }); },
       getFontColor: () => { call(); const x = s.cell(r, c); return (x && x.fmt.color) || '#000000'; },
       getFontColors: () => { call(); return grid((rr, cc) => { const x = s.cell(rr, cc); return (x && x.fmt.color) || '#000000'; }); },
       getFormulas: () => { call(); return grid((rr, cc) => { const x = s.cell(rr, cc); return x ? x.f : ''; }); },

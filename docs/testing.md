@@ -40,10 +40,13 @@ the refactor** and verify each entry point's outcome in a real spreadsheet. The 
   entry point shows up here); with the helpers loaded and switched off the whole state suite gives the same results; switched on, a check never throws into the run;
   the verifiers' own copy of the config sheet layout (`LC_CONFIG_HEADER`, idle colours) agrees with what `ConfigGrid` produces.
 - **Two deliberate changes of the helper files on this branch** (re-pinned; the rest is as merged), made after a `FAIL [Konfiguracja 1] activity indicators back to idle - still showing activity: data writing`
-  was reported while all controls looked off:
-  1. *Indicator check* (`Live Check Verifiers.js`, `lcVerifyIdleIndicators_`): the detail now says what the script read (`D2: background #ff0000, font #000000`) and whether another checked run is in
-     progress. If one is (started, no result yet, under 10 minutes, not this check's own run or a nested run of the same execution) the result is a **WARN naming that run** instead of a FAIL: a refresh
-     lights D2 for as long as it writes, and a trigger of the same document that runs its check meanwhile reads the lit cell. With no other run in progress it stays a FAIL.
+  was reported while all controls looked off (D2 turned out to have been cleared and made black by hand):
+  1. *Indicator check* (`Live Check Verifiers.js` `lcVerifyIdleIndicators_`, `Live Check.js` snapshot part `indicators`): a hand-edited cell is not the run's doing. Before a run the look
+     (background, font) of B2:D2 of every config sheet is captured. Afterwards a cell the flow works with (it lights it and puts it back: co-edit B2, estimate B2 C2, refresh B2 C2 D2;
+     an error stops a refresh/estimate at B2 C2) must be idle; every other cell must look exactly as before - if it was not idle before and is the same, the check **passes** and the detail says
+     "not touched by this run and the same as before it"; if the run changed it and left it not idle it **fails**, showing both looks. Without a baseline (a new sheet) every cell must be idle.
+     If a lit cell was changed while another checked run is in progress (started, no result, under 10 minutes, not this check's own run or a nested run of the same execution) the result is a
+     **WARN naming that run** (a refresh lights D2 for as long as it writes and a trigger of the same document may check meanwhile).
   2. *Sidebar details* (`Live Check Sidebar.html`): FAIL lines are red, WARN lines amber, PASS grey, SKIP grey italic; the head line has the colour of the run's status.
   `testConfigGridIndicators("Konfiguracja 1")` (Test Functions.js) prints the same reads on demand.
 - In a real spreadsheet: `liveCheckEnable()`, then use the add-on (menu, edits, triggers) and read the sidebar (add-on menu -> Narzędzia programisty -> Live check) or
