@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
 // RESULT SHEET: the sheet an import writes its table to.
-// Today the Spreadsheet service is called directly (clear, one number format per column, one setValues), exactly as Menu.js did.
-// This is the seam for the planned BulkSheet writer for tall data (Grid keeps a window of at most 3000 rows and is not meant for it).
+// What is specific here: the number format of a column follows the data type BC reported for it. The writing itself (clear, formats,
+// chunked values) is BulkSheet.js, which does not know about BC.
 // ---------------------------------------------------------------------------
 
 const ResultSheet = {
@@ -12,14 +12,7 @@ const ResultSheet = {
    * @param columnDataTypes {String[]} Data type of each column (EDM or JS name); sets the number format of the column.
    */
   write(sheetName,table,columnDataTypes){
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    let sheet = ss.getSheetByName(sheetName);
-    if (!sheet) sheet = ss.insertSheet(sheetName);
-    sheet.getDataRange().clear();
     dbgLog(columnDataTypes);
-    columnDataTypes.forEach((dataType,index)=>{
-      sheet.getRange(1,index+1,table.length,1).setNumberFormat(new DataType(dataType).getSpreadsheetNumberFormat()); 
-    });
-    sheet.getRange(1, 1, table.length, table[0].length).setValues(table); 
+    BulkSheet.writeTable(sheetName,table,{columnFormats: columnDataTypes.map(dataType => new DataType(dataType).getSpreadsheetNumberFormat())});
   }
 };

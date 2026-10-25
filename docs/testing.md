@@ -8,6 +8,18 @@ Each scenario runs through both commit paths (`[api]`, `[service]`), and "parity
 The sim throws on any request or method it does not know, so `Grid.js` cannot start using a new call unnoticed.
 Architecture rules are tests too (no project words in `Grid.js`, nothing used at load time, only `SpreadsheetApp`/`Sheets`/`Utilities`).
 
+## 2d. Result table writing (`tests/bulk-sheet.test.js`)
+- `BulkSheet.writeTable(sheetName, table, { columnFormats, chunkCells })` (`BulkSheet.js`) replaced the inline writing in `ResultSheet.write`: ensure the sheet and its size, clear the data range, one number format per column
+  for the whole table height, then the values in chunks of whole rows (at most 50 000 cells per `setValues`; the old code made one call for the whole table). `ResultSheet.write` only turns BC data types into formats.
+- `tests/golden/legacy-result-sheet.js` is the frozen `ResultSheet.write`. Both run on the same simulated book (new sheet, existing sheet with more rows / columns / formats / a note than the new table, empty sheet, header only,
+  one cell, fewer or more types than columns, 20 000 rows x 6 columns, exactly the sheet's height); every cell, format and note must be identical.
+- Intended differences: (1) a table that is empty, has an empty first row or ragged rows is refused **before** the sheet is created or cleared (before: the sheet was cleared, then a `TypeError` from `table[0].length`);
+  (2) the sheet is **grown** (`insertRowsAfter` / `insertColumnsAfter`) when the table is taller or wider than the sheet, instead of relying on the platform to grow it on write. The simulation refuses a write past the sheet's size
+  and I could not confirm what the real service does; growing explicitly is correct either way.
+- No Sheets API path: the advanced service is off in `appsscript.json`, so such a path could not be checked against anything. Not verified on a real spreadsheet: speed and memory with 100 000+ rows, and the 10 million cell limit
+  of a spreadsheet (a write that would pass it fails with the platform's own error; nothing here guards it).
+- Mutation checks: wrong chunk offset, skipped chunks, formats only on the first row, no clear and no growth are all caught. The tall golden compares by JSON string (a `deepStrictEqual` diff of 120 000 cells takes minutes).
+
 ## 2c. Settings sheet (`tests/settings-sheet.test.js`)
 - `tests/golden/legacy-settings-sheet.js` is the **frozen `SettingsSheet`** from before its cell access moved to `SettingsGrid` (`Settings Grid.js`).
 - Old and new class run in fresh scopes on the same simulated book (new one through both Grid commit paths) for: a missing sheet (created with header, unit dropdown, date format), an existing sheet with three

@@ -14,7 +14,7 @@ const { FakePlatform } = require('./platform-fakes');
 const ROOT = path.join(__dirname, '..');
 const BASE = ['Custom errors.js', 'Helper Data Store.js', 'Store.js', 'Settings.js', 'Main Settings.js', 'Controller.js', 'Trigger Manager.js',
   'Global Add-on Settings.js', 'Quick Start.js', 'functions.js', 'Track onEdit Triggers.js', 'Status Manager.js', 'Data Type.js', 'Menu.js', 'Settings Sheet.js'];
-const USE_CASE_FILES = ['Import Query.js', 'ResultSheet.js', 'RefreshSheet.js', 'EstimateSheet.js', 'RefreshAll.js', 'ScheduleRefresh.js'].filter(f => fs.existsSync(path.join(ROOT, f)));
+const USE_CASE_FILES = ['Import Query.js', 'BulkSheet.js', 'ResultSheet.js', 'RefreshSheet.js', 'EstimateSheet.js', 'RefreshAll.js', 'ScheduleRefresh.js'].filter(f => fs.existsSync(path.join(ROOT, f)));
 
 const FAKES = `
   globalThis.SheetCoeditor = class {

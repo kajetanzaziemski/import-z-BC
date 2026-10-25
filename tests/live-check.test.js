@@ -262,7 +262,7 @@ module.exports = function register(t) {
     const app = { getActiveSpreadsheet: () => ss, flush() {}, WrapStrategy: book.SpreadsheetApp.WrapStrategy, newDataValidation: book.SpreadsheetApp.newDataValidation,
       DataValidationCriteria: book.SpreadsheetApp.DataValidationCriteria,
       getActive: () => ({ getActiveSheet: () => ({ getName: () => 'Konfiguracja 1' }) }), getUi: () => ({ alert() {} }) };
-    const files = [...FILES, 'Data Type.js', 'Menu.js', 'Import Query.js', 'ResultSheet.js', 'RefreshSheet.js', 'EstimateSheet.js', 'Sheet Coeditor.js', 'Grid.js', 'Grid Util.js', 'Config Grid.js'];
+    const files = [...FILES, 'Data Type.js', 'Menu.js', 'Import Query.js', 'BulkSheet.js', 'ResultSheet.js', 'RefreshSheet.js', 'EstimateSheet.js', 'Sheet Coeditor.js', 'Grid.js', 'Grid Util.js', 'Config Grid.js'];
     const ex = p.execution(files, { SpreadsheetApp: app, Utilities: book.Utilities, Session: { getActiveUser: () => ({ getEmail: () => 'u' }) } });
     ex.eval(`StatusManager.fullStatusCheck = () => {};
       globalThis.CCTImportConfig = class { constructor(v) { this.v = v; } };
@@ -317,7 +317,7 @@ module.exports = function register(t) {
   });
 
   // ---- jobs (intents): a run is reported under what it DID, via the technical trigger ---------------------------------------------------------
-  const JOB_FILES = ['Import Query.js', 'ResultSheet.js', 'RefreshSheet.js', 'EstimateSheet.js', 'RefreshAll.js', 'ScheduleRefresh.js', 'AnalyseConfig.js', 'Router.js',
+  const JOB_FILES = ['Import Query.js', 'BulkSheet.js', 'ResultSheet.js', 'RefreshSheet.js', 'EstimateSheet.js', 'RefreshAll.js', 'ScheduleRefresh.js', 'AnalyseConfig.js', 'Router.js',
     'Data Type.js', 'Menu.js', 'Sheet Coeditor.js', 'Grid.js', 'Grid Util.js', 'Config Grid.js'];
 
   test('live check jobs: every job the code announces (Controller.intent, the router\'s action table) is in the catalogue and has a verifier, and none is orphaned', () => {

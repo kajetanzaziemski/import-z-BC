@@ -571,6 +571,9 @@ require('./coeditor.test.js')({ test });
 // ---- settings sheet: what SettingsSheet reads and writes (golden against the frozen class) ------------------------------------
 require('./settings-sheet.test.js')({ test });
 
+// ---- result table writing: BulkSheet / ResultSheet (golden against the frozen ResultSheet) ----------------------------------------
+require('./bulk-sheet.test.js')({ test });
+
 // ---- state layer: stores, settings, locks, agent detection state (fresh Apps Script executions on fake platform services) ----------
 require('./state.test.js')({ test });
 // the same suite with the live check helpers loaded (switched off): nothing may change
