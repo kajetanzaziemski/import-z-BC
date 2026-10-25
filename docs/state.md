@@ -14,7 +14,7 @@ version with and without it can run on the same document. Tests: `tests/state.te
 `Store`: `get/set/remove(scope,key)`, `getJson/setJson`, `cache.get/set(…, ttl)/remove`, `optional.getCache/setCache`, `object`, `array`, `service(scope,'properties'|'cache')`, `available`.
 
 ## Callers moved (mechanical, each pinned by a test)
-`Track onEdit Triggers.js` (document cache with 30 s lifetime, suspect flag), `functions.js` (`runFunctionWithLock` flag), `Trigger Manager.js` (trigger logs → `getJson/setJson`,
+`Track onEdit Triggers.js` (document cache with 30 s lifetime, suspect flag), `functions.js` (`runLatestOnly` ticket), `Trigger Manager.js` (trigger logs → `getJson/setJson`,
 agent pairs → `Store.array`), `Metadata.js` (optional document cache), `Autoryzacja BC.js` (OAuth2 property store / cache = user scope via `Store.service`),
 `Global Add-on Settings.js`, `Quick Start.js` (`getGlobalSettings`, settings sheet name).
 Rules in the tests: only `Store.js` touches `HelperDataStore`/`OptionalDataStore`; only `Helper Data Store.js` touches `PropertiesService`/`CacheService`; only `Store.js` constructs

@@ -62,7 +62,7 @@ A use case: opens grids through adapters (L2), calls services (L3), commits **on
 Today there are four mechanisms (`HelperDataStore`, `MainSettings`, `getImportSettings`, `getGlobalSettings`). Suggest **one `Store` namespace** with scopes:
 `Store.document` (StorageObject, merge-on-save under lock – keep CLAUDE.md rules), `Store.user`, `Store.script`, `Store.cache`; `MainSettings` / `GlobalSettings`
 become typed accessors on top of it (`Settings.addonStatus()`, `Settings.refreshPermit()`, `Settings.tenant()`…).
-`Lock` (document lock wrapper: `withDocumentLock`, `runFunctionWithLock`), `Log` (`dbgLog`, `agentLog`).
+`Lock` (document lock wrapper: `withDocumentLock`, `runLatestOnly`), `Log` (`dbgLog`, `agentLog`).
 
 ## Rules to enforce in `tests/run.js` (as wyceny does)
 1. Only L2 adapters build or open a Grid; services and use cases never call `Grid.open` / `new Grid`.

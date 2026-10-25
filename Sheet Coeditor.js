@@ -65,28 +65,36 @@ class SheetCoeditor{
   }
 
   // - - - - - - - - Handle events - - - - - - - - 
-  sheetEdit(e){
-    this.respondToManyCellsEdit();
+  /**
+   * @param e The edit event (not used: the sheet is read again).
+   * @param shouldContinue {function(): boolean} Asked at the checkpoints (before the first write, after the inserted lines, before the dropdowns are written):
+   *   false = a newer co-edit has started, stop here and leave the rest to it. Default: always continue.
+   * @returns {boolean} true when everything was done, false when it stopped at a checkpoint.
+   */
+  sheetEdit(e,shouldContinue=()=>true){
+    return this.respondToManyCellsEdit(shouldContinue);
     
     // if(e?.range?.getA1Notation().indexOf(":")<0) this.respondToSingleCellEdit(e);
     // else this.respondToManyCellsEdit();
   }
 
-  respondToManyCellsEdit(){
+  respondToManyCellsEdit(shouldContinue=()=>true){
     dbgLog("Many cells edit...");
     this.cct = this.loadFromSheet();
-    this.applyCoeditsWithLock();
+    if(!shouldContinue()) return false;      // checkpoint 1: nothing has been written yet
+    return this.applyCoeditsWithLock(shouldContinue);
   }
 
   // - - - - - - - - Modify sheet - - - - - - - -     
-  applyCoeditsWithLock(){
-    this.applyCoedits();   // the lock-and-retry variant was unreachable code and is gone; runFunctionWithLock (functions.js) does that job
+  applyCoeditsWithLock(shouldContinue=()=>true){
+    return this.applyCoedits(shouldContinue);   // the lock (and "only the newest run completes") is runLatestOnly (functions.js), around the whole sheetEdit
   }
 
-  applyCoedits(){
+  applyCoedits(shouldContinue=()=>true){
     this.switchEstimateInfoActive(false);
     if(this.insertRows()>0) this.cct = new CCTImportConfig(this.lines.values());   // the sheet as the inserts left it (no second read)
-    this.setDataValidationsToSheet();
+    if(!shouldContinue()) return false;      // checkpoint 2: the lines are in; building the dropdowns asks BC and is the slow part
+    return this.setDataValidationsToSheet(shouldContinue);
   }
 
   insertRows(){
@@ -97,12 +105,15 @@ class SheetCoeditor{
     return this.cct.insertRows.length;
   }
 
-  setDataValidationsToSheet(){
+  setDataValidationsToSheet(shouldContinue=()=>true){
     let noteMsg = 'Pusta lista może wynikać z braku połączenia z BC. Spróbuj nawiązać połączenie i wywołaj opcję "Analizuj zapytanie" dla tego arkusza';
-    let notesArray = map2D(this.cct.getDataValidationsArray(),x => x ? x.getDescription()=="empty selection" ? noteMsg : null : null)
-    let array = map2D(this.cct.getDataValidationsArray(),x => x ? x.getSpreadsheetAppDataValidation() : null)
+    const validations = this.cct.getDataValidationsArray();
+    let notesArray = map2D(validations,x => x ? x.getDescription()=="empty selection" ? noteMsg : null : null)
+    let array = map2D(validations,x => x ? x.getSpreadsheetAppDataValidation() : null)
+    if(!shouldContinue()) return false;      // checkpoint 3: everything is prepared, nothing written yet
     this.lines.setDropdowns(array,notesArray);
     this.lines.save();
+    return true;
   }
 
   /** The status cells of this config sheet (Config Grid.js); read once per SheetCoeditor, every switch is one commit. */

@@ -39,9 +39,13 @@ Found while building and testing the live check helpers (`docs/live-check.md`), 
 11. **`SettingsSheet` row positions go stale.** `addNewSheetInfo()` inserts a config line (after row 2 while there are no config lines, i.e. above the `lastRefresh` /
     `refreshFrequency` lines) but does not move `lastRefreshPos` / `refreshFrequencyPos`; a `setLastRefresh()` later in the same execution writes into the wrong row.
     Pinned in `tests/settings-sheet.test.js`. In practice the wizard and `RefreshAll` run in separate executions.
-12. **`runFunctionWithLock` lost requests made during the action: FIXED.** The holder set its flag to "no" after its action, erasing the "yes" of a run that had been waiting for the lock; the waiting run then found "no" and
+12. **`runFunctionWithLock` lost requests made during the action: FIXED, then REPLACED by "only the last co-edit completes"** (see the end of this item). First fix: The holder set its flag to "no" after its action, erasing the "yes" of a run that had been waiting for the lock; the waiting run then found "no" and
     did nothing, although the holder had read the sheet before the change (a row pasted during an analyse was never analysed: no empty queryOption row, no dropdowns on the pasted line). Now every caller sets "yes", the holder
     sets "no" before each pass and does another pass when "yes" came back (max 5), the lock is released after the action. `functions.js`, tests in `tests/state.test.js`.
+    **Final design (`runLatestOnly`, `functions.js`):** every co-edit writes its own ticket to `<sheet>_coedit` when it starts and takes the *document* lock (not the script lock: documents no longer wait for each other),
+    waiting up to ~90 s and giving up at once if a newer ticket appears; the co-edit checks `isLatest()` at three checkpoints (before the first write, after the lines are inserted, before the dropdowns - prepared with the
+    slow BC calls - are written) and drops out mid-flight when a newer run exists. Outcomes: `completed`, `dropped` (the newer run owns the reading light and switches it off), `timeout` (never got the lock: it switches the light
+    off itself). A dropped run leaves what it already wrote (inserted lines): the newer run reads the sheet again and completes it. No pass loop, no queue of redundant runs.
 
 ### Fixed after the first real-sheet runs (each with tests)
 - **#3 `ConnectionError` aborting the co-edit: FIXED.** The field list, the navigation property list and the data-type lookup of `ConfigDValStore` fall back to the empty list with its note, like the table list (not remembered, so the next run asks BC again).

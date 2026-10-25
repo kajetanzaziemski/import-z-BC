@@ -50,7 +50,7 @@ Everything is one global scope (Apps Script); the arrows are conventions, not en
  │ PLATFORM: SpreadsheetApp – direct getRange/setValues/insertRow/… calls in SheetCoeditor, SettingsSheet, Menu (result write)  │
  │           (Grid.js, copied from wyceny, would sit between the SHEET boxes and this line – not wired in yet)                  │
  └───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
- side: functions.js (array helpers, dbgLog, runFunctionWithLock) · Test Functions.js (manual tests) · Grid.js / Grid Util.js (unused)
+ side: functions.js (array helpers, dbgLog, runLatestOnly (was runFunctionWithLock)) · Test Functions.js (manual tests) · Grid.js / Grid Util.js (unused)
 ```
 
 ## The two main flows

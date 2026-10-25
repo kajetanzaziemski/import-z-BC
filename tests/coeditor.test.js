@@ -203,4 +203,73 @@ module.exports = function register(t) {
       assert.ok(s.book.sheets['K'].lastRow() >= 8);
     });
   });
+
+  // ---- only the last co-edit completes (checkpoints) -------------------------------------------------------------------------------------------
+  ['api', 'service'].forEach(mode => {
+    test('checkpoints: sheetEdit asks shouldContinue three times (before the first write, after the lines are inserted, before the dropdowns are written) and returns true when all was done [' + mode + ']', () => {
+      const s = scope(mode);
+      s.run(`ConfigGrid.create('K')`);
+      fillLines(s.book, SCENARIOS['table and an option']);
+      s.run(`globalThis.__asked = 0; globalThis.__r = new SheetCoeditor('K', false).sheetEdit({}, () => { __asked++; return true; })`);
+      assert.deepStrictEqual([s.run('__asked'), s.run('__r')], [3, true]);
+      assert.strictEqual(s.run(`new SheetCoeditor('K', false).sheetEdit({})`), true, 'without a callback it always goes through');
+    });
+
+    [[1, 'before anything is written'], [2, 'after the lines are inserted, before the dropdowns'], [3, 'with the dropdowns prepared, before they are written']].forEach(([stopAt, when]) =>
+      test(`checkpoints: stopping at checkpoint ${stopAt} (${when}) writes nothing after it and returns false [${mode}]`, () => {
+        const s = scope(mode);
+        s.run(`ConfigGrid.create('K')`);
+        fillLines(s.book, SCENARIOS['table and an option']);
+        const before = JSON.stringify(compact(s.book));
+        s.run(`globalThis.__asked = 0; globalThis.__r = new SheetCoeditor('K', false).sheetEdit({}, () => ++__asked < ${stopAt})`);
+        assert.strictEqual(s.run('__r'), false);
+        const sh = s.book.sheets['K'];
+        const dropdowns = () => { let n = 0; for (let r = 6; r <= sh.lastRow(); r++) for (let c = 2; c <= 6; c++) if ((sh.cell(r, c) || {}).dv) n++; return n; };
+        if (stopAt === 1) assert.strictEqual(JSON.stringify(compact(s.book)), before, 'the sheet is exactly as found');
+        if (stopAt === 2) { assert.ok(sh.lastRow() > 7, 'the inserted lines are there'); assert.strictEqual(dropdowns(), 0, 'no dropdowns'); }
+        if (stopAt === 3) { assert.ok(sh.lastRow() > 7); assert.strictEqual(dropdowns(), 0, 'no dropdowns'); }
+        // and the newer run finds a sheet it can complete
+        assert.strictEqual(s.run(`new SheetCoeditor('K', false).sheetEdit({})`), true);
+        assert.ok(dropdowns() > 0);
+      }));
+  });
+
+  // The real thing: AnalyseConfig + runLatestOnly + the co-editor, with a later edit that arrives while the first co-edit is in BC's hands.
+  const { FakePlatform } = require('./platform-fakes');
+  function analyseScope(mode, hookAt) {
+    const book = new SimBook({ api: mode === 'api' });
+    const p = new FakePlatform();
+    const files = ['Custom errors.js', 'Helper Data Store.js', 'Store.js', 'functions.js', ...FILES.filter(f => !['functions.js', 'Custom errors.js'].includes(f)), 'AnalyseConfig.js'];
+    const run = (code, extra) => {
+      const ex = p.execution(files, Object.assign({ SpreadsheetApp: book.SpreadsheetApp, Utilities: book.Utilities, Sheets: mode === 'api' ? book.Sheets : undefined, __hookAt: hookAt, __book: book }, extra || {}));
+      ex.eval(`globalThis.dbgLog = () => {}; globalThis.__calls = {}; globalThis.getMetadata = () => ({
+        listTables: () => { __tick('listTables'); return ['Customers', 'Items']; },
+        listProperties: t => { __tick('listProperties'); return ['No', 'Name']; }, listNavProperties: t => ['Lines'], getDataType: () => 'Edm.String' });
+        function __tick(name) { __calls[name] = (__calls[name] || 0) + 1; if (typeof __hook === 'function' && name === __hookAt.name && __calls[name] === __hookAt.nth) __hook(); }`);
+      return ex.eval(code);
+    };
+    return { book, p, run };
+  }
+  const newerRunStarts = `() => { Store.set('document', 'K_coedit', 'a-newer-run'); }`;
+  ['api', 'service'].forEach(mode => [
+    ['while the first co-edit reads (its model is being built)', { name: 'listTables', nth: 2 }, 'nothing'],
+    ['while the dropdowns are being prepared (the lines are already in)', { name: 'listProperties', nth: 1 }, 'lines']
+  ].forEach(([when, hookAt, expectLeft]) => test(`only the last co-edit completes: a newer one starts ${when}: the first drops out, leaves the reading light to the newer one, and the newer one finishes the sheet [${mode}]`, () => {
+    const s = analyseScope(mode, hookAt);
+    s.run(`ConfigGrid.create('K')`);
+    fillLines(s.book, SCENARIOS['table, select, fields, filter']);
+    const below = () => JSON.stringify(Object.entries(compact(s.book).cells).filter(([k]) => Number(k.split(',')[0]) >= 3));      // rows 1-2 hold the lights
+    const before = below();
+    s.run(`globalThis.__hook = ${newerRunStarts}; AnalyseConfig.run('K', {})`);
+    const sh = s.book.sheets['K'];
+    const dropdowns = () => { let n = 0; for (let r = 6; r <= sh.lastRow(); r++) for (let c = 2; c <= 6; c++) if ((sh.cell(r, c) || {}).dv) n++; return n; };
+    assert.strictEqual(sh.cell(2, 2).fmt.bg, '#008000', 'the dropped run did not switch the reading light off');
+    if (expectLeft === 'nothing') assert.strictEqual(below(), before, 'the lines are exactly as found');
+    else { assert.ok(sh.lastRow() > 10, 'the lines were inserted'); assert.strictEqual(dropdowns(), 0, 'but no dropdowns were written by the dropped run'); }
+    // the newer run (its ticket is already in the flag): it takes the lock, finds itself the latest, completes and puts the light back
+    s.run(`globalThis.__hook = null; runLatestOnly(isLatest => new SheetCoeditor('K', false).sheetEdit({}, isLatest), 'K_coedit')`);
+    s.run(`new SheetCoeditor('K', false).switchReadingControl(false)`);
+    assert.ok(dropdowns() > 0);
+    assert.strictEqual(sh.cell(2, 2).fmt.bg, '#cccccc');
+  })));
 };

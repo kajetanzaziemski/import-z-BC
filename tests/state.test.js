@@ -1,5 +1,5 @@
 // Tests of the state layer: HelperDataStore / Store, MainSettings / Settings, GlobalSettings, StorageObject, the agent detection's use of
-// cache and properties, runFunctionWithLock. Registered by tests/run.js.
+// cache and properties, runLatestOnly (the co-edit lock). Registered by tests/run.js.
 //
 // Every test builds a FRESH execution (all project files loaded into a new global scope, like a new Apps Script run) on a FakePlatform
 // that keeps the stored data. Two executions on one platform model two concurrent / consecutive runs.
@@ -275,76 +275,74 @@ module.exports = function register(t) {
     assert.strictEqual(ex.eval(`getAgentSuspect()`), null);
   });
 
-  test('state: runFunctionWithLock: runs the action under the lock and leaves the flag "no"', () => {
+  // Only the LAST co-edit to start may complete: every run writes its own ticket to the document property <sheet>_coedit when it starts; the action gets
+  // isLatest() and drops out (returns false) at its checkpoints as soon as a newer ticket is there; a run that waits for the lock gives up as soon as it is
+  // not the latest any more. (Before: a request made during a pass was served by another pass of the holder; the user wants the newest only.)
+
+  test('state: runLatestOnly: runs the action under the document lock, hands it isLatest(), leaves its own ticket in the flag, returns "completed"', () => {
     const { p, ex } = setup();
-    ex.eval(`globalThis.__n = 0; runFunctionWithLock(() => { __n++; }, 'flagA')`);
+    const r = ex.eval(`globalThis.__n = 0; globalThis.__sawLatest = null; const r = runLatestOnly(isLatest => { __n++; __sawLatest = isLatest(); }, 'flagA'); r`);
+    assert.strictEqual(r, 'completed');
     assert.strictEqual(ex.eval(`__n`), 1);
-    assert.strictEqual(p.props.document.flagA, 'no');
+    assert.strictEqual(ex.eval(`__sawLatest`), true);
+    assert.ok(/^[0-9a-z]+-[0-9a-z]+$/.test(p.props.document.flagA), 'a ticket, not yes/no: ' + p.props.document.flagA);
+    assert.ok(p.calls.includes('lock.acquired') && p.calls.includes('lock.released'));
   });
 
-  test('state: runFunctionWithLock: when the lock is busy it asks for a re-run ("yes"), and runs once if the lock frees up while waiting', () => {
-    const { p, ex } = setup();
-    p.lockHeld = true; p.lockFreesAfter = 1;                       // the first tryLock fails, the second succeeds
-    ex.eval(`globalThis.__n = 0; runFunctionWithLock(() => { __n++; }, 'flagB')`);
-    assert.strictEqual(ex.eval(`__n`), 1);
-    assert.strictEqual(p.props.document.flagB, 'no');
-    const q = setup();
-    q.p.lockHeld = true;                                           // never frees
-    q.ex.eval(`globalThis.__n = 0; runFunctionWithLock(() => { __n++; }, 'flagC')`);
-    assert.strictEqual(q.ex.eval(`__n`), 0);
-    assert.strictEqual(q.p.props.document.flagC, 'yes', 'whoever holds the lock sees that a re-run is needed');
-  });
-
-  // A request that comes in while the holder works (the user pastes a row while an analyse runs) must not be lost: the holder reads the sheet at
-  // the START of its action, so the paste is not in what it works on. Before: the holder cleared the flag after its action and the waiting run found "no".
-  test('state: runFunctionWithLock: a request that arrives during the action makes the holder run it again (nothing is lost)', () => {
+  test('state: runLatestOnly: a run that starts while another works takes over - the one working finds out at its next checkpoint and drops out (returns "dropped"), the newer one gets its turn', () => {
     const { p, ex, next } = setup();
-    p.tryLockAttempts = 0;
-    ex.ctx.__otherRun = () => {                                      // a second execution while this one holds the lock: it cannot get it
-      p.lockHeld = true;
+    ex.ctx.__newerStarts = () => {
+      p.lockHeld = true;                                          // the newer run cannot get the lock while this one works
       const y = next();
-      y.ex.eval(`globalThis.__yRan = 0; runFunctionWithLock(() => { __yRan++; }, 'flagD')`);
+      y.ex.eval(`globalThis.__yRan = 0; globalThis.__yOutcome = runLatestOnly(() => { __yRan++; }, 'flagB')`);
       p.lockHeld = false;
-      return y.ex.eval(`__yRan`);
+      return [y.ex.eval(`__yRan`), y.ex.eval(`__yOutcome`)];
     };
-    ex.eval(`globalThis.__runs = 0; globalThis.__yRuns = 0;
-      runFunctionWithLock(() => { __runs++; if (__runs === 1) __yRuns = __otherRun(); }, 'flagD')`);
-    assert.strictEqual(ex.eval(`__yRuns`), 0, 'the other run could not take the lock');
-    assert.strictEqual(ex.eval(`__runs`), 2, 'the holder did the action again for the request made during the first one');
-    assert.strictEqual(p.props.document.flagD, 'no');
+    const out = ex.eval(`globalThis.__log = []; const r = runLatestOnly(isLatest => {
+      __log.push('checkpoint 1: ' + isLatest());
+      __yStatus = __newerStarts();
+      __log.push('checkpoint 2: ' + isLatest());
+      return isLatest() ? undefined : false;
+    }, 'flagB'); [r, __log, __yStatus]`);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(out)), ['dropped', ['checkpoint 1: true', 'checkpoint 2: false'], [0, 'timeout']]);
   });
 
-  test('state: runFunctionWithLock: a run that gets the lock after the holder handled its request does nothing; one request = one action even with many waiting', () => {
-    const { p, ex, next } = setup();
-    ex.ctx.__others = () => {
-      p.lockHeld = true; p.lockFreesAfter = Infinity;
-      for (let i = 0; i < 3; i++) next().ex.eval(`runFunctionWithLock(() => { throw new Error('waiting run must not act'); }, 'flagE')`);
-      p.lockHeld = false;
-    };
-    ex.eval(`globalThis.__runs = 0; runFunctionWithLock(() => { __runs++; if (__runs === 1) __others(); }, 'flagE')`);
-    assert.strictEqual(ex.eval(`__runs`), 2, 'three waiting requests are one more pass, not three');
-    // a late run: the flag is "no" (its request was served), it takes the lock and leaves
-    const late = next();
-    late.ex.eval(`globalThis.__n = 0; runFunctionWithLock(() => { __n++; }, 'flagE')`);
-    assert.strictEqual(late.ex.eval(`__n`), 1, 'a new request on a quiet document is served once');
-    p.props.document.flagE = 'no';
-    const q = next();
-    q.p.lockHeld = true; q.p.lockFreesAfter = 1;                   // takes the lock on the second try, but its request was already served by someone else
-    q.ex.eval(`globalThis.__n = 0; runFunctionWithLock(() => { __n++; }, 'flagE')`);
-    assert.strictEqual(q.ex.eval(`__n`), 1);
-  });
-
-  test('state: runFunctionWithLock: a stream of requests is served at most 5 times in one run; the rest stays requested', () => {
+  test('state: runLatestOnly: a run that waits for the lock and finds a newer ticket meanwhile gives up at once ("dropped"), without running', () => {
     const { p, ex } = setup();
-    ex.eval(`globalThis.__n = 0; runFunctionWithLock(() => { __n++; Store.set('document', 'flagF', 'yes'); }, 'flagF')`);
-    assert.strictEqual(ex.eval(`__n`), 5);
-    assert.strictEqual(p.props.document.flagF, 'yes');
+    let attempts = 0;
+    ex.ctx.LockService = { getDocumentLock: () => ({ tryLock: () => { attempts++; if (attempts === 3) p.props.document.flagC = 'newer-ticket'; return false; }, hasLock: () => false, releaseLock() {} }) };
+    const r = ex.eval(`globalThis.__n = 0; runLatestOnly(() => { __n++; }, 'flagC')`);
+    assert.strictEqual(r, 'dropped');
+    assert.strictEqual(ex.eval(`__n`), 0);
+    assert.ok(attempts <= 4, 'it did not go on waiting: ' + attempts);
   });
 
-  test('state: runFunctionWithLock: the lock is released after the action, also when it throws', () => {
+  test('state: runLatestOnly: it waits for the lock (a few tries) and then runs; a lock that never frees gives "timeout" after about 90 s of tries and the action does not run', () => {
     const { p, ex } = setup();
-    assert.throws(() => ex.eval(`runFunctionWithLock(() => { throw new Error('boom'); }, 'flagG')`), /boom/);
+    p.lockHeld = true; p.lockFreesAfter = 4;                      // the 5th try gets it
+    assert.strictEqual(ex.eval(`globalThis.__n = 0; runLatestOnly(() => { __n++; }, 'flagD')`), 'completed');
+    assert.strictEqual(ex.eval(`__n`), 1);
+    const q = setup();
+    q.p.lockHeld = true;                                          // never
+    assert.strictEqual(q.ex.eval(`globalThis.__n = 0; runLatestOnly(() => { __n++; }, 'flagE')`), 'timeout');
+    assert.strictEqual(q.ex.eval(`__n`), 0);
+    assert.ok(q.p.tryLockAttempts >= 40 && q.p.tryLockAttempts <= 50, 'tries: ' + q.p.tryLockAttempts);
+  });
+
+  test('state: runLatestOnly: a run that gets the lock but is no longer the latest does not run the action', () => {
+    const { p, ex } = setup();
+    let has = false;
+    ex.ctx.LockService = { getDocumentLock: () => ({ tryLock: () => { p.props.document.flagF = 'newer-ticket'; has = true; return true; }, hasLock: () => has, releaseLock() { has = false; p.calls.push('lock.released'); } }) };
+    assert.strictEqual(ex.eval(`globalThis.__n = 0; runLatestOnly(() => { __n++; }, 'flagF')`), 'dropped');
+    assert.strictEqual(ex.eval(`__n`), 0);
     assert.ok(p.calls.includes('lock.released'));
+  });
+
+  test('state: runLatestOnly: the lock is released after the action, also when it throws (the error goes on); finishing as the latest is "completed", being overtaken at the very end is "dropped"', () => {
+    const { p, ex } = setup();
+    assert.throws(() => ex.eval(`runLatestOnly(() => { throw new Error('boom'); }, 'flagG')`), /boom/);
+    assert.ok(p.calls.includes('lock.released'));
+    assert.strictEqual(ex.eval(`runLatestOnly(isLatest => { Store.set('document', 'flagH', 'someone-newer'); }, 'flagH')`), 'dropped');
   });
 
   // =====================================================================================================================

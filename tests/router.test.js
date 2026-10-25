@@ -19,7 +19,12 @@ const NEW_FILES = ['Import Query.js', 'BulkSheet.js', 'ResultSheet.js', 'Refresh
 const FAKES = `
   globalThis.SheetCoeditor = class {
     constructor(name, readingActive) { __log.push(['coed.new', name, !!readingActive]); this.name = name; }
-    sheetEdit(e) { __log.push(['coed.sheetEdit', e === undefined ? 'no event' : (e === __event ? 'the event' : 'another event')]); if (__cfg.coeditError) throw new Error(__cfg.coeditError); }
+    sheetEdit(e, isLatest) {
+      __log.push(['coed.sheetEdit', e === undefined ? 'no event' : (e === __event ? 'the event' : 'another event')]);
+      if (__cfg.coeditError) throw new Error(__cfg.coeditError);
+      if (__cfg.newerStartsDuringEdit) Store.set('document', 'Konfiguracja 1_coedit', 'a-newer-run');      // a later edit arrives while this one works
+      if (isLatest && !isLatest()) { __log.push(['coed.droppedAtCheckpoint']); return false; }
+    }
     switchReadingControl(a) { __log.push(['reading', a]); }
   };
   getMainSettings = () => {
@@ -61,7 +66,20 @@ module.exports = function register(t) {
     const sc = scenario();
     sc.edit();
     assert.deepStrictEqual(sc.calls(), [['coed.new', 'Konfiguracja 1', true], ['coed.sheetEdit', 'the event'], ['reading', false]]);
-    assert.strictEqual(sc.p.props.document['Konfiguracja 1_coedit'], 'no', 'runFunctionWithLock leaves its flag');
+    assert.ok(/^[0-9a-z]+-[0-9a-z]+$/.test(sc.p.props.document['Konfiguracja 1_coedit']), 'runLatestOnly leaves its ticket in the flag');
+  });
+
+  test('edit: when a newer co-edit starts while this one works, this one drops out at its checkpoint and leaves the reading cell to the newer one', () => {
+    const sc = scenario({ newerStartsDuringEdit: true });
+    sc.edit();
+    assert.deepStrictEqual(sc.calls(), [['coed.new', 'Konfiguracja 1', true], ['coed.sheetEdit', 'the event'], ['coed.droppedAtCheckpoint']], 'no ["reading", false]');
+  });
+
+  test('edit: a co-edit that never gets the lock (90 s of tries) does not run, and puts the reading cell back to idle itself - nobody else will', () => {
+    const sc = scenario();
+    sc.p.lockHeld = true;
+    sc.edit();
+    assert.deepStrictEqual(sc.calls(), [['coed.new', 'Konfiguracja 1', true], ['reading', false]]);
   });
 
   test('edit: in the settings sheet on the refresh frequency -> the time trigger is set; nothing else happens', () => {
@@ -242,7 +260,7 @@ module.exports = function register(t) {
   });
 
   test('rule: only AnalyseConfig builds the co-editor for an edit (the coedit flag "<sheet>_coedit" lives there), Router has no sheet access', () => {
-    assert.ok(/runFunctionWithLock\(\(\) => shCoed\.sheetEdit\(editEvent\),sheetName\+"_coedit"\)/.test(code('AnalyseConfig.js')));
+    assert.ok(/runLatestOnly\(isLatest => shCoed\.sheetEdit\(editEvent,isLatest\),sheetName\+"_coedit"\)/.test(code('AnalyseConfig.js')));
     assert.ok(!/_coedit/.test(code('Quick Start.js')));
     assert.ok(!/SpreadsheetApp|getRange|SheetCoeditor/.test(code('Router.js')));
     assert.ok(!/SpreadsheetApp|getRange/.test(code('AnalyseConfig.js')));

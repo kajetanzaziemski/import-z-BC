@@ -64,28 +64,34 @@ function md5Hash(string){
 }
 
 /**
- * Runs `action` under the script lock, so that two executions never work on the same thing at once - and so that a request made while the action
- * runs is not lost. `flag` (a document property) says "a run is requested":
- *  - every caller first sets it to "yes" (its request) and then tries the lock, 1 s and then up to 10 s more;
- *  - the caller that gets the lock sets the flag to "no" BEFORE each pass and then runs the action (which reads whatever it works on at its start),
- *    so a request made during the pass leaves the flag "yes" and the holder does another pass; at most LOCK_MAX_PASSES in one run (the rest stays "yes");
- *  - a caller that finds the flag "no" once it has the lock has been served by a pass that started after its request: it does nothing;
- *  - a caller that never gets the lock leaves its request "yes": the holder serves it.
- * (Before, the holder set "no" AFTER its pass, which erased the requests made during it: a paste while an analyse was running was never analysed.)
+ * Runs `action` so that only the LAST run to start completes: runs started meanwhile are not queued up one after the other, the older ones drop out,
+ * even in the middle of their work.
+ *  - Every run first writes its own ticket to the document property `flag` ("I am the newest"). The ticket in the property is the newest run's.
+ *  - Then it takes the DOCUMENT lock (not the script lock, which would make all documents wait for each other), trying for about LATEST_WAIT_MS. While it waits
+ *    it gives up as soon as it is not the newest any more ("dropped"); if the lock does not come in time: "timeout".
+ *  - With the lock it checks once more, then runs `action(isLatest)`. The action calls isLatest() at its checkpoints (before it changes anything, and before
+ *    every write that cannot be taken back or is slow to prepare) and drops out by returning false when a newer run has started; the lock is then freed for it.
+ * Returns "completed" (the action finished and no newer run came), "dropped" (a newer run exists: leave what the newer one needs - the reading indicator -
+ * to it) or "timeout" (never got the lock; the caller was the newest and nobody will do its work). An error from the action goes on to the caller.
  */
-const LOCK_MAX_PASSES = 5;
+const LATEST_WAIT_MS = 90000;
+const LATEST_POLL_MS = 2000;
 
-function runFunctionWithLock(action,flag="scriptLocked__"){
-  Store.set("document",flag,"yes");
-  const lock = LockService.getScriptLock();
-  lock.tryLock(1000);
-  if (!lock.hasLock()) lock.tryLock(10000);
-  if (!lock.hasLock()) return;
+function runLatestOnly(action,flag="scriptLocked__"){
+  const ticket = Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,8);
+  Store.set("document",flag,ticket);
+  const isLatest = () => Store.get("document",flag) === ticket;
+
+  const lock = LockService.getDocumentLock();
+  for(let tries = 0; !lock.hasLock(); tries++){
+    if(!isLatest()) return "dropped";
+    if(tries * LATEST_POLL_MS >= LATEST_WAIT_MS) return "timeout";
+    lock.tryLock(LATEST_POLL_MS);
+  }
   try {
-    for (let pass = 0; pass < LOCK_MAX_PASSES && Store.get("document",flag)=="yes"; pass++) {
-      Store.set("document",flag,"no");
-      action();
-    }
+    if(!isLatest()) return "dropped";
+    const result = action(isLatest);
+    return result !== false && isLatest() ? "completed" : "dropped";
   } finally {
     lock.releaseLock();
   }
