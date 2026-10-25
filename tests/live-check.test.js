@@ -17,7 +17,7 @@ const sha = f => crypto.createHash('sha256').update(fs.readFileSync(path.join(RO
 module.exports = function register(t) {
   const { test, both } = t;
   const FILES = ['Custom errors.js', 'Helper Data Store.js', 'Store.js', 'Settings.js', 'Main Settings.js', 'Controller.js', 'Trigger Manager.js',
-    'Global Add-on Settings.js', 'Quick Start.js', 'functions.js', 'Track onEdit Triggers.js', 'Status Manager.js',
+    'Global Add-on Settings.js', 'Quick Start.js', 'functions.js', 'Track onEdit Triggers.js', 'Status Manager.js', 'Agent Reconciler.js', 'Agents.js', 'Verify Agent.js',
     'Live Check.js', 'Live Check Verifiers.js', 'Live Check Sidebar Server.js'];
 
   test('live check: the helper files are exactly the ones merged from live-test-helpers (pinned; they define what must not change)', () => {
@@ -264,7 +264,7 @@ module.exports = function register(t) {
       getActive: () => ({ getActiveSheet: () => ({ getName: () => 'Konfiguracja 1' }) }), getUi: () => ({ alert() {} }) };
     const files = [...FILES, 'Data Type.js', 'Menu.js', 'Import Query.js', 'BulkSheet.js', 'ResultSheet.js', 'RefreshSheet.js', 'EstimateSheet.js', 'Sheet Coeditor.js', 'Grid.js', 'Grid Util.js', 'Config Grid.js'];
     const ex = p.execution(files, { SpreadsheetApp: app, Utilities: book.Utilities, Session: { getActiveUser: () => ({ getEmail: () => 'u' }) } });
-    ex.eval(`StatusManager.fullStatusCheck = () => {};
+    ex.eval(`Agents.ensureActive = () => {};
       globalThis.CCTImportConfig = class { constructor(v) { this.v = v; } };
       SheetCoeditor.prototype.getTable = () => 'Customers'; SheetCoeditor.prototype.getTableQueryArray = () => []; SheetCoeditor.prototype.getExtendTable = () => null;
       SheetCoeditor.prototype.getExtendQueryArray = () => []; SheetCoeditor.prototype.getDataTypes = () => ({});
@@ -391,7 +391,7 @@ module.exports = function register(t) {
       DataValidationCriteria: book.SpreadsheetApp.DataValidationCriteria, getUi: () => ({ alert() {} }) };
     const files = [...FILES, 'Settings Sheet.js', ...JOB_FILES];
     const ex = p.execution(files, { SpreadsheetApp: app, Utilities: book.Utilities, Session: { getActiveUser: () => ({ getEmail: () => 'u' }) } });
-    ex.eval(`StatusManager.fullStatusCheck = () => {};
+    ex.eval(`Agents.ensureActive = () => {};
       globalThis.CCTImportConfig = class { constructor(v) { this.v = v; } };
       SheetCoeditor.prototype.sheetEdit = function () {};
       getMainSettings = () => ({ isConfigSheet: n => n === 'Konfiguracja 1', isRefreshFrequencyCell: r => isInRange(4, 4, r) || isInRange(4, 5, r),

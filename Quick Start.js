@@ -32,11 +32,11 @@ function setGlobalSettings(form){
 
 function sheetEdit(e){
   agentLog("INSTALLABLE",null,`sheetEdit entry point called by trigger ${e.triggerUid} (add-on status: ${MainSettings.getAddonStatus() ? "ON" : "OFF - nothing is recorded"}).`);
-  Controller.registerInit(() => TriggerWrapper.logTriggerUsed(e.triggerUid));
+  Controller.registerInit(() => Agents.markUsed(e.triggerUid));
   Controller.checkInput("sheetEditAction",{e});
   Controller.run("sheetEditAction",() => {
-    recordInstallableSeen(e);   // before the power check: a powered-off agent that is still alive must be seen
-    const powerOn = StatusManager.checkTriggerPower(e.triggerUid);
+    Agents.recordEdit(e);   // before the power check: a powered-off agent that is still alive must be seen
+    const powerOn = Agents.isPowered(e.triggerUid);
     agentLog("INSTALLABLE",fingerprint(e),`Power check of trigger ${e.triggerUid}: ${powerOn ? "ON - running the edit action" : "OFF or not logged - edit action SKIPPED (the edit was still reported to the simple trigger)"}.`);
     if(!powerOn){ Controller.intent("agent.skipped",{sheet: null, changeType: null}); return; }
     sheetEditAction(e);
@@ -53,11 +53,11 @@ function sheetEditAction(e){
 }
 
 function sheetChange(e){
-  Controller.registerInit(() => TriggerWrapper.logTriggerUsed(e.triggerUid));
+  Controller.registerInit(() => Agents.markUsed(e.triggerUid));
   Controller.checkInput("sheetChangeAction",{e});
   Controller.run("sheetChangeAction",() => {
     sheetChangeAction(e);
-    if(!StatusManager.checkTriggerPower(e.triggerUid)) return;
+    if(!Agents.isPowered(e.triggerUid)) return;
   });
 }
 

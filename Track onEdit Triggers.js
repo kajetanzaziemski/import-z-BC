@@ -89,17 +89,9 @@ function recordInstallableSeen(e){
 
 // - - - - - - - - simple trigger side - - - - - - - -
 
-/** Called by the simple onEdit trigger. */
+/** Called by the simple onEdit trigger. The waiting and the judging are Agents.verifyEdit(), what follows from the verdict is Verify Agent.js. */
 function checkInstallableAgentRan(e){
-  const fp = fingerprint(e);
-  agentLog("SIMPLE",fp,`Simple onEdit fired. Waiting up to ${INSTAL_WAIT_MS} ms (polling every ${INSTAL_POLL_MS} ms) for the installable trigger to report the same edit.`);
-  const start = Date.now();
-  if(waitForInstallable(fp,INSTAL_WAIT_MS)) {
-    agentLog("SIMPLE",fp,`OK: installable trigger reported this edit (found after ${Date.now()-start} ms). Agent is alive, nothing to do.`);
-    return;
-  }
-  agentLog("SIMPLE",fp,`NO REPORT from the installable trigger within ${Date.now()-start} ms. Raising the alarm.`);
-  raiseAgentAlarm(fp);
+  VerifyAgent.run(e);
 }
 
 function waitForInstallable(fp,maxMs){
@@ -138,7 +130,12 @@ function consumeInstallableTrace(key,fp){
 
 // - - - - - - - - alarm - - - - - - - -
 
-function raiseAgentAlarm(fp){
+/**
+ * The record did not come: judge, and say what was decided (nothing is done here - the caller acts on the verdict, see Verify Agent.js).
+ * First miss: set the suspect flag -> 'suspect'. A miss while the flag is set (no installable run cleared it): the agent is dead ->
+ * 'dead' while the agents are still powered on, 'dead-known' when they are already off.
+ */
+function judgeMissingRecord(fp){
   const previous = withDocumentLock(() => {
     const suspect = getAgentSuspect();
     if(!suspect) setAgentSuspect(fp);
@@ -148,17 +145,10 @@ function raiseAgentAlarm(fp){
   if(previous) {
     const ageS = Math.round((Date.now() - new Date(previous.time).getTime())/1000);
     agentLog("SIMPLE",fp,`ALARM level 2: agent was already marked suspect ${ageS} s ago (edit ${previous.fp}) and no installable run has been seen since. Agent considered DEAD.`);
-    if(!StatusManager.basicStatusCheck()) {
-      agentLog("SIMPLE",fp,"Agents are already powered off (user has been warned before). Not powering off again, not showing the alert again.");
-      return;
-    }
-    agentLog("SIMPLE",fp,"Powering OFF all agents in this file.");
-    StatusManager.powerOffAllAgentsInFile();
-  } else {
-    agentLog("SIMPLE",fp,"ALARM level 1: agent marked SUSPECT (flag set). Not powering off yet: the installable trigger may only be late. A later installable run clears the flag, a second miss without one powers the agents off.");
+    return { verdict: Agents.isActive() ? 'dead' : 'dead-known' };
   }
-  agentLog("SIMPLE",fp,"Showing the 'agent not configured' alert to the user (shown when this execution closes).");
-  StatusManager.lightFailInfo();
+  agentLog("SIMPLE",fp,"ALARM level 1: agent marked SUSPECT (flag set). Not powering off yet: the installable trigger may only be late. A later installable run clears the flag, a second miss without one powers the agents off.");
+  return { verdict: 'suspect' };
 }
 
 function getAgentSuspect(){

@@ -12,7 +12,7 @@ const { FakePlatform } = require('./platform-fakes');
 
 const ROOT = path.join(__dirname, '..');
 const BASE = ['Custom errors.js', 'Helper Data Store.js', 'Store.js', 'Settings.js', 'Main Settings.js', 'Controller.js', 'Trigger Manager.js',
-  'Global Add-on Settings.js', 'Quick Start.js', 'functions.js', 'Track onEdit Triggers.js', 'Status Manager.js', 'Data Type.js', 'Menu.js', 'Settings Sheet.js'];
+  'Global Add-on Settings.js', 'Quick Start.js', 'functions.js', 'Track onEdit Triggers.js', 'Status Manager.js', 'Agent Reconciler.js', 'Agents.js', 'Verify Agent.js', 'Data Type.js', 'Menu.js', 'Settings Sheet.js'];
 const NEW_FILES = ['Import Query.js', 'BulkSheet.js', 'ResultSheet.js', 'RefreshSheet.js', 'EstimateSheet.js', 'RefreshAll.js', 'ScheduleRefresh.js', 'AnalyseConfig.js', 'Router.js']
   .filter(f => fs.existsSync(path.join(ROOT, f)));
 
@@ -48,7 +48,7 @@ module.exports = function register(t) {
     const event = { triggerUid: 't1', changeType: cfg.changeType, range: { getSheet: () => ({ getName: () => cfg.rangeSheet || cfg.active }), getA1Notation: () => 'B2', getRow: () => 2, getColumn: () => 2 },
       source: { getActiveSheet: () => ({ getName: () => cfg.active }) } };
     const ex = p.execution(FILES, { __cfg: cfg, __log: log, __event: event, __settingsCalls: settingsCalls });
-    ex.eval(`StatusManager.fullStatusCheck = () => {}`);
+    ex.eval(`Agents.ensureActive = () => {}`);
     ex.eval(FAKES);
     return { p, ex, log, cfg, event, settingsCalls, calls: () => plain(log),
       edit: () => { ex.ctx.e = event; return ex.eval(`sheetEdit(e)`); },

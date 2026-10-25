@@ -82,5 +82,5 @@ become typed accessors on top of it (`Settings.addonStatus()`, `Settings.refresh
 3. Extract `RefreshSheet` / `EstimateSheet` from `Menu.js` (pure move) → add `ResultSheet`/BulkSheet.
 4. `SettingsGrid` + `RefreshAll`/`ScheduleRefresh`. (Both done: `Settings Grid.js` holds the layout and all cell access of the settings sheet, `SettingsSheet` keeps the meaning of the lines.)
 5. Split `SheetCoeditor` into `ConfigGrid` + `QueryModel` + `AnalyseConfig`. Done for the sheet access: `ConfigGrid.lines()` reads/inserts/writes the query lines, `SheetCoeditor` has no `SpreadsheetApp` call left, `AnalyseConfig` is the use case. The query model (`Content Tracker.js`, `Data Validations.js`, `Fix Register.js`) never touched a range, so it was not moved or renamed (a rename to `QueryModel` / `ValidationCatalog` would be churn without a behaviour gain); a rule test keeps it free of sheet calls.
-6. `AgentService` regroup (largest, riskiest; touches triggers/permits – last, with the live-add-on caveats of CLAUDE.md).
+6. (Done, see `docs/agent-service.md`; behaviour fixes still open) `AgentService` regroup (largest, riskiest; touches triggers/permits – last, with the live-add-on caveats of CLAUDE.md).
 7. Enforce the rules above as tests.

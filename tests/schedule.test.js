@@ -13,7 +13,7 @@ const { FakePlatform } = require('./platform-fakes');
 
 const ROOT = path.join(__dirname, '..');
 const BASE = ['Custom errors.js', 'Helper Data Store.js', 'Store.js', 'Settings.js', 'Main Settings.js', 'Controller.js', 'Trigger Manager.js',
-  'Global Add-on Settings.js', 'Quick Start.js', 'functions.js', 'Track onEdit Triggers.js', 'Status Manager.js', 'Data Type.js', 'Menu.js', 'Settings Sheet.js'];
+  'Global Add-on Settings.js', 'Quick Start.js', 'functions.js', 'Track onEdit Triggers.js', 'Status Manager.js', 'Agent Reconciler.js', 'Agents.js', 'Verify Agent.js', 'Data Type.js', 'Menu.js', 'Settings Sheet.js'];
 const USE_CASE_FILES = ['Import Query.js', 'BulkSheet.js', 'ResultSheet.js', 'RefreshSheet.js', 'EstimateSheet.js', 'RefreshAll.js', 'ScheduleRefresh.js'].filter(f => fs.existsSync(path.join(ROOT, f)));
 
 const FAKES = `
@@ -44,7 +44,7 @@ module.exports = function register(t) {
     p.props.document.importSettingsArray = JSON.stringify(Object.assign({ addonStatus: true, importSheetName: 'Ustawienia' }, cfg.settings || {}));
     const log = [];
     const ex = p.execution(FILES, { __cfg: cfg, __log: log });
-    ex.eval(`StatusManager.fullStatusCheck = () => {}`);
+    ex.eval(`Agents.ensureActive = () => {}`);
     ex.eval(FAKES);
     const stored = () => JSON.parse(p.props.document.importSettingsArray);
     return { p, ex, log, cfg, calls: () => plain(log), stored,

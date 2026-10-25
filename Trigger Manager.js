@@ -52,9 +52,9 @@ class AgentManager{
 	}
 
 	installNew(){
-		TriggerWrapper.deleteAllUserEditTriggersInDocument().deleteAllUserChangeTriggersInDocument();
-		let editId = TriggerWrapper.createOnEditTrigger("sheetEdit");
-		let changeId = TriggerWrapper.createOnChangeTrigger("sheetChange");
+		TriggerGateway.deleteAllUserEditTriggersInDocument().deleteAllUserChangeTriggersInDocument();
+		let editId = TriggerGateway.createOnEditTrigger("sheetEdit");
+		let changeId = TriggerGateway.createOnChangeTrigger("sheetChange");
 		this.saveToStorageArray(editId,changeId);
 		return editId;
 	}
@@ -73,7 +73,7 @@ class AgentManager{
 		}
 		let changeId = agentIdPair.filter(elem => elem != editId)[0];
 		dbgLog("ChangeId indentified as "+changeId);
-		TriggerWrapper.deleteTrigger(editId).deleteTrigger(changeId);
+		TriggerGateway.deleteTrigger(editId).deleteTrigger(changeId);
 		let agentIdPairIndex = this.agentStorage.storageArray.findIndex(elem => elem.includes(editId));
 		this.agentStorage.storageArray.splice(agentIdPairIndex,1);
 		return this;
@@ -94,7 +94,7 @@ class TriggerManager{
 
 }
 
-class TriggerWrapper{
+class TriggerGateway{
 	/** 
 	 * This function is intended as PRIVATE. Do not call this from outside the class.
 	 * 
@@ -291,11 +291,11 @@ class TriggerLog{
 	powerOffAll(){
 		let editTriggers = this.getAllOfFunction("sheetEdit",true);
 		editTriggers.forEach(triggerEntry => {
-			TriggerWrapper.triggerPowerOff(triggerEntry.triggerId);
+			TriggerGateway.triggerPowerOff(triggerEntry.triggerId);
 		});
 		let changeTriggers = this.getAllOfFunction("sheetChange",true);
 		changeTriggers.forEach(triggerEntry => {
-			TriggerWrapper.triggerPowerOff(triggerEntry.triggerId);
+			TriggerGateway.triggerPowerOff(triggerEntry.triggerId);
 		});
 	}
 }
@@ -349,3 +349,6 @@ class TriggerInfoEntry{
 		this.powerOn = trigger==null ? null : true;
 	}
 }
+
+/** The old name (Test Functions.js and anything else that still says it). */
+const TriggerWrapper = TriggerGateway;

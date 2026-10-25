@@ -9,7 +9,7 @@ const assert = require('assert');
 const { FakePlatform } = require('./platform-fakes');
 
 const FILES = ['Custom errors.js', 'Helper Data Store.js', 'Store.js', 'Settings.js', 'Main Settings.js', 'Controller.js', 'Trigger Manager.js',
-  'Global Add-on Settings.js', 'Quick Start.js', 'functions.js', 'Track onEdit Triggers.js', 'Status Manager.js', 'Settings Sheet.js'];
+  'Global Add-on Settings.js', 'Quick Start.js', 'functions.js', 'Track onEdit Triggers.js', 'Status Manager.js', 'Agent Reconciler.js', 'Agents.js', 'Verify Agent.js', 'Settings Sheet.js'];
 
 // Captured from the code before the regroup (PRINT_AGENT_GOLDEN=1 node tests/run.js prints them again).
 const STORY = {
@@ -311,5 +311,48 @@ module.exports = function register(t) {
     const norm = JSON.parse(JSON.stringify(rows)).map(r => r.map(x => (typeof x === 'string' && /^20\d\d-/.test(x) ? 'DATE' : x)));
     if (process.env.PRINT_AGENT_GOLDEN) console.log('TABLE=' + JSON.stringify(norm));
     assert.deepStrictEqual(norm, TABLE);
+  });
+
+  // ---- the regroup: pure plan, one door, no UI / sheet in the service -------------------------------------------------------------------------
+  const fs = require('fs'), path = require('path'), vm = require('vm');
+  const ROOT = path.join(__dirname, '..');
+  const code = f => fs.readFileSync(path.join(ROOT, f), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
+
+  test('AgentReconciler.plan: pure (loads alone, no platform), one entry per id in the order user log, document log, project; no row -> actions undefined', () => {
+    const ctx = vm.createContext({});
+    vm.runInContext(fs.readFileSync(path.join(ROOT, 'Agent Reconciler.js'), 'utf8') + ';globalThis.__R = AgentReconciler;', ctx);
+    const plan = ctx.__R.plan(new Map([['u1', 'ON'], ['both', 'OFF']]), new Map([['d1', 'ON'], ['both', 'OFF']]), new Map([['s1', true], ['both', true], ['gap', true]]));
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(plan.map(x => [x.itemId, x.key]))), [['u1', 'ON|X|X'], ['both', 'OFF|OFF|V'], ['d1', 'X|ON|X'], ['s1', 'X|X|V'], ['gap', 'X|X|V']]);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(plan[1].actions)), { user: 'Remove', doc: 'Remove', script: 'Uninstall' });
+    const gap = ctx.__R.plan(new Map([['g', 'ON']]), new Map([['g', 'OFF']]), new Map([['g', true]]));
+    assert.strictEqual(gap[0].actions, undefined);
+  });
+
+  test('rule: the agent service files touch neither the spreadsheet nor the UI (the alert and the sidebars are StatusManager\'s, the edit event is only read)', () => {
+    ['Agents.js', 'Agent Reconciler.js', 'Verify Agent.js', 'Trigger Manager.js', 'Track onEdit Triggers.js'].forEach(f => {
+      const c = code(f);
+      assert.ok(!/getUi\(|\.alert\(|showSidebar|showModal|HtmlService|openById|getSheetByName|getRange\(|setValue/.test(c), f);
+    });
+  });
+
+  test('rule: only Trigger Manager.js (TriggerGateway) creates, deletes and lists triggers for the agents; the other ScriptApp callers are the time trigger and the settings sheet\'s raw triggers', () => {
+    const users = fs.readdirSync(ROOT).filter(f => /\.js$/.test(f) && !/^(Live Check|Test Functions)/.test(f))
+      .filter(f => /ScriptApp\.(newTrigger|deleteTrigger|getProjectTriggers|getUserTriggers)/.test(code(f))).sort();
+    assert.deepStrictEqual(users, ['ScheduleRefresh.js', 'Settings Sheet.js', 'Trigger Manager.js']);
+  });
+
+  test('rule: outside the agent files nobody reaches into the registers or the pool - they ask Agents (Quick Start.js keeps the old global getters for the service itself)', () => {
+    const inside = new Set(['Trigger Manager.js', 'Status Manager.js', 'Agents.js', 'Track onEdit Triggers.js', 'Verify Agent.js', 'Quick Start.js']);
+    const offenders = fs.readdirSync(ROOT).filter(f => /\.js$/.test(f) && !inside.has(f) && !/^(Live Check|Test Functions)/.test(f))
+      .filter(f => /getAgentManager|getDocumentTriggerLog|getUserTriggerLog|TriggerWrapper|TriggerGateway|StatusManager\.(basicStatusCheck|fullStatusCheck|forceRefresh|repairStatus|checkTriggerPower|powerOffAllAgentsInFile|logCleanUp|getAgentInfo)/.test(code(f)));
+    assert.deepStrictEqual(offenders, []);
+    ['Quick Start.js', 'Main Settings.js'].forEach(f => assert.ok(!/TriggerWrapper|TriggerGateway|StatusManager\.(basic|full|check|force|repair)/.test(code(f).replace(/function (getDocumentTriggerLog|getUserTriggerLog|getAgentManager)[\s\S]*?\n\}/g, '')), f));
+  });
+
+  test('rule: the old names still answer (forwarders): StatusManager.* and TriggerWrapper, and the old edit-check names', () => {
+    const w = world(), a = w.doc('A');
+    click(a);
+    assert.strictEqual(a.run(`StatusManager.basicStatusCheck() && StatusManager.checkTriggerPower('trig-1') && typeof TriggerWrapper.createOnEditTrigger === 'function' && TriggerWrapper === TriggerGateway`), true);
+    assert.strictEqual(a.run(`typeof checkInstallableAgentRan + typeof recordInstallableSeen`), 'functionfunction');
   });
 };

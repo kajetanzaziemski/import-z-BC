@@ -39,7 +39,7 @@ class MainSettings{
     if(statusOn == "on" || statusOn == "ON") statusOn = true;
     if(statusOn == "off" || statusOn == "OFF") statusOn = false;
     if(statusOn && !this.getSettingsSheetName()) this.setSettingsSheetName();
-    if(statusOn) Controller.registerClosingOnce(() => StatusManager.fullStatusCheck(),"status check")
+    if(statusOn) Controller.registerClosingOnce(() => Agents.ensureActive(),"status check")
     Settings.setAddonStatus(statusOn);
     return this;
   }

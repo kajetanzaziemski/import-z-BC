@@ -12,7 +12,7 @@ const { FakePlatform } = require('./platform-fakes');
 
 // Order does not matter (Apps Script gives no promise either); nothing may be used at load time.
 const BASE_FILES = ['Custom errors.js', 'Helper Data Store.js', 'Store.js', 'Settings.js', 'Main Settings.js', 'Controller.js', 'Trigger Manager.js',
-  'Global Add-on Settings.js', 'Quick Start.js', 'functions.js', 'Track onEdit Triggers.js', 'Status Manager.js'];
+  'Global Add-on Settings.js', 'Quick Start.js', 'functions.js', 'Track onEdit Triggers.js', 'Status Manager.js', 'Agent Reconciler.js', 'Agents.js', 'Verify Agent.js'];
 
 const LIVE_CHECK_FILES = ['Live Check.js', 'Live Check Verifiers.js', 'Live Check Sidebar Server.js'];
 
@@ -30,7 +30,7 @@ module.exports = function register(t) {
   function setup(platform) {
     const p = platform || new FakePlatform();
     const ex = p.execution(FILES);
-    ex.eval('StatusManager.fullStatusCheck = () => { globalThis.__statusChecks = (globalThis.__statusChecks || 0) + 1; }');   // not under test
+    ex.eval('Agents.ensureActive = () => { globalThis.__statusChecks = (globalThis.__statusChecks || 0) + 1; }');   // not under test
     ex.eval('var __statusChecks = 0');
     return { p, ex, next: () => setup(p) };
   }

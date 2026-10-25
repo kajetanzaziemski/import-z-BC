@@ -1,5 +1,12 @@
 # AgentService: what it is, what is in it, how to get there
 
+> **Status (regroup done, behaviour unchanged):** the facade `Agents` (`Agents.js`), the pure `AgentReconciler` (`Agent Reconciler.js`, with `ACTION_TABLE`), the use case `VerifyAgent` (`Verify Agent.js`: acts on the
+> detector's verdict) and `TriggerGateway` (`Trigger Manager.js`, the old name `TriggerWrapper` is an alias) exist; `Quick Start.js` and `Main Settings.js` call only `Agents`; `StatusManager` keeps the UI (alert, sidebars,
+> the HTML of the trigger table) and forwarders under the old names; the trigger table's facts come from `Agents.snapshot()` (plain objects). `docs/agent-lifecycle.md` describes when agents are created, replaced
+> and destroyed; `tests/agents.test.js` pins it (written *before* the regroup, passing unchanged after it, including the detector's log lines word for word).
+> **Not done (each is a behaviour change, needs its own decision):** the smells 1-4 below and the todo list in `trigger-management-todo.md` (whole-array saves, eviction leaves ghosts, the 6-document eviction
+> cycle, raw triggers of `SettingsSheet`, the missing `ON|OFF|V` row) - all pinned as "quirk" in the tests.
+
 "Agent" = the pair of installable triggers (`sheetEdit` + `sheetChange`) that the add-on installs for a user and a document, because a simple `onEdit`
 cannot call BC or write much. About 900 lines in 3 files: `Trigger Manager.js` (430), `Status Manager.js` (296), `Track onEdit Triggers.js` (178).
 Read from the code on branch `refactor-and-grid`; nothing here is changed yet.

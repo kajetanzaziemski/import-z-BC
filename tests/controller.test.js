@@ -103,7 +103,7 @@ module.exports = function register(t) {
 
   // ---- no nested runs, nothing is lost in the closing phase (bugs-todo #2) ---------------------------------------------------------------
   const AGENT_FILES = ['Custom errors.js', 'Helper Data Store.js', 'Store.js', 'Settings.js', 'Main Settings.js', 'Controller.js', 'Trigger Manager.js',
-    'Global Add-on Settings.js', 'Quick Start.js', 'functions.js', 'Track onEdit Triggers.js', 'Status Manager.js'];
+    'Global Add-on Settings.js', 'Quick Start.js', 'functions.js', 'Track onEdit Triggers.js', 'Status Manager.js', 'Agent Reconciler.js', 'Agents.js', 'Verify Agent.js'];
 
   test('controller: turning the add-on ON repairs the agents (edit + change trigger) and the logs and the agent pair are SAVED (bugs-todo #2: they were lost)', () => {
     const p = new FakePlatform();

@@ -26,6 +26,6 @@ Still to do
 - (done after the tag: `SheetCoeditor` split, see `docs/testing.md` section 2b)
 - (done after the tag: `SettingsGrid`, see `docs/testing.md` section 2c)
 - (done after the tag: `BulkSheet` behind `ResultSheet`, see `docs/testing.md` section 2d)
-- `AgentService` regroup (`Trigger Manager.js`, `Status Manager.js`, `Track onEdit Triggers.js`)
+- (done after the tag: `AgentService` regroup, facade `Agents`, `docs/agent-lifecycle.md`)
 - Remaining use cases still inside `Menu.js` / `Status Manager.js` (wizard, auth flow, logout, status check); BC layer reorganisation
 - The time trigger as two live-check jobs (`refresh.scheduled`, `refresh.retired`)
