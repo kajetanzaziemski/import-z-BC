@@ -149,12 +149,12 @@ function insertImportWizard(){
 }
 
 function refreshAll(){
-  Controller.run("menuRefreshAll",() => getMainSettings().getSheetList().forEach(cfg => RefreshSheet.run(cfg.configSheet,cfg.resultSheet)));
+  Controller.run("menuRefreshAll",() => RefreshAll.all());
 }
 
+/** Kept under its old name; the work is in RefreshAll.js. */
 function refreshAllTrue(){
-  let sList = getMainSettings().getSheetListWithRefreshTrue();
-  if(sList.length) sList.forEach(cfg => RefreshSheet.run(cfg.configSheet,cfg.resultSheet));
+  RefreshAll.ticked();
 }
 
 /** Kept under its old name (Test Functions.js, anything that still calls it); the work is in RefreshSheet.js. */

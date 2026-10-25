@@ -221,4 +221,30 @@ module.exports = function register(t) {
     assert.throws(() => sc.ex.eval(`refreshAllTrue()`), /boom/);
     assert.deepStrictEqual(sc.calls(), [['refresh', 'K1']]);
   });
+
+  // ---- rules -----------------------------------------------------------------------------------------------------------------------------------
+  const code = f => fs.readFileSync(path.join(ROOT, f), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
+
+  test('rule: RefreshAll and ScheduleRefresh never touch a spreadsheet; only ScheduleRefresh creates time-based triggers and removes the refresh triggers (the agent triggers belong to Trigger Manager)', () => {
+    ['RefreshAll.js', 'ScheduleRefresh.js'].forEach(f => assert.ok(!/SpreadsheetApp|getRange|getSheetByName/.test(code(f)), f));
+    const offenders = fs.readdirSync(ROOT).filter(f => /\.js$/.test(f) && f !== 'ScheduleRefresh.js' && !/^(Test Functions|Live Check)/.test(f))
+      .filter(f => /\.timeBased\(\)|\["autoRefresh","autoRefreshHandler"\]/.test(code(f)));
+    assert.deepStrictEqual(offenders, []);
+  });
+
+  test('rule: the old names are one-line forwarders (Settings Sheet.js, Menu.js); the settings sheet no longer decides how a trigger is made', () => {
+    const ss = code('Settings Sheet.js'), menu = code('Menu.js');
+    assert.ok(/setRefreshTrigger\(\)\{\s*ScheduleRefresh\.setUp\(this\.getRefreshFrequency\(\)\);\s*\}/.test(ss));
+    assert.ok(/function autoRefreshFunction\(e\)\{\s*RefreshAll\.scheduled\(\);\s*\}/.test(ss));
+    assert.ok(/function autoRefreshContent\(e\) \{\s*ScheduleRefresh\.run\(e\);\s*\}/.test(ss));
+    assert.ok(/function autoRefreshContentOld\(e\) \{\s*ScheduleRefresh\.runLegacy\(e\);\s*\}/.test(ss));
+    assert.ok(/function refreshAllTrue\(\)\{\s*RefreshAll\.ticked\(\);\s*\}/.test(menu));
+    assert.ok(/Controller\.run\("menuRefreshAll",\(\) => RefreshAll\.all\(\)\)/.test(menu));
+    assert.ok(!/ScriptApp\.newTrigger\('autoRefreshHandler'\)/.test(ss));
+  });
+
+  test('rule: the new files load alone, in any order (nothing is used at load time)', () => {
+    const vm = require('vm');
+    ['RefreshAll.js', 'ScheduleRefresh.js'].forEach(f => vm.runInNewContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), {}));
+  });
 };

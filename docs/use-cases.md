@@ -1,4 +1,4 @@
-# Use cases extracted from Menu.js (step 3 of the plan)
+# Use cases extracted from Menu.js and Settings Sheet.js (step 3 of the plan)
 
 Pure move: same calls in the same order, same error handling, same status-cell switching. One intended difference (below).
 
@@ -32,3 +32,33 @@ Rules: the use cases and `ImportQuery` contain no `SpreadsheetApp`/range access;
 ## Next
 - `RefreshAll` / `ScheduleRefresh` (the loops in `Menu.js` and `Settings Sheet.js`, `autoRefreshFunction`) can now call `RefreshSheet.run` directly.
 - `ResultSheet.write` is the seam for the BulkSheet writer: tall data should not go through Grid's 3000-row window; the contract (table, per-column types) is already the one a bulk writer needs.
+
+
+---
+
+# RefreshAll and ScheduleRefresh
+
+| New | Was | Role |
+|---|---|---|
+| `RefreshAll.all()` (`RefreshAll.js`) | body of `refreshAll` in `Menu.js` | every config/result pair of the settings sheet, in order (menu "refresh all") |
+| `RefreshAll.ticked()` | `refreshAllTrue` | only the pairs ticked for automatic refresh |
+| `RefreshAll.scheduled()` | `autoRefreshFunction` in `Settings Sheet.js` | what a time trigger does: `ticked()`, then note the time on the settings sheet |
+| `ScheduleRefresh.setUp(frequency)` (`ScheduleRefresh.js`) | `SettingsSheet.setRefreshTrigger` | remove the refresh triggers, create THE time trigger (`everyHours(n)` / `everyDays(n)`), issue the refresh permit for it (interval in hours) |
+| `ScheduleRefresh.run(e)` | `autoRefreshContent` | a time trigger fired: only if the permit was issued for this trigger refresh (`RefreshAll.scheduled()`) and touch the permit, else delete itself |
+| `ScheduleRefresh.runLegacy(e)` | `autoRefreshContentOld` | the same for old triggers that run `autoRefresh()`; issues its own permit when there is none |
+
+Entry points stay where they are and keep their names, action names and live-check hooks: `autoRefreshHandler(e)` / `autoRefresh(e)` (`Controller.checkInput` + `Controller.run("requestAutoRefesh", ...)`),
+`refreshAll()` (`menuRefreshAll`). The old function names (`autoRefreshFunction`, `autoRefreshContent`, `autoRefreshContentOld`, `refreshAllTrue`, `SettingsSheet.setRefreshTrigger`) are one-line forwarders.
+
+## Behaviour kept on purpose (pinned by `tests/schedule.test.js`, written first against the old code)
+- The permit rules of CLAUDE.md: a trigger refreshes only if `permit.issuedFor === e.triggerUid`, otherwise it deletes itself (only itself); `touchRefreshPermit` re-reads the store, so a permit reissued by another run meanwhile is not overwritten.
+- Quirks, pinned so that fixing them is a conscious change: `setUp` removes the refresh triggers of **all** documents of the user (bugs-todo #5); without a refresh-frequency row (`null`) it removes them and then fails with a `TypeError`;
+  the time is noted also when nothing was ticked and not when a refresh fails; the first legacy run records no `lastRun` (the permit it issued is not stored yet when it is touched); the first failing sheet stops the loop.
+
+## The one difference
+`SettingsSheet.setRefreshTrigger()` used to read the refresh frequency *after* removing the triggers; the forwarder reads it first and hands the value to `ScheduleRefresh.setUp`. It only matters if reading the settings sheet itself fails: then the old triggers are no longer removed first.
+
+## Testing
+Real files in a fresh Apps Script scope on fake Properties/Cache/Lock services and a fake `ScriptApp` with real trigger bookkeeping (`tests/platform-fakes.js`: `newTrigger(...).timeBased().everyHours(n).create()`, `getProjectTriggers()`, `getUserTriggers()` without time triggers,
+`deleteTrigger`). Faked: the settings sheet object and the single-sheet refresh. 12 deliberate breakages of the new files are all caught. Rules: neither file touches a spreadsheet; only `ScheduleRefresh.js` creates time-based triggers or removes the refresh triggers; the new files load alone.
+**Not covered offline:** Apps Script's real trigger quotas/latency and real `ScriptApp` behaviour; the live check (`requestAutoRefesh`, `sheetEditAction` for the refresh-frequency edit) covers those on a real spreadsheet.

@@ -59,6 +59,10 @@ The extracted workflows (`RefreshSheet`, `EstimateSheet`, `ResultSheet`, `Import
 the metadata and the settings sheet are faked and record their calls, so the tests pin the order of the status-cell switches, the error paths and what is written to the result sheet.
 Written against the old code first. See `docs/use-cases.md`.
 
+## 2e. Automatic-refresh tests (`tests/schedule.test.js`)
+`RefreshAll` / `ScheduleRefresh` against fake Properties/Cache/Lock and a fake `ScriptApp` that keeps a real list of triggers (create via the builder, `getProjectTriggers`, `deleteTrigger`, time-based ones hidden from `getUserTriggers`).
+Pins the time trigger set-up, the permit-guarded handlers (current and legacy), the permit re-read and the refresh loops; quirks are pinned and named. See `docs/use-cases.md`.
+
 ## 3. Real-spreadsheet check (do before anything is pushed to the live add-on)
 Production runs the **Spreadsheet-service path** (the Sheets advanced service is not enabled in `appsscript.json`), so that is the path to check.
 1. Push to a **copy** of the script (a second Apps Script project / test spreadsheet, not the Marketplace one): `clasp push` there (`.claspignore` keeps `tests/` out).
