@@ -48,13 +48,18 @@ The sidebar asks the server every 3 s (not while the sidebar is hidden) and gets
 The three server functions it uses (`liveCheckSidebarData`, `liveCheckSidebarDetail`, `liveCheckSidebarSetEnabled`) are
 monitoring tools and are not checked themselves. The submenu entry only appears while the helper files are in the project.
 
+## Jobs (what the run actually did)
+`sheetEdit` / `sheetChange` fire for everything, so the router (`docs/router.md`) names the job the event turned out to be and the run is reported under it:
+`config.coedit [Konfiguracja 1] (via sheetEditAction)`, `settings.refreshFrequency`, `settings.edit`, `sheet.ignored`, `change.ignored`, `agent.skipped`. `liveCheckIntents()` prints the catalogue.
+Each run gets two sets of checks: the trigger's (bookkeeping, power) and the job's (did it do its job). The sidebar's headline is the job.
+
 ## What is checked
 
 | Entry point (action name) | Crude check of the outcome |
 |---|---|
 | `onOpen`, `onOpenAction` | nothing changed (sheets, properties); menu / alert cannot be read back |
 | `simpleOnEdit` | no sheet touched; only the suspect flag (and agent power after a level 2 alarm) changed; the outcome fits the decision the code logged; duration under the 30 s limit |
-| `sheetEditAction` | power OFF/unlogged → skipped; last-use recorded; settings sheet exists; edit of refresh frequency → one time trigger, permit issued for it with the right interval; edit in a config sheet → co-edit result (below); other sheet → nothing added |
+| `sheetEditAction` (the trigger side; the content is judged under the job, see above) | power OFF/unlogged → skipped; last-use recorded; settings sheet exists; edit of refresh frequency → one time trigger, permit issued for it with the right interval; edit in a config sheet → co-edit result (below); other sheet → nothing added |
 | `sheetChangeAction` | `EDIT`/`FORMAT` ignored; otherwise the co-edit result for the active config sheet |
 | `requestAutoRefesh` | permitted trigger: refresh time + zone shown, permit `lastRun` set, result sheets of ticked configs verified; unpermitted trigger: removed itself, nothing refreshed |
 | `menuInsertImportWizard` | one new row in the settings sheet at the right place with a checkbox, new config sheet with the golden header and co-edit result, no result sheet yet |

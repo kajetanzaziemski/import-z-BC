@@ -76,6 +76,21 @@ function liveCheckNote(text){
   if(notes.length < 200) notes.push(String(text));
 }
 
+/**
+ * The running entry point turned out to be a particular JOB (the router calls this through Controller.intent): "config.coedit",
+ * "settings.refreshFrequency" ... The run is then reported under that name ("via" the technical entry point) and the verifier of the intent
+ * judges what the job was supposed to do. data = { sheet, changeType }.
+ */
+function liveCheckIntent(name,data){
+  if(!lcEnabled || lcStack.length == 0) return;
+  try{
+    const frame = lcStack[lcStack.length-1];
+    frame.intent = String(name);
+    frame.intentData = data ?? {};
+    lcStoreRunning_(frame);          // the sidebar shows the job while it is still running
+  } catch(err) {}
+}
+
 /** Starts the check of an action: takes the "before" snapshot. Returns the frame to give to liveCheckEnd(), or null. */
 function liveCheckBegin(actionName){
   if(!liveCheckIsEnabled()) return null;
@@ -210,6 +225,8 @@ class LiveCheckContext{
     this.actionName = frame.actionName;
     this.input = frame.input ?? {};
     this.notes = frame.notes;
+    this.intent = frame.intent ?? null;           // the job the router found (see liveCheckIntent), if any
+    this.intentData = frame.intentData ?? {};
     this.nested = frame.nested;
     this.before = frame.before;
     this.startedAt = frame.startedAt;
@@ -321,6 +338,15 @@ function lcRunVerifier_(c,note){
     try{ spec.verify(c); }
     catch(err) { c.fail("verifier crashed",err && err.stack || err); }
   }
+  // The job the entry point turned out to be is judged on its own, after the technical checks of the entry point.
+  if(c.intent){
+    const intentSpec = liveCheckVerifiers()[c.intent];
+    if(!intentSpec) c.skip(`job ${c.intent}`,"no verifier registered for this job");
+    else{
+      try{ intentSpec.verify(c); }
+      catch(err) { c.fail("verifier crashed",err && err.stack || err); }
+    }
+  }
   if(c.error){
     if(c.errorIsExpected) c.pass("error expected",c.errorIsExpected);
     else if(c.connectionDown) c.warn("ended with a connection error",`BC not authorised or metadata not cached, so the parts that need BC could not be checked: ${c.error.message}`);
@@ -341,11 +367,16 @@ function lcCommonChecks_(c){
 
 // - - - - - - - - recording - - - - - - - -
 
+/** What a run is called in reports: the job (with its sheet) via the technical entry point, or just the entry point. */
+function lcName_(entry){
+  return entry.i ? `${entry.i}${entry.d ? " [" + entry.d + "]" : ""} (via ${entry.a})` : entry.a;
+}
+
 function lcFormat_(entry){
   if(entry.s == "RUN" || entry.s == "LOST"){
-    return `${LIVE_CHECK_TAG} ${entry.s} ${entry.a} (started ${entry.t}${entry.s == "LOST" ? "; no result was ever recorded - the run was aborted, timed out or crashed" : "; still running"})`;
+    return `${LIVE_CHECK_TAG} ${entry.s} ${lcName_(entry)} (started ${entry.t}${entry.s == "LOST" ? "; no result was ever recorded - the run was aborted, timed out or crashed" : "; still running"})`;
   }
-  const head = `${LIVE_CHECK_TAG} ${entry.s} ${entry.a} (${entry.ms} ms)`;
+  const head = `${LIVE_CHECK_TAG} ${entry.s} ${lcName_(entry)} (${entry.ms} ms)`;
   return head + entry.c.map(x => `\n    ${x[0]} ${x[1]}${x[2] ? " - " + x[2] : ""}`).join("");
 }
 
@@ -355,6 +386,8 @@ function lcRecord_(c){
     a: c.actionName,
     s: c.status,
     ms: c.durationMs,
+    i: c.intent ?? undefined,                     // the job, when the router named one
+    d: c.intentData.sheet ?? undefined,           // the sheet it is about
     c: c.checks.map(x => [x.status,x.name,x.detail])
   };
   const text = lcFormat_(entry);
@@ -386,7 +419,7 @@ function lcRecord_(c){
   if(entry.s == "FAIL" || entry.s == "WARN"){
     try{
       const bad = entry.c.filter(x => x[0] == "FAIL" || x[0] == "WARN").map(x => x[1]).join("; ");
-      SpreadsheetApp.getActiveSpreadsheet().toast(`${entry.s} ${entry.a}: ${bad}`.slice(0,200),"Live check",10);
+      SpreadsheetApp.getActiveSpreadsheet().toast(`${entry.s} ${lcName_(entry)}: ${bad}`.slice(0,200),"Live check",10);
     } catch(err) {}
   }
 }
@@ -408,7 +441,7 @@ function lcStoredResults_(){
 /** A run is on the list from its start, so that the sidebar can show it while it is still going. */
 function lcStoreRunning_(frame){
   try{
-    PropertiesService.getDocumentProperties().setProperty(frame.key,JSON.stringify({t: frame.startedIso, a: frame.actionName, s: "RUN", ms: 0, c: []}));
+    PropertiesService.getDocumentProperties().setProperty(frame.key,JSON.stringify({t: frame.startedIso, a: frame.actionName, i: frame.intent, d: frame.intentData?.sheet ?? undefined, s: "RUN", ms: 0, c: []}));
   } catch(err) {}
 }
 
@@ -423,8 +456,9 @@ function liveCheckReport(limit=20,onlyBad=false){
 function liveCheckSummary(){
   const counts = {};
   lcStoredResults_().filter(e => e.s != "RUN" && e.s != "LOST").forEach(e => {
-    counts[e.a] = counts[e.a] ?? {PASS: 0, WARN: 0, FAIL: 0, SKIP: 0};
-    counts[e.a][e.s]++;
+    const name = e.i ?? e.a;                                  // a run is counted under its job when it has one
+    counts[name] = counts[name] ?? {PASS: 0, WARN: 0, FAIL: 0, SKIP: 0};
+    counts[name][e.s]++;
   });
   const text = Object.keys(counts).sort().map(a => `${a}: ${JSON.stringify(counts[a])}`).join("\n");
   Logger.log(text || `${LIVE_CHECK_TAG} no results stored.`);
@@ -439,10 +473,30 @@ function liveCheckClear(){
 /** Entry points known to the checks and the ones that have no verifier yet. */
 function liveCheckCoverage(){
   const verifiers = liveCheckVerifiers();
-  const missing = LIVE_CHECK_ENTRY_POINTS.filter(x => !verifiers[x.action]);
-  const unknown = Object.keys(verifiers).filter(a => !LIVE_CHECK_ENTRY_POINTS.some(x => x.action == a));
+  const missing = LIVE_CHECK_ENTRY_POINTS.filter(x => !verifiers[x.action]).concat(LIVE_CHECK_INTENTS.filter(x => !verifiers[x.intent]).map(x => ({action: x.intent, entry: "job: " + x.text})));
+  const unknown = Object.keys(verifiers).filter(a => !LIVE_CHECK_ENTRY_POINTS.some(x => x.action == a) && !LIVE_CHECK_INTENTS.some(x => x.intent == a));
   Logger.log(`${LIVE_CHECK_TAG} ${LIVE_CHECK_ENTRY_POINTS.length} entry points listed, ${missing.length} without a verifier${missing.length ? ": " + missing.map(x => x.action).join(", ") : ""}; verifiers not matching a listed entry point: ${unknown.join(", ") || "none"}.`);
   return {missing: missing, unknown: unknown};
+}
+
+/**
+ * The JOBS an entry point can turn out to be (the router, Router.js, announces them with Controller.intent()). The same technical trigger means
+ * very different things: these are what the user cares about, and what the report is headed with. Each has a verifier of its own.
+ */
+const LIVE_CHECK_INTENTS = [
+  {intent: "config.coedit",              text: "a config sheet was edited or changed: its query lines and dropdowns (with notes) are completed"},
+  {intent: "settings.refreshFrequency",  text: "the refresh frequency in the settings sheet was edited: the time trigger and its permit are set up"},
+  {intent: "settings.edit",              text: "another edit in the settings sheet: nothing to do"},
+  {intent: "sheet.ignored",              text: "an edit or change in a sheet the add-on does not manage: nothing to do"},
+  {intent: "change.ignored",             text: "a change of type EDIT or FORMAT (the cells are handled by the edit trigger): nothing to do"},
+  {intent: "agent.skipped",              text: "the edit trigger is powered off or not logged: the edit is skipped"}
+];
+
+/** Logs and returns the catalogue of jobs. */
+function liveCheckIntents(){
+  const text = LIVE_CHECK_INTENTS.map(x => `${x.intent}: ${x.text}`).join("\n");
+  Logger.log(text);
+  return text;
 }
 
 /**

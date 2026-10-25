@@ -389,7 +389,7 @@ function liveCheckVerifiers(){
 function buildLiveCheckVerifiers_(){
   const menuNoise = ["importSettingsArray","docTriggerArray",/_coedit$/,"agentSuspect"];   // menu actions switch the add-on ON and may repair agents
 
-  return {
+  return Object.assign(lcJobVerifiers_(),{
 
     // - - - - - - - - events - - - - - - - -
 
@@ -807,7 +807,7 @@ function buildLiveCheckVerifiers_(){
         else c.skip("OAuth token stored","authorisation was denied / no tenant configured");
       }
     }
-  };
+  });
 }
 
 // - - - - - - - - verifiers with more than a few lines - - - - - - - -
@@ -826,8 +826,9 @@ function lcVerifyRefreshedConfig_(c,entry){
 }
 
 /**
- * sheetEdit (installable onEdit) and sheetChange (installable onChange) share what happens after the power check:
- * updateAfterEdit() -> co-editing of the config sheet.
+ * sheetEdit (installable onEdit) and sheetChange (installable onChange): the TECHNICAL side of the run - the trigger's bookkeeping and its power.
+ * What the run did about the edit is a job of its own (the router names it, see LIVE_CHECK_INTENTS) and is judged by the verifier of that job
+ * ("config.coedit", "settings.refreshFrequency" ...). When no job was announced (the run stopped before routing) the content is judged here, as before.
  * @param kind {String} "edit" or "change"
  */
 function lcVerifyAgentRun_(c,kind){
@@ -836,8 +837,7 @@ function lcVerifyAgentRun_(c,kind){
   const uid = e.triggerUid;
   const log = lcDocLog_();
   const entry = log.find(t => t.triggerId === uid);
-  const beforeLog = lcHave_(c.before.docProps) && c.before.docProps.docTriggerArray ? JSON.parse(c.before.docProps.docTriggerArray) : [];
-  const powerBefore = beforeLog.some(t => t[0] === uid && t[2] === true);
+  const powerBefore = lcAgentPowerBefore_(c);
 
   if(entry) c.expectSoft("trigger's last use recorded",Date.parse(entry.lastUsed) >= c.startedAt - 2000,`lastUsed ${entry.lastUsed} - ${LC_KNOWN_LOST_UPDATES}`);
   if(kind == "edit") c.expectSoft("agent suspect flag cleared by the installable run",!c.docProp("agentSuspect"),"agentSuspect is set (a simple trigger of a later edit may have set it again)");
@@ -854,6 +854,31 @@ function lcVerifyAgentRun_(c,kind){
   const settings = c.now("settingsSheet");
   if(!c.expect("settings sheet exists with its signature (created on demand)",settings.exists && LC_SETTINGS_SIGNATURES.includes(settings.b2),`name ${settings.name}, B2 = ${settings.b2}`)) return;
 
+  if(!c.intent) lcVerifyAgentContent_(c,kind,settings);
+}
+
+/** Was the trigger of this run logged and powered on before the run? */
+function lcAgentPowerBefore_(c){
+  const uid = c.input.e && c.input.e.triggerUid;
+  const beforeLog = lcHave_(c.before.docProps) && c.before.docProps.docTriggerArray ? JSON.parse(c.before.docProps.docTriggerArray) : [];
+  return beforeLog.some(t => t[0] === uid && t[2] === true);
+}
+
+/** The sheet an edit / change is about, as the verifier sees it (the edited range's sheet for an edit, the active sheet for a change). */
+function lcAgentSheet_(c,kind){
+  const e = c.input.e;
+  return kind == "edit" ? (e.range ? e.range.getSheet().getName() : null) : c.now("activeSheet");
+}
+
+/** Did the edit touch the refresh frequency (column D or E of its row in the settings sheet)? */
+function lcRefreshFrequencyTouched_(c,settings){
+  const e = c.input.e, row = settings.freqRow;
+  return !!(e && e.range) && !!row && row >= e.range.getRow() && row <= e.range.getLastRow() && [4,5].some(col => col >= e.range.getColumn() && col <= e.range.getLastColumn());
+}
+
+/** The old, complete judgement of what an edit / change led to - used only when no job was announced. */
+function lcVerifyAgentContent_(c,kind,settings){
+  const e = c.input.e;
   if(kind == "change"){
     const type = String(e.changeType);
     if(type == "EDIT" || type == "FORMAT"){
@@ -863,13 +888,11 @@ function lcVerifyAgentRun_(c,kind){
     }
   }
 
-  const editedName = kind == "edit" ? (e.range ? e.range.getSheet().getName() : null) : c.now("activeSheet");
+  const editedName = lcAgentSheet_(c,kind);
   if(!editedName) return c.skip("edited sheet","not known");
 
   if(kind == "edit" && editedName === settings.name && e.range){
-    const row = settings.freqRow;
-    const touched = !!row && row >= e.range.getRow() && row <= e.range.getLastRow() && [4,5].some(col => col >= e.range.getColumn() && col <= e.range.getLastColumn());
-    if(touched) lcVerifyRefreshTrigger_(c,settings);
+    if(lcRefreshFrequencyTouched_(c,settings)) lcVerifyRefreshTrigger_(c,settings);
     else c.pass("edit in the settings sheet outside the refresh frequency: nothing to do");
     return;
   }
@@ -879,11 +902,83 @@ function lcVerifyAgentRun_(c,kind){
     return;
   }
 
-  // Any other sheet: the add-on does nothing there (apart from creating its settings sheet on first use).
-  const type = kind == "change" ? String(e.changeType) : "";
+  lcVerifyUnrelatedSheet_(c,settings,kind == "change" ? String(e.changeType) : "");
+}
+
+/** Any other sheet: the add-on does nothing there (apart from creating its settings sheet on first use). */
+function lcVerifyUnrelatedSheet_(c,settings,type){
   if(type == "INSERT_GRID" || type == "REMOVE_GRID") c.skip("sheets untouched","sheets were added / removed by the change itself");
   else{
     const extra = lcAddedSheets_(c).filter(n => n !== settings.name);
     c.expect("no sheet added in an unrelated sheet's edit",extra.length == 0,`added ${extra.join(", ")}`);
   }
 }
+
+// - - - - - - - - jobs (what an edit / change turned out to mean; the router names them) - - - - - - - -
+// Each verifier works out its own premise from the event and the settings sheet instead of trusting the router: a wrongly routed edit is a FAIL.
+
+/** A change run by a trigger that was powered off is not asserted (the code runs the action anyway, docs/trigger-management-todo.md #5). */
+function lcSkipUnpoweredChange_(c){
+  if(c.actionName === "sheetChangeAction" && !lcAgentPowerBefore_(c)){
+    c.skip("job not asserted","power OFF - sheetChange runs the action before looking at the power (docs/trigger-management-todo.md #5)");
+    return true;
+  }
+  return false;
+}
+
+function lcJobVerifiers_(){
+  return {
+    "config.coedit": {
+      verify(c){
+        if(lcSkipUnpoweredChange_(c)) return;
+        const kind = lcAgentKind_(c), settings = c.now("settingsSheet"), sheet = c.intentData.sheet;
+        c.expect(`${sheet} is a config sheet listed in the settings sheet`,settings.configs.some(x => x.config === sheet),`listed: ${settings.configs.map(x => x.config).join(", ")}`);
+        if(kind == "change") c.expect("a structure change, not a cell edit",!["EDIT","FORMAT"].includes(String(c.input.e.changeType)),String(c.input.e.changeType));
+        lcVerifyConfigCoedit_(c,sheet);
+      }
+    },
+
+    "settings.refreshFrequency": {
+      verify(c){
+        if(lcSkipUnpoweredChange_(c)) return;
+        const settings = c.now("settingsSheet");
+        if(!c.expect("the edit touched the refresh frequency (number or unit)",lcRefreshFrequencyTouched_(c,settings),"the edited range does not cover the refresh frequency cells")) return;
+        lcVerifyRefreshTrigger_(c,settings);
+      }
+    },
+
+    "settings.edit": {
+      verify(c){
+        if(lcSkipUnpoweredChange_(c)) return;
+        const settings = c.now("settingsSheet");
+        c.expect("edit in the settings sheet outside the refresh frequency: nothing to do",!lcRefreshFrequencyTouched_(c,settings),"the edit DID touch the refresh frequency but no time trigger was set up");
+      }
+    },
+
+    "sheet.ignored": {
+      verify(c){
+        if(lcSkipUnpoweredChange_(c)) return;
+        const kind = lcAgentKind_(c), settings = c.now("settingsSheet"), sheet = lcAgentSheet_(c,kind);
+        c.expect("not a config sheet: nothing to do",!settings.configs.some(x => x.config === sheet),`${sheet} is a config sheet`);
+        lcVerifyUnrelatedSheet_(c,settings,kind == "change" ? String(c.input.e.changeType) : "");
+      }
+    },
+
+    "change.ignored": {
+      verify(c){
+        const type = String(c.input.e && c.input.e.changeType);
+        if(!c.expect("only EDIT and FORMAT changes are ignored",type == "EDIT" || type == "FORMAT",type)) return;
+        c.unchanged("sheets",`${type} change is ignored`);
+        c.unchanged("docProps",`${type} change is ignored`,["docTriggerArray","agentSuspect"]);
+      }
+    },
+
+    "agent.skipped": {
+      verify(c){
+        c.expect("the trigger is powered off or not logged",!lcAgentPowerBefore_(c),"the trigger was powered on, but the edit was skipped");
+      }
+    }
+  };
+}
+
+function lcAgentKind_(c){ return c.actionName === "sheetChangeAction" ? "change" : "edit"; }

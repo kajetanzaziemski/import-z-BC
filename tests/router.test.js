@@ -158,4 +158,82 @@ module.exports = function register(t) {
     assert.ok(/Controller\.run\("sheetEditAction"/.test(text) && /Controller\.run\("sheetChangeAction"/.test(text));
     assert.ok(/function sheetEditAction\(e\)/.test(text) && /function sheetChangeAction\(e\)/.test(text));
   });
+
+  // ---- the router itself: what each event means (the jobs), announced before the action runs ---------------------------------------------------
+  const route = (sc, kind) => { sc.ex.ctx.e = sc.event; return plain(sc.ex.eval(kind === 'edit' ? `Router.routeEdit(e)` : `Router.routeChange(e)`)); };
+  const withIntentLog = sc => { sc.ex.ctx.liveCheckIntent = (n, d) => sc.log.push(['intent', n, d]); return sc; };
+
+  test('router: an EDIT means ... config sheet -> config.coedit, settings sheet -> refresh frequency or plain settings edit, anything else -> sheet.ignored', () => {
+    const r = (over, kind) => { const x = route(scenario(over), kind || 'edit'); return [x.intent, x.sheet]; };
+    assert.deepStrictEqual(r({}), ['config.coedit', 'Konfiguracja 1']);
+    assert.deepStrictEqual(r({ active: 'Ustawienia', freqCell: true }), ['settings.refreshFrequency', 'Ustawienia']);
+    assert.deepStrictEqual(r({ active: 'Ustawienia', freqCell: false }), ['settings.edit', 'Ustawienia']);
+    assert.deepStrictEqual(r({ active: 'Arkusz1' }), ['sheet.ignored', 'Arkusz1']);
+    assert.deepStrictEqual(r({ active: 'Dane wg. 1' }), ['sheet.ignored', 'Dane wg. 1'], 'a result sheet is not a config sheet');
+  });
+
+  test('router: a CHANGE means ... EDIT / FORMAT -> change.ignored; a structure change -> config.coedit on a config sheet, sheet.ignored elsewhere (also in the settings sheet)', () => {
+    const r = (over) => { const x = route(scenario(over), 'change'); return [x.intent, x.sheet === undefined ? null : x.sheet, x.changeType]; };
+    assert.deepStrictEqual(r({ changeType: 'EDIT' }), ['change.ignored', null, 'EDIT']);
+    assert.deepStrictEqual(r({ changeType: 'FORMAT' }), ['change.ignored', null, 'FORMAT']);
+    assert.deepStrictEqual(r({ changeType: 'INSERT_ROW' }), ['config.coedit', 'Konfiguracja 1', 'INSERT_ROW']);
+    assert.deepStrictEqual(r({ changeType: 'INSERT_GRID', active: 'Arkusz1' }), ['sheet.ignored', 'Arkusz1', 'INSERT_GRID']);
+    assert.deepStrictEqual(r({ changeType: 'REMOVE_ROW', active: 'Ustawienia', freqCell: true }), ['sheet.ignored', 'Ustawienia', 'REMOVE_ROW']);
+  });
+
+  test('router: routing only LOOKS - no action runs and no intent is announced until perform()', () => {
+    const sc = withIntentLog(scenario());
+    route(sc, 'edit');
+    assert.deepStrictEqual(sc.calls(), []);
+  });
+
+  test('router: the intent is announced BEFORE the action, with the sheet and the change type', () => {
+    const sc = withIntentLog(scenario());
+    sc.edit();
+    assert.deepStrictEqual(sc.calls().slice(0, 2), [['intent', 'config.coedit', { sheet: 'Konfiguracja 1', changeType: null }], ['coed.new', 'Konfiguracja 1', true]]);
+    const st = withIntentLog(scenario({ active: 'Ustawienia', freqCell: true }));
+    st.edit();
+    assert.deepStrictEqual(st.calls(), [['intent', 'settings.refreshFrequency', { sheet: 'Ustawienia', changeType: null }], ['setRefreshTrigger']]);
+    const ch = withIntentLog(scenario({ changeType: 'INSERT_ROW' }));
+    ch.change();
+    assert.deepStrictEqual(ch.calls()[0], ['intent', 'config.coedit', { sheet: 'Konfiguracja 1', changeType: 'INSERT_ROW' }]);
+  });
+
+  test('router: every kind of event announces its job (sheet.ignored, settings.edit, change.ignored, agent.skipped included)', () => {
+    const intents = (over, kind) => { const sc = withIntentLog(scenario(over)); sc[kind](); return sc.calls().filter(c => c[0] === 'intent').map(c => c[1]); };
+    assert.deepStrictEqual(intents({ active: 'Arkusz1' }, 'edit'), ['sheet.ignored']);
+    assert.deepStrictEqual(intents({ active: 'Ustawienia' }, 'edit'), ['settings.edit']);
+    assert.deepStrictEqual(intents({ changeType: 'FORMAT' }, 'change'), ['change.ignored']);
+    assert.deepStrictEqual(intents({ power: false }, 'edit'), ['agent.skipped']);
+    assert.deepStrictEqual(intents({ active: 'Arkusz1', changeType: 'INSERT_GRID' }, 'change'), ['sheet.ignored']);
+  });
+
+  test('router: a failing action still has its job announced first (the live check labels the failed run correctly)', () => {
+    const sc = withIntentLog(scenario({ coeditError: 'boom' }));
+    assert.throws(() => sc.edit(), /boom/);
+    assert.strictEqual(sc.calls()[0][0], 'intent');
+  });
+
+  // ---- rules ---------------------------------------------------------------------------------------------------------------------------------
+  const code = f => fs.readFileSync(path.join(ROOT, f), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
+
+  test('rule: the entry points only hand over to the router (sheetEditAction / sheetChangeAction are one-liners, no edit logic left in Quick Start.js)', () => {
+    const q = code('Quick Start.js');
+    assert.ok(/function sheetEditAction\(e\)\{\s*Router\.edit\(e\);[^\n]*\s*\}/.test(q));
+    assert.ok(/function sheetChangeAction\(e\)\{\s*dbgLog\(e\.changeType\);\s*Router\.change\(e\);\s*\}/.test(q));
+    assert.ok(!/getMainSettings\(\)\.sheetEdit\(|e\.changeType==/.test(q));
+    assert.ok(/function updateAfterEdit\(sheetName,editEvent\)\{\s*if\(getMainSettings\(\)\.isConfigSheet\(sheetName\)\) AnalyseConfig\.run\(sheetName,editEvent\);\s*\}/.test(q));
+  });
+
+  test('rule: only AnalyseConfig builds the co-editor for an edit (the coedit flag "<sheet>_coedit" lives there), Router has no sheet access', () => {
+    assert.ok(/runFunctionWithLock\(\(\) => shCoed\.sheetEdit\(editEvent\),sheetName\+"_coedit"\)/.test(code('AnalyseConfig.js')));
+    assert.ok(!/_coedit/.test(code('Quick Start.js')));
+    assert.ok(!/SpreadsheetApp|getRange|SheetCoeditor/.test(code('Router.js')));
+    assert.ok(!/SpreadsheetApp|getRange/.test(code('AnalyseConfig.js')));
+  });
+
+  test('rule: the new files load alone, in any order (nothing is used at load time)', () => {
+    const vm = require('vm');
+    ['Router.js', 'AnalyseConfig.js'].forEach(f => vm.runInNewContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), {}));
+  });
 };

@@ -47,6 +47,8 @@ the refactor** and verify each entry point's outcome in a real spreadsheet. The 
      "not touched by this run and the same as before it"; if the run changed it and left it not idle it **fails**, showing both looks. Without a baseline (a new sheet) every cell must be idle.
      If a lit cell was changed while another checked run is in progress (started, no result, under 10 minutes, not this check's own run or a nested run of the same execution) the result is a
      **WARN naming that run** (a refresh lights D2 for as long as it writes and a trigger of the same document may check meanwhile).
+  3. *Jobs* (`Live Check.js`, `Live Check Verifiers.js`, `Live Check Sidebar*.js/html`): a run is stored and reported under the job the router found (`liveCheckIntent`, `LIVE_CHECK_INTENTS`, a verifier per job);
+     the trigger's verifier keeps the bookkeeping and the job's verifier judges what was done; each job re-derives its premise from the event. See `docs/router.md`.
   2. *Sidebar details* (`Live Check Sidebar.html`): FAIL lines are red, WARN lines amber, PASS grey, SKIP grey italic; the head line has the colour of the run's status.
   `testConfigGridIndicators("Konfiguracja 1")` (Test Functions.js) prints the same reads on demand.
 - In a real spreadsheet: `liveCheckEnable()`, then use the add-on (menu, edits, triggers) and read the sidebar (add-on menu -> Narzędzia programisty -> Live check) or
@@ -62,6 +64,11 @@ Written against the old code first. See `docs/use-cases.md`.
 ## 2e. Automatic-refresh tests (`tests/schedule.test.js`)
 `RefreshAll` / `ScheduleRefresh` against fake Properties/Cache/Lock and a fake `ScriptApp` that keeps a real list of triggers (create via the builder, `getProjectTriggers`, `deleteTrigger`, time-based ones hidden from `getUserTriggers`).
 Pins the time trigger set-up, the permit-guarded handlers (current and legacy), the permit re-read and the refresh loops; quirks are pinned and named. See `docs/use-cases.md`.
+
+## 2f. Router and jobs (`tests/router.test.js`, `tests/live-check.test.js`)
+`router.test.js` pins (against the old code first) which action fires for which `sheetEdit` / `sheetChange` event, then tests the router's classification table, that the job is announced before the action,
+and the rules (entry points are one-liners, no edit logic left in Quick Start.js). `live-check.test.js` runs the real triggers with the live check ON and checks labels, which verifier ran, misrouting detection,
+the fallback without a job, the catalogue / verifier / announcement agreement, the report format and the sidebar headline. See `docs/router.md`.
 
 ## 3. Real-spreadsheet check (do before anything is pushed to the live add-on)
 Production runs the **Spreadsheet-service path** (the Sheets advanced service is not enabled in `appsscript.json`), so that is the path to check.

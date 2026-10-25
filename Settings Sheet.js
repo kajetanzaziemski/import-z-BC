@@ -54,10 +54,13 @@ class SettingsSheet{
     return sheet;
   }
 
+  /** Is the edited range (part of) the refresh frequency: its number (column D) or its unit (column E)? */
+  isRefreshFrequencyCell(range){
+    return isInRange(this.refreshFrequencyPos,4,range) || isInRange(this.refreshFrequencyPos,5,range);
+  }
+
   sheetEdit(e){
-    dbgLog(isInRange(this.refreshFrequencyPos,4,e.range));
-    dbgLog(isInRange(this.refreshFrequencyPos,5,e.range));
-    if(isInRange(this.refreshFrequencyPos,4,e.range) || isInRange(this.refreshFrequencyPos,5,e.range)){
+    if(this.isRefreshFrequencyCell(e.range)){
       dbgLog("refreshFreqency data editted. Setting new time trigger.");
       this.setRefreshTrigger();
     } 

@@ -23,6 +23,7 @@
       .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .FAIL .name { color: #d93025; font-weight: bold; }
       .meta { color: #80868b; white-space: nowrap; font-size: 11px; }
+      .via { color: #80868b; white-space: nowrap; font-size: 11px; }
       .detail { display: none; margin: 0; padding: 6px 10px 10px 28px; white-space: pre; overflow-x: auto; font: 11px/1.4 monospace; background: #fafafa; }
       /* one block per line; the bad ones are coloured (min-width keeps the colour under the whole line when the details scroll sideways) */
       .detail .l { display: block; min-width: max-content; padding: 0 4px; border-left: 3px solid transparent; }
@@ -77,6 +78,9 @@
         });
       }
 
+      // The headline of a run: the job the router found (with its sheet), else the technical entry point.
+      function runLabel(r) { return r.i ? r.i + (r.d ? " [" + r.d + "]" : "") : r.a; }
+
       function render() {
         var list = document.getElementById("list");
         list.textContent = "";
@@ -87,11 +91,12 @@
           var head = document.createElement("div");
           head.className = "head";
           var dot = document.createElement("span"); dot.className = "dot";
-          var name = document.createElement("span"); name.className = "name"; name.textContent = r.a + (r.bad ? "  (" + r.bad + ")" : "");
-          name.title = r.s;
+          var name = document.createElement("span"); name.className = "name"; name.textContent = runLabel(r) + (r.bad ? "  (" + r.bad + ")" : "");
+          name.title = r.s + (r.text ? " - " + r.text : "");
+          var via = document.createElement("span"); via.className = "via"; via.textContent = r.i ? "via " + r.a : "";
           var meta = document.createElement("span"); meta.className = "meta"; meta.textContent = clock(r.t) + " · " + duration(r);
           meta.setAttribute("data-key", r.k);
-          head.appendChild(dot); head.appendChild(name); head.appendChild(meta);
+          head.appendChild(dot); head.appendChild(name); if (r.i) head.appendChild(via); head.appendChild(meta);
           var detail = document.createElement("pre"); detail.className = "detail"; showDetail(detail, details[r.k] || "…");
           head.onclick = function () { toggle(r); };
           run.appendChild(head); run.appendChild(detail);

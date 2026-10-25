@@ -316,6 +316,164 @@ module.exports = function register(t) {
     assert.strictEqual(e2e({ handD2: true, run: 'refreshCurrentSheet()', action: 'menuRefreshCurrentSheet', breakIt: forget }).status, 'FAIL');
   });
 
+  // ---- jobs (intents): a run is reported under what it DID, via the technical trigger ---------------------------------------------------------
+  const JOB_FILES = ['Import Query.js', 'ResultSheet.js', 'RefreshSheet.js', 'EstimateSheet.js', 'RefreshAll.js', 'ScheduleRefresh.js', 'AnalyseConfig.js', 'Router.js',
+    'Data Type.js', 'Menu.js', 'Sheet Coeditor.js', 'Grid.js', 'Grid Util.js', 'Config Grid.js'];
+
+  test('live check jobs: every job the code announces (Controller.intent, the router\'s action table) is in the catalogue and has a verifier, and none is orphaned', () => {
+    const text = f => read(f).replace(/\/\*[\s\S]*?\*\//g, '').split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
+    const announced = new Set();
+    fs.readdirSync(ROOT).filter(f => /\.js$/.test(f) && !/^(Live Check|Test Functions)/.test(f)).forEach(f => {
+      (text(f).match(/Controller\.intent\(\s*["']([^"']+)["']/g) || []).forEach(m => announced.add(m.match(/["']([^"']+)["']/)[1]));
+    });
+    const table = text('Router.js').match(/const ROUTE_ACTIONS_ = \{([\s\S]*?)\n\};/)[1];
+    (table.match(/^  "([a-z.A-Z]+)":/gm) || []).forEach(m => announced.add(m.match(/"([^"]+)"/)[1]));
+    const ex = new FakePlatform().execution(FILES);
+    const catalogue = new Set(ex.eval(`LIVE_CHECK_INTENTS.map(x => x.intent)`));
+    assert.deepStrictEqual([...announced].filter(x => !catalogue.has(x)), [], 'announced but not in LIVE_CHECK_INTENTS');
+    assert.deepStrictEqual([...catalogue].filter(x => !announced.has(x)), [], 'in the catalogue but nobody announces it');
+    const verifiers = new Set(ex.eval(`Object.keys(liveCheckVerifiers())`));
+    assert.deepStrictEqual([...catalogue].filter(x => !verifiers.has(x)), [], 'jobs without a verifier');
+    const cov = JSON.parse(JSON.stringify(ex.eval(`liveCheckCoverage()`)));
+    assert.deepStrictEqual([cov.missing, cov.unknown], [[], []]);
+  });
+
+  /**
+   * The installable triggers with the live check ON: real Quick Start / Router / Controller / live check files, the simulated spreadsheet with a settings
+   * sheet (config row, refresh frequency row), a logged trigger "t1". Faked: the settings sheet OBJECT (isConfigSheet / isRefreshFrequencyCell), the co-edit
+   * itself (no-op; the live check's content checks therefore see an unfinished config sheet - only labels and which verifier ran are looked at).
+   */
+  function agentRun(o) {
+    const { SimBook } = require('./sim');
+    const p = new FakePlatform();
+    p.props.document.importSettingsArray = JSON.stringify({ addonStatus: true, importSheetName: 'Ustawienia' });
+    p.props.document.docTriggerArray = JSON.stringify([{ triggerId: 't1', trigEventType: 'ON_EDIT', trigFunction: 'sheetEdit', dateCreated: '2020-01-01', lastUsed: '2020-01-01', SsId: 'ss-1', powerOn: o.power !== false }]);
+    p.props.document.liveCheckEnabled = 'on';
+    const book = new SimBook({ api: false });
+    const st = book.add('Ustawienia');
+    [['Opis linii'], ['configSheet', 'Konfiguracja 1', 'Wynik', false], ['refreshFrequency', 'Odświeżaj co:', 6, 'godzin']].forEach((row, i) => row.forEach((v, j) => st.setValue(i + 2, j + 2, v, '')));
+    book.activeName = o.active ?? 'Konfiguracja 1';
+    const ss = book.spreadsheet();
+    const app = { getActiveSpreadsheet: () => ss, flush() {}, WrapStrategy: book.SpreadsheetApp.WrapStrategy, newDataValidation: book.SpreadsheetApp.newDataValidation,
+      DataValidationCriteria: book.SpreadsheetApp.DataValidationCriteria, getUi: () => ({ alert() {} }) };
+    const files = [...FILES, 'Settings Sheet.js', ...JOB_FILES];
+    const ex = p.execution(files, { SpreadsheetApp: app, Utilities: book.Utilities, Session: { getActiveUser: () => ({ getEmail: () => 'u' }) } });
+    ex.eval(`StatusManager.fullStatusCheck = () => {};
+      globalThis.CCTImportConfig = class { constructor(v) { this.v = v; } };
+      SheetCoeditor.prototype.sheetEdit = function () {};
+      getMainSettings = () => ({ isConfigSheet: n => n === 'Konfiguracja 1', isRefreshFrequencyCell: r => isInRange(4, 4, r) || isInRange(4, 5, r),
+        setRefreshTrigger: () => ScheduleRefresh.setUp({ freq: 6, unit: 'hrs' }) });`);
+    ex.eval(`new SheetCoeditor('Konfiguracja 1', false)`);
+    if (o.breakIt) ex.eval(o.breakIt);
+    const range = o.range ?? { sheet: o.active ?? 'Konfiguracja 1', row: 6, col: 2 };
+    ex.ctx.__e = { triggerUid: 't1', changeType: o.changeType ?? 'INSERT_ROW',
+      range: { getSheet: () => ({ getName: () => range.sheet }), getA1Notation: () => 'B6', getRow: () => range.row, getLastRow: () => range.row, getColumn: () => range.col, getLastColumn: () => range.col },
+      source: { getActiveSheet: () => ({ getName: () => o.active ?? 'Konfiguracja 1' }) } };
+    ex.eval(o.entry === 'change' ? `sheetChange(__e)` : `sheetEdit(__e)`);
+    const entries = Object.keys(p.props.document).filter(k => /^liveCheck:\d/.test(k)).sort().map(k => JSON.parse(p.props.document[k]));
+    assert.strictEqual(entries.length, 1, 'one recorded run: ' + entries.map(e => e.a + '/' + e.i).join(','));
+    const entry = entries[0];
+    return { entry, ex, names: entry.c.map(x => x[1]), status: name => (entry.c.find(x => x[1] === name || x[1].indexOf(name) >= 0) || [])[0], head: ex.eval(`lcFormat_(${JSON.stringify(entry)})`).split('\n')[0] };
+  }
+
+  test('live check jobs: a config sheet edit is reported as config.coedit [sheet] via sheetEditAction; the job\'s own checks ran next to the trigger\'s', () => {
+    const r = agentRun({ entry: 'edit' });
+    assert.deepStrictEqual([r.entry.i, r.entry.d, r.entry.a], ['config.coedit', 'Konfiguracja 1', 'sheetEditAction']);
+    assert.ok(/^\[LIVE-CHECK\] (PASS|WARN|FAIL) config\.coedit \[Konfiguracja 1\] \(via sheetEditAction\) \(\d+ ms\)$/.test(r.head), r.head);
+    assert.ok(r.names.includes('settings sheet exists with its signature (created on demand)'), 'trigger side: ' + r.names.join(' | '));
+    assert.ok(r.names.includes('Konfiguracja 1 is a config sheet listed in the settings sheet'), 'job side');
+    assert.ok(r.names.some(n => /\[Konfiguracja 1\] activity indicators back to idle/.test(n)), 'job side: the co-edit result is judged');
+  });
+
+  test('live check jobs: a structure change on a config sheet is the SAME job (config.coedit) via sheetChangeAction', () => {
+    const r = agentRun({ entry: 'change', changeType: 'INSERT_ROW' });
+    assert.deepStrictEqual([r.entry.i, r.entry.d, r.entry.a], ['config.coedit', 'Konfiguracja 1', 'sheetChangeAction']);
+    assert.ok(r.names.includes('a structure change, not a cell edit'));
+  });
+
+  test('live check jobs: the same sheetEdit on the settings sheet is a different job - settings.refreshFrequency when the frequency was edited, settings.edit otherwise', () => {
+    const f = agentRun({ entry: 'edit', active: 'Ustawienia', range: { sheet: 'Ustawienia', row: 4, col: 4 } });
+    assert.deepStrictEqual([f.entry.i, f.entry.d], ['settings.refreshFrequency', 'Ustawienia']);
+    assert.ok(f.names.includes('the edit touched the refresh frequency (number or unit)'));
+    assert.ok(f.names.includes('exactly one autoRefreshHandler trigger'), 'the time trigger is judged: ' + f.names.join(' | '));
+    const o = agentRun({ entry: 'edit', active: 'Ustawienia', range: { sheet: 'Ustawienia', row: 3, col: 3 } });
+    assert.strictEqual(o.entry.i, 'settings.edit');
+    assert.strictEqual(o.status('edit in the settings sheet outside the refresh frequency: nothing to do'), 'PASS');
+  });
+
+  test('live check jobs: an edit elsewhere is sheet.ignored, an EDIT/FORMAT change is change.ignored, a powered-off trigger is agent.skipped', () => {
+    const a = agentRun({ entry: 'edit', active: 'Arkusz1', range: { sheet: 'Arkusz1', row: 1, col: 1 } });
+    assert.strictEqual(a.entry.i, 'sheet.ignored');
+    assert.strictEqual(a.status('not a config sheet: nothing to do'), 'PASS');
+    const c = agentRun({ entry: 'change', changeType: 'FORMAT' });
+    assert.strictEqual(c.entry.i, 'change.ignored');
+    assert.strictEqual(c.status('only EDIT and FORMAT changes are ignored'), 'PASS');
+    const s = agentRun({ entry: 'edit', power: false });
+    assert.deepStrictEqual([s.entry.i, s.entry.d], ['agent.skipped', undefined]);
+    assert.ok(/agent\.skipped \(via sheetEditAction\)/.test(s.head), s.head);
+    assert.strictEqual(s.status('the trigger is powered off or not logged'), 'PASS');
+    assert.strictEqual(s.status('power OFF or trigger not logged: edit action skipped, sheets untouched'), 'PASS', 'the trigger side stays');
+  });
+
+  test('live check jobs: a powered-off CHANGE trigger still co-edits (known quirk): the job is not asserted, as before', () => {
+    const r = agentRun({ entry: 'change', power: false });
+    assert.strictEqual(r.entry.i, 'config.coedit');
+    assert.strictEqual(r.status('job not asserted'), 'SKIP');
+  });
+
+  test('live check jobs: a WRONGLY routed edit is a FAIL (each job re-derives its premise from the event, not from the router)', () => {
+    const asConfig = agentRun({ entry: 'edit', active: 'Arkusz1', range: { sheet: 'Arkusz1', row: 1, col: 1 }, breakIt: `Router.routeEdit = e => ({ intent: 'config.coedit', sheet: 'Arkusz1', event: e })` });
+    assert.strictEqual(asConfig.status('Arkusz1 is a config sheet listed in the settings sheet'), 'FAIL');
+    const ignoredConfig = agentRun({ entry: 'edit', breakIt: `Router.routeEdit = e => ({ intent: 'sheet.ignored', sheet: 'Konfiguracja 1', event: e })` });
+    assert.strictEqual(ignoredConfig.status('not a config sheet: nothing to do'), 'FAIL');
+    const missedFrequency = agentRun({ entry: 'edit', active: 'Ustawienia', range: { sheet: 'Ustawienia', row: 4, col: 5 }, breakIt: `Router.routeEdit = e => ({ intent: 'settings.edit', sheet: 'Ustawienia', event: e })` });
+    assert.strictEqual(missedFrequency.status('edit in the settings sheet outside the refresh frequency: nothing to do'), 'FAIL');
+    const wrongFrequency = agentRun({ entry: 'edit', active: 'Ustawienia', range: { sheet: 'Ustawienia', row: 3, col: 3 }, breakIt: `Router.routeEdit = e => ({ intent: 'settings.refreshFrequency', sheet: 'Ustawienia', event: e })` });
+    assert.strictEqual(wrongFrequency.status('the edit touched the refresh frequency (number or unit)'), 'FAIL');
+    const wrongIgnore = agentRun({ entry: 'change', changeType: 'INSERT_ROW', breakIt: `Router.routeChange = e => ({ intent: 'change.ignored', changeType: e.changeType })` });
+    assert.strictEqual(wrongIgnore.status('only EDIT and FORMAT changes are ignored'), 'FAIL');
+  });
+
+  test('live check jobs: when no job was announced (the run stopped before routing) the trigger\'s verifier judges the content itself, as it did before', () => {
+    const r = agentRun({ entry: 'edit', breakIt: `Router.edit = () => {}` });
+    assert.strictEqual(r.entry.i, undefined);
+    assert.strictEqual(r.entry.a, 'sheetEditAction');
+    assert.ok(r.names.some(n => /\[Konfiguracja 1\] activity indicators back to idle/.test(n)), 'content checked by the trigger verifier: ' + r.names.join(' | '));
+  });
+
+  test('live check jobs: switched OFF nothing is announced or stored (the router works the same without the live check)', () => {
+    const p = new FakePlatform();
+    const ex = p.execution(FILES);
+    assert.doesNotThrow(() => ex.eval(`Controller.intent('config.coedit', { sheet: 'x', changeType: null })`));
+    assert.deepStrictEqual(Object.keys(p.props.document).filter(k => /^liveCheck:/.test(k)), []);
+  });
+
+  test('live check jobs: reports, summary and the sidebar headline use the job; runs without a job keep their entry point name', () => {
+    const ex = new FakePlatform().execution(FILES);
+    const fmt = e => ex.eval(`lcFormat_(${JSON.stringify(e)})`);
+    assert.ok(/^\[LIVE-CHECK\] FAIL config\.coedit \[Konfiguracja 1\] \(via sheetEditAction\) \(12 ms\)\n    FAIL x - y$/.test(fmt({ s: 'FAIL', a: 'sheetEditAction', i: 'config.coedit', d: 'Konfiguracja 1', ms: 12, c: [['FAIL', 'x', 'y']] })));
+    assert.ok(/^\[LIVE-CHECK\] PASS menuRefreshAll \(5 ms\)/.test(fmt({ s: 'PASS', a: 'menuRefreshAll', ms: 5, c: [] })));
+    assert.ok(/RUN settings\.edit \(via sheetEditAction\) \(started/.test(fmt({ s: 'RUN', a: 'sheetEditAction', i: 'settings.edit', t: '2026-01-01T00:00:00Z' })));
+    const p = new FakePlatform();
+    p.props.document['liveCheck:2026-01-01T00:00:01Z:a'] = JSON.stringify({ t: '2026-01-01T00:00:01Z', a: 'sheetEditAction', i: 'config.coedit', d: 'K1', s: 'PASS', ms: 1, c: [] });
+    p.props.document['liveCheck:2026-01-01T00:00:02Z:b'] = JSON.stringify({ t: '2026-01-01T00:00:02Z', a: 'sheetEditAction', i: 'sheet.ignored', s: 'PASS', ms: 1, c: [] });
+    p.props.document['liveCheck:2026-01-01T00:00:03Z:c'] = JSON.stringify({ t: '2026-01-01T00:00:03Z', a: 'menuRefreshAll', s: 'FAIL', ms: 1, c: [] });
+    const e2 = p.execution(FILES);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(e2.eval(`liveCheckSummary()`))), { 'config.coedit': { PASS: 1, WARN: 0, FAIL: 0, SKIP: 0 }, 'sheet.ignored': { PASS: 1, WARN: 0, FAIL: 0, SKIP: 0 }, menuRefreshAll: { PASS: 0, WARN: 0, FAIL: 1, SKIP: 0 } });
+    const rows = JSON.parse(JSON.stringify(e2.eval(`liveCheckSidebarData(null)`).rows));
+    const byKey = Object.fromEntries(rows.map(r => [r.k.slice(-1), r]));
+    assert.deepStrictEqual([byKey.a.i, byKey.a.d, byKey.a.a], ['config.coedit', 'K1', 'sheetEditAction']);
+    assert.ok(/config sheet was edited or changed/.test(byKey.a.text));
+    assert.strictEqual(byKey.c.i, null);
+    assert.strictEqual(byKey.c.text, null);
+  });
+
+  test('live check jobs: the catalogue can be printed (liveCheckIntents) and describes every job in words', () => {
+    const ex = new FakePlatform().execution(FILES);
+    const text = ex.eval(`liveCheckIntents()`);
+    ['config.coedit', 'settings.refreshFrequency', 'settings.edit', 'sheet.ignored', 'change.ignored', 'agent.skipped'].forEach(n => assert.ok(new RegExp('^' + n.replace('.', '\\.') + ': .{20,}', 'm').test(text), n));
+  });
+
   // The sidebar: the details are coloured line by line. The two functions are taken out of the page and run against a minimal DOM.
   function sidebarFunctions() {
     const vm = require('vm');
@@ -353,5 +511,18 @@ module.exports = function register(t) {
     const html = read('Live Check Sidebar.html');
     assert.ok(/\.detail \.l\.FAIL\s*\{[^}]*color: #a50e0e[^}]*background: #fce8e6/.test(html));
     assert.ok(/\.detail \.l\.WARN\s*\{[^}]*color: #7a4f01[^}]*background: #fef3c7/.test(html));
+  });
+
+  test('live check sidebar: the headline of a run is its job with the sheet, else the entry point; "via" and the description are shown for jobs', () => {
+    const vm = require('vm');
+    const html = read('Live Check Sidebar.html');
+    const m = html.match(/function runLabel\(r\) \{[^\n]*\}/);
+    assert.ok(m, 'runLabel not found');
+    const runLabel = vm.runInNewContext('(' + m[0].replace('function runLabel', 'function') + ')');
+    assert.strictEqual(runLabel({ a: 'sheetEditAction', i: 'config.coedit', d: 'Konfiguracja 1' }), 'config.coedit [Konfiguracja 1]');
+    assert.strictEqual(runLabel({ a: 'sheetEditAction', i: 'sheet.ignored', d: null }), 'sheet.ignored');
+    assert.strictEqual(runLabel({ a: 'menuRefreshAll', i: null }), 'menuRefreshAll');
+    assert.ok(/via\.textContent = r\.i \? "via " \+ r\.a : ""/.test(html));
+    assert.ok(/name\.title = r\.s \+ \(r\.text \? " - " \+ r\.text : ""\)/.test(html));
   });
 };

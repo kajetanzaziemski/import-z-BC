@@ -26,6 +26,9 @@ function liveCheckSidebarData(clientToken){
     k: e.k,
     t: e.t,
     a: e.a,
+    i: e.i ?? null,                                // the job the router named (shown as the headline), a is then the entry point it came through
+    d: e.d ?? null,                                // the sheet it is about
+    text: e.i ? (LIVE_CHECK_INTENTS.find(x => x.intent == e.i) || {}).text ?? null : null,
     s: e.s == "RUN" && now - Date.parse(e.t) > LC_RUN_STALE_MS ? "LOST" : e.s,
     ms: e.ms,
     bad: e.c.filter(x => x[0] == "FAIL" || x[0] == "WARN").length

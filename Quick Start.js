@@ -37,7 +37,7 @@ function sheetEdit(e){
     recordInstallableSeen(e);   // before the power check: a powered-off agent that is still alive must be seen
     const powerOn = StatusManager.checkTriggerPower(e.triggerUid);
     agentLog("INSTALLABLE",fingerprint(e),`Power check of trigger ${e.triggerUid}: ${powerOn ? "ON - running the edit action" : "OFF or not logged - edit action SKIPPED (the edit was still reported to the simple trigger)"}.`);
-    if(!powerOn) return;
+    if(!powerOn){ Controller.intent("agent.skipped",{sheet: null, changeType: null}); return; }
     sheetEditAction(e);
   });
 }
@@ -48,8 +48,7 @@ function sheetEdit(e){
  *
  **/
 function sheetEditAction(e){
-  if(e.source.getActiveSheet().getName() == MainSettings.getSettingsSheetName()) getMainSettings().sheetEdit(e);
-  updateAfterEdit(e.source.getActiveSheet().getName(),e);  
+  Router.edit(e);     // which job the edit means is decided in Router.js
 }
 
 function sheetChange(e){
@@ -63,21 +62,11 @@ function sheetChange(e){
 
 function sheetChangeAction(e){
   dbgLog(e.changeType);
-  if(e.changeType=="EDIT" || e.changeType=="FORMAT") return;
-  updateAfterEdit(e.source.getActiveSheet().getName());
+  Router.change(e);
 }
 
 function updateAfterEdit(sheetName,editEvent){
-  if(getMainSettings().isConfigSheet(sheetName)){
-    let shCoed = new SheetCoeditor(sheetName,true);
-    try{
-    runFunctionWithLock(() => shCoed.sheetEdit(editEvent),sheetName+"_coedit");
-    } catch(e) {
-      shCoed.switchReadingControl(false);
-      throw e;
-    }
-    shCoed.switchReadingControl(false);
-  };
+  if(getMainSettings().isConfigSheet(sheetName)) AnalyseConfig.run(sheetName,editEvent);
 }
 
 var mStgs = null;

@@ -38,6 +38,14 @@ const Controller = (function () {
     if(typeof liveCheckNote === "function") liveCheckNote(text);
   }
 
+  /**
+   * Tells the live check what the running entry point is actually doing (the router calls it): the same technical trigger can mean very different
+   * jobs. data = { sheet, changeType }. Nothing happens without the live check files.
+   */
+  function intent(name, data) {
+    if(typeof liveCheckIntent === "function") liveCheckIntent(name, data);
+  }
+
   /** Live check around an entry point that does not use run(). Passes the result and errors through. */
   function checked(actionName, actionFn, input) {
     if(typeof liveCheckGuard !== "function") return actionFn();
@@ -87,5 +95,5 @@ const Controller = (function () {
     return result;
   }
 
-  return { registerInit, registerClosing, registerClosingOnce, run, checked, checkInput, checkNote };
+  return { registerInit, registerClosing, registerClosingOnce, run, checked, checkInput, checkNote, intent };
 })();
