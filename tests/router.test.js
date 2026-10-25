@@ -137,10 +137,14 @@ module.exports = function register(t) {
     });
   });
 
-  test('change: KNOWN QUIRK pinned - the action runs BEFORE the power check, so a powered-OFF trigger still co-edits (bugs-todo / trigger-management #5)', () => {
+  test('change: a trigger that is powered OFF (or not logged) does nothing - the power is looked at before the action, as for an edit (was: the action ran first)', () => {
     const sc = scenario({ power: false });
     sc.change();
-    assert.deepStrictEqual(sc.calls().map(c => c[0]), ['coed.new', 'coed.sheetEdit', 'reading']);
+    assert.deepStrictEqual(sc.calls(), []);
+    const unlogged = scenario();
+    unlogged.p.props.document.docTriggerArray = '[]';
+    unlogged.change();
+    assert.deepStrictEqual(unlogged.calls(), []);
   });
 
   test('change: the use of the trigger is logged (lastUsed moves) and a failing co-edit idles the reading cell and gives the error back', () => {
@@ -216,6 +220,7 @@ module.exports = function register(t) {
     assert.deepStrictEqual(intents({ active: 'Ustawienia' }, 'edit'), ['settings.edit']);
     assert.deepStrictEqual(intents({ changeType: 'FORMAT' }, 'change'), ['change.ignored']);
     assert.deepStrictEqual(intents({ power: false }, 'edit'), ['agent.skipped']);
+    assert.deepStrictEqual(intents({ power: false }, 'change'), ['agent.skipped']);
     assert.deepStrictEqual(intents({ active: 'Arkusz1', changeType: 'INSERT_GRID' }, 'change'), ['sheet.ignored']);
   });
 

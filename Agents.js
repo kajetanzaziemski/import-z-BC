@@ -70,11 +70,15 @@ const Agents = {
       dbgLog(`Actions for this item`+JSON.stringify(actions));
 
       if (!actions) {
-        // The table has no row for this combination (ON|OFF|V).
+        // (Every combination has a row; this is only for a table that was edited.)
         dbgLog(`No rule found for item ${itemId}, state ${key}`);
         return;
       }
 
+      if (actions.user === 'PowerOff') {
+        dbgLog(`Powering the user log entry of ${itemId} off.`);
+        getUserTriggerLog().setPowerOn(itemId,false);
+      }
       if (actions.user === 'Remove') {
         dbgLog(`Removing item with id ${itemId} from user log.`);
         getAgentManager().delete(itemId);

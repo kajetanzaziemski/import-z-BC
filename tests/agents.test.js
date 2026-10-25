@@ -184,6 +184,61 @@ module.exports = function register(t) {
     assert.deepStrictEqual(f.doc, ['trig-11:Edit:ON', 'trig-12:Change:ON']);
   });
 
+  test('agents: eviction takes the pair whose edit trigger was used LEAST recently (lastUsed), not the first in the log', () => {
+    const w = sixDocs();
+    w.doc('A').p.advance(3600);
+    w.doc('A').run(`sheetEdit({ triggerUid: 'trig-1', range: { getSheet: () => ({ getName: () => 'S' }), getA1Notation: () => 'B2' } })`);      // A's agent works: used now
+    w.doc('B').p.advance(60);
+    click(w.doc('F'));
+    const f = w.doc('F').state();
+    assert.deepStrictEqual(f.pairs, [1, 3, 4, 5, 6].map(pairOf), "B's pair (never used since it was installed) went, A's stayed");
+    assert.deepStrictEqual(f.project.filter(x => /@B$/.test(x)), []);
+  });
+
+  test('agents: getOldest copes with missing or unreadable dates (they count as oldest) and with Date objects and ISO strings alike', () => {
+    const w = world(), a = w.doc('A');
+    const r = a.run(`(() => { const log = new UserTriggerLog();
+      const e = (id, used, created) => Object.assign(new TriggerInfoEntry(null), { triggerId: id, trigEventType: 'ON_EDIT', lastUsed: used, dateCreated: created });
+      log.triggerArray = [e('late', '2023-11-15T10:00:00.000Z', null), e('none', null, null), e('date', new Date('2023-11-14T10:00:00.000Z'), null), e('created', null, '2023-11-13T10:00:00.000Z')];
+      const order = []; while (log.triggerArray.length) { const o = log.getOldest('ON_EDIT'); order.push(o.triggerId); log.deleteEntryWithTriggerId(o.triggerId); }
+      return order.join(','); })()`);
+    assert.strictEqual(r, 'none,created,date,late');
+  });
+
+  test('agents: deleting a trigger given as an object (what installNew does with the document\'s old triggers) removes its log entries too', () => {
+    const w = world(), a = w.doc('A');
+    click(a);
+    a.run(`Controller.run('requestX', () => { TriggerGateway.deleteAllUserEditTriggersInDocument(); })`);
+    const s = a.state();
+    assert.deepStrictEqual(s.project, ['trig-2:sheetChange@A']);
+    assert.deepStrictEqual(s.doc, ['trig-2:Change:ON'], 'the edit entry is gone from the document log');
+    assert.deepStrictEqual(s.user, ['trig-2:Change:ON@A'], 'and from the user log');
+  });
+
+  test('agents: installNew is all or nothing - if the change trigger cannot be created the edit trigger is deleted again, nothing is logged, the error goes on', () => {
+    const w = world(), a = w.doc('A');
+    const base = a.p.scriptApp();
+    const failing = Object.assign({}, base, { newTrigger: fn => { const b = base.newTrigger(fn); if (fn === 'sheetChange') b.create = () => { throw new Error('boom'); }; return b; } });
+    assert.throws(() => a.run(`Controller.run('requestX', () => { getAgentManager().installNew(); })`, { ScriptApp: failing }), /boom/);
+    assert.deepStrictEqual(a.state(), { project: [], doc: [], user: [], pairs: [], suspect: null });
+    click(a);                                                     // and the next try works (trig-1 was the rolled-back edit trigger)
+    assert.deepStrictEqual(a.state().pairs, [['trig-2', 'trig-3']]);
+  });
+
+  test('agents: installNew counts the user\'s triggers first - a pair that would pass the quota of 20 is refused with a message, nothing is deleted or created', () => {
+    const w = world(), a = w.doc('A');
+    for (let i = 0; i < 19; i++) a.p.triggers.push({ id: 'time-' + i, fn: 'autoRefreshHandler', type: 'CLOCK', source: null, params: {} });
+    assert.throws(() => a.run(`Controller.run('requestX', () => { getAgentManager().installNew(); })`), /limit triggerów/);
+    assert.strictEqual(a.p.triggers.length, 19);
+    a.p.triggers.pop();                                           // 18 + 2 = 20: exactly the quota
+    click(a);
+    assert.strictEqual(a.p.triggers.length, 20);
+    assert.deepStrictEqual(a.state().pairs.length, 1);
+    // an existing pair of this document does not count against itself when it is replaced
+    a.run(`forceAgentRefresh()`);
+    assert.strictEqual(a.p.triggers.length, 20);
+  });
+
   test('agents: quirk - eviction cannot touch the other document: its document log still says ON (the add-on there believes it has agents) and the user log keeps the evicted entries', () => {
     const w = sixDocs();
     click(w.doc('F'));
@@ -245,9 +300,9 @@ module.exports = function register(t) {
     'ON|ON|V': [1, 1, 1], 'ON|ON|X': [0, 0, 0], 'ON|OFF|X': [0, 0, 0], 'ON|X|V': [1, 0, 1], 'ON|X|X': [0, 0, 0],
     'OFF|ON|V': [0, 0, 0], 'OFF|ON|X': [0, 0, 0], 'OFF|OFF|V': [0, 0, 0], 'OFF|OFF|X': [0, 0, 0], 'OFF|X|V': [0, 0, 0], 'OFF|X|X': [0, 0, 0],
     'X|ON|V': [1, 1, 1], 'X|ON|X': [0, 1, 0], 'X|OFF|V': [0, 0, 0], 'X|OFF|X': [0, 1, 0], 'X|X|V': [0, 0, 1], 'X|X|X': [0, 0, 0],
-    'ON|OFF|V': [1, 1, 1]                                                  // quirk: the one combination the table has no row for - nothing happens
+    'ON|OFF|V': [1, 0, 0]                                                  // the document says OFF (it wins): its entry goes, the trigger is uninstalled, the user entry stays powered OFF (tombstone)
   };
-  Object.keys(OUTCOMES).forEach(key => test(`agents: clean-up of one item in the state user|doc|script = ${key}${key === 'ON|OFF|V' ? ' (quirk: no rule, nothing happens)' : ''}`, () => {
+  Object.keys(OUTCOMES).forEach(key => test(`agents: clean-up of one item in the state user|doc|script = ${key}${key === 'ON|OFF|V' ? ' (the document wins: doc entry removed, trigger uninstalled, user entry powered OFF)' : ''}`, () => {
     const [u, d, s] = key.split('|');
     const w = world(), a = w.doc('A');
     const entry = on => ({ triggerId: 'trig-1', trigEventType: 'ON_EDIT', trigFunction: 'sheetEdit', dateCreated: '2023-11-14T22:00:00.000Z', lastUsed: '2023-11-14T22:00:00.000Z', SsId: 'A', powerOn: on });
@@ -258,6 +313,7 @@ module.exports = function register(t) {
     const st = a.state();
     const got = [st.user.some(x => x.startsWith('trig-1:')) ? 1 : 0, st.doc.some(x => x.startsWith('trig-1:')) ? 1 : 0, st.project.some(x => x.startsWith('trig-1:')) ? 1 : 0];
     assert.deepStrictEqual(got, OUTCOMES[key], key);
+    if (key === 'ON|OFF|V') assert.deepStrictEqual(st.user, ['trig-1:Edit:OFF@A'], 'the user log keeps a powered-OFF tombstone; the next clean-up (OFF|X|X) removes it');
   }));
 
   // ---- deleting -------------------------------------------------------------------------------------------------------------------------------
@@ -324,8 +380,11 @@ module.exports = function register(t) {
     const plan = ctx.__R.plan(new Map([['u1', 'ON'], ['both', 'OFF']]), new Map([['d1', 'ON'], ['both', 'OFF']]), new Map([['s1', true], ['both', true], ['gap', true]]));
     assert.deepStrictEqual(JSON.parse(JSON.stringify(plan.map(x => [x.itemId, x.key]))), [['u1', 'ON|X|X'], ['both', 'OFF|OFF|V'], ['d1', 'X|ON|X'], ['s1', 'X|X|V'], ['gap', 'X|X|V']]);
     assert.deepStrictEqual(JSON.parse(JSON.stringify(plan[1].actions)), { user: 'Remove', doc: 'Remove', script: 'Uninstall' });
-    const gap = ctx.__R.plan(new Map([['g', 'ON']]), new Map([['g', 'OFF']]), new Map([['g', true]]));
-    assert.strictEqual(gap[0].actions, undefined);
+    const every = ['ON', 'OFF', 'X'].flatMap(u => ['ON', 'OFF', 'X'].flatMap(d => ['V', 'X'].map(s => [u, d, s])));
+    every.forEach(([u, d, s]) => {
+      const plan1 = ctx.__R.plan(new Map(u === 'X' ? [] : [['g', u]]), new Map(d === 'X' ? [] : [['g', d]]), new Map(s === 'X' ? [] : [['g', true]]));
+      if (plan1.length) assert.ok(plan1[0].actions, `a row for ${u}|${d}|${s}`);
+    });
   });
 
   test('rule: the agent service files touch neither the spreadsheet nor the UI (the alert and the sidebars are StatusManager\'s, the edit event is only read)', () => {

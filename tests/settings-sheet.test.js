@@ -91,9 +91,8 @@ module.exports = function register(t) {
     `__ss.setLastRefresh(new Date(Date.UTC(2025, 5, 1, 8, 15)))`, `__ss.getLastRefresh()`], s => fillSettings(s, { configs: CONFIGS, noLast: true }), { noApiLook: true });
   same('setLastRefresh with no argument uses now (a fixed clock)', [
     `__ss.setLastRefresh()`, `__ss.getLastRefresh()`], s => fillSettings(s, { configs: CONFIGS }));
-  same('setLastRefresh then addNewSheetInfo then setLastRefresh again', [
-    `__ss.setLastRefresh(new Date(Date.UTC(2025, 5, 1, 8, 15)))`, `__ss.addNewSheetInfo('Z', 'Dane Z', true)`,
-    `__ss.setLastRefresh(new Date(Date.UTC(2025, 6, 2, 9, 0)))`, `__ss.getLastRefresh()`, `__ss.getSheetList()`], s => fillSettings(s, { configs: CONFIGS }));
+  same('setLastRefresh then addNewSheetInfo (the later setLastRefresh differs from the frozen class on purpose: see the test at the end)', [
+    `__ss.setLastRefresh(new Date(Date.UTC(2025, 5, 1, 8, 15)))`, `__ss.addNewSheetInfo('Z', 'Dane Z', true)`, `__ss.getSheetList()`], s => fillSettings(s, { configs: CONFIGS }));
 
   MODES.forEach(mode => {
     test('golden: the edit triggers are set up only when missing (same as before) [' + mode + ']', () => {
@@ -132,16 +131,21 @@ module.exports = function register(t) {
     vm.runInNewContext(fs.readFileSync(path.join(ROOT, 'Settings Grid.js'), 'utf8'), {});
   });
 
-  // The positions SettingsSheet keeps (lastRefreshPos, refreshFrequencyPos) are not moved when addNewSheetInfo inserts a row above them
-  // (a new config line goes after row 2 while there are no config lines). Pinned: the second setLastRefresh below writes into the row where
-  // lastRefresh WAS. See docs/bugs-todo.md.
-  MODES.forEach(mode => test('pinned quirk: after addNewSheetInfo the remembered lastRefresh row is stale [' + mode + ']', () => {
+  // The row numbers SettingsSheet remembers (lastRefreshPos, refreshFrequencyPos) follow a line that addNewSheetInfo inserts above them (a new config line goes
+  // after row 2 while there are no config lines). Before, the later setLastRefresh of the same run wrote into the row where lastRefresh WAS (bugs-todo #11);
+  // this is the one place where the new class intentionally differs from the frozen one.
+  MODES.forEach(mode => test('after addNewSheetInfo the remembered lastRefresh and refreshFrequency rows follow the insert [' + mode + ']', () => {
     const s = scope(mode, sh => fillSettings(sh, {}));
     s.run(`globalThis.__ss = new SettingsSheet(); __ss.addNewSheetInfo('N', 'Dane N', true); __ss.setLastRefresh(new Date(Date.UTC(2025, 6, 2, 9, 0)))`);
     const sh = s.book.sheets['Ustawienia'];
-    assert.strictEqual(sh.cell(6, 2).v, 'lastRefresh', 'the real lastRefresh row moved down by one');
-    assert.strictEqual(sh.cell(6, 4).v, (Date.UTC(2025, 2, 3, 10, 30) - Date.UTC(1899, 11, 30)) / 86400000, 'and kept the old time');
+    const ref = scope(mode, rb => fillSettings(rb, {}));          // the same time written on a sheet where nothing was inserted: what the cell should hold
+    ref.run(`new SettingsSheet().setLastRefresh(new Date(Date.UTC(2025, 6, 2, 9, 0)))`);
+    const serial = ref.book.sheets['Ustawienia'].cell(5, 4).v;
+    assert.strictEqual(sh.cell(6, 2).v, 'lastRefresh', 'the lastRefresh line moved down by one');
+    assert.strictEqual(sh.cell(6, 4).v, serial, 'and got the new time');
     assert.strictEqual(sh.cell(5, 2).v, 'headerGeneralSettings');
-    assert.ok(typeof sh.cell(5, 4).v === 'number', 'the time went to the old position (now the headerGeneralSettings line)');
+    assert.strictEqual((sh.cell(5, 4) || { v: '' }).v, '', 'the line above it is not touched');
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(s.run(`[__ss.lastRefreshPos, __ss.refreshFrequencyPos]`))), [6, 7]);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(s.run(`__ss.readRefreshFrequency()`))), { freq: 12, unit: 'hrs' }, 'the frequency is read from where it is now');
   }));
 };

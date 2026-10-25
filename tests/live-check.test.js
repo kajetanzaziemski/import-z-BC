@@ -457,10 +457,10 @@ module.exports = function register(t) {
     assert.strictEqual(s.status('power OFF or trigger not logged: edit action skipped, sheets untouched'), 'PASS', 'the trigger side stays');
   });
 
-  test('live check jobs: a powered-off CHANGE trigger still co-edits (known quirk): the job is not asserted, as before', () => {
+  test('live check jobs: a powered-off CHANGE trigger skips the change and announces agent.skipped, like an edit (was: it still co-edited and the job was not asserted)', () => {
     const r = agentRun({ entry: 'change', power: false });
-    assert.strictEqual(r.entry.i, 'config.coedit');
-    assert.strictEqual(r.status('job not asserted'), 'SKIP');
+    assert.strictEqual(r.entry.i, 'agent.skipped');
+    assert.strictEqual(r.status('the trigger is powered off or not logged'), 'PASS');
   });
 
   test('live check jobs: a WRONGLY routed edit is a FAIL (each job re-derives its premise from the event, not from the router)', () => {

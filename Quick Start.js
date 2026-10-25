@@ -56,8 +56,9 @@ function sheetChange(e){
   Controller.registerInit(() => Agents.markUsed(e.triggerUid));
   Controller.checkInput("sheetChangeAction",{e});
   Controller.run("sheetChangeAction",() => {
+    // powered off or not logged: the change is skipped, like an edit (the power is looked at BEFORE the action)
+    if(!Agents.isPowered(e.triggerUid)){ Controller.intent("agent.skipped",{sheet: null, changeType: null}); return; }
     sheetChangeAction(e);
-    if(!Agents.isPowered(e.triggerUid)) return;
   });
 }
 

@@ -2,7 +2,7 @@
 // AGENT RECONCILER: decides what to do with every trigger id that any of the three records knows about. Pure: no platform call, no log access,
 // no global - it gets three maps and returns a plan; Agents.cleanUp() (Agents.js) reads the maps and carries the plan out.
 // States: user / document log: 'ON' | 'OFF' | 'X' (not logged); project triggers: 'V' (the trigger exists) | 'X'.
-// docs/agent-lifecycle.md explains the rows; tests/agents.test.js pins the outcome of every combination (one combination has no row: ON|OFF|V).
+// docs/agent-lifecycle.md explains the rows; tests/agents.test.js pins the outcome of every combination (all 18 have a row).
 // ---------------------------------------------------------------------------
 
 // key = `${userState}|${docState}|${scriptState}`
@@ -11,6 +11,7 @@ const ACTION_TABLE = {
   'ON|ON|V':   { user: null,        doc: null,     script: null },
   'ON|ON|X':   { user: 'Remove',    doc: 'Remove', script: null },
   'ON|OFF|X':  { user: 'Remove',    doc: 'Remove', script: null },
+  'ON|OFF|V':  { user: 'PowerOff', doc: 'Remove', script: 'Uninstall' },   // the document's OFF wins: its entry goes, the trigger is uninstalled, the user entry stays as an OFF tombstone
   'ON|X|V':    { user: null,    doc: null,     script: null },
   'ON|X|X':    { user: 'Remove',    doc: null,     script: null },
   'OFF|ON|V':  { user: 'Remove',    doc: 'Remove', script: 'Uninstall' },

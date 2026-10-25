@@ -1,3 +1,5 @@
+const TRIGGER_QUOTA_PER_USER = 20;       // Apps Script: triggers per user per script
+
 class AgentManager{
 	constructor(key,limit=5){
 		this.agentStorage = Store.array(key,"user");
@@ -51,10 +53,24 @@ class AgentManager{
 		return this.deleteOldest().installNew();
 	}
 
+	/**
+	 * Replaces the user's edit / change triggers of this document with a new pair. All or nothing: it first counts the user's triggers (the platform allows
+	 * TRIGGER_QUOTA_PER_USER per user and script; the ones of this document that are about to be replaced do not count) and refuses a pair that would not fit,
+	 * and when the change trigger cannot be created the edit trigger is deleted again.
+	 */
 	installNew(){
+		const mine = TriggerGateway.getUserTriggers().filter(trigger => [ScriptApp.EventType.ON_EDIT,ScriptApp.EventType.ON_CHANGE].includes(trigger.getEventType()));
+		const others = TriggerGateway.getProjectTriggers().length - mine.length;
+		if(others + 2 > TRIGGER_QUOTA_PER_USER) throw new SimpleError(`Nie można zainstalować agenta: masz już ${others} triggerów tego dodatku, a limit platformy to ${TRIGGER_QUOTA_PER_USER} na użytkownika (limit triggerów). Usuń zbędne triggery (menu Narzędzia programisty -> Wszystkie triggery).`);
 		TriggerGateway.deleteAllUserEditTriggersInDocument().deleteAllUserChangeTriggersInDocument();
 		let editId = TriggerGateway.createOnEditTrigger("sheetEdit");
-		let changeId = TriggerGateway.createOnChangeTrigger("sheetChange");
+		let changeId;
+		try{
+			changeId = TriggerGateway.createOnChangeTrigger("sheetChange");
+		} catch(e) {
+			TriggerGateway.deleteTrigger(editId);
+			throw e;
+		}
 		this.saveToStorageArray(editId,changeId);
 		return editId;
 	}
@@ -140,7 +156,8 @@ class TriggerGateway{
   			() => ScriptApp.deleteTrigger(trigger),
   			"Unknown Error occured when attempting to delete trigger "+trigId
   		);
-  		if(getDocumentTriggerLog().deleteEntryWithTriggerId(trigId,true)) getUserTriggerLog().deleteEntryWithTriggerId(trigId);
+  		const id = typeof(trigId)=='string' ? trigId : trigger?.getUniqueId();      // the log entries are found by id, also when the trigger itself was passed
+  		if(getDocumentTriggerLog().deleteEntryWithTriggerId(id,true)) getUserTriggerLog().deleteEntryWithTriggerId(id);
   		return this;
   	}
 
@@ -280,8 +297,10 @@ class TriggerLog{
 		return this.triggerArray.filter(elem => elem.trigFunction == triggerFunction).filter(elem => elem.powerOn == (powerOn ?? elem.powerOn));
 	}
 
+	/** The entry of this event type that was used least recently (lastUsed, else dateCreated); one with no readable date counts as the oldest. */
 	getOldest(triggerEventType){
-		return this.getAllOfType(triggerEventType).sort((a,b)=>b.lastUsed-a.lastUsed)[0] ?? null;
+		const time = entry => { const t = new Date(entry.lastUsed ?? entry.dateCreated).getTime(); return isNaN(t) ? -Infinity : t; };
+		return this.getAllOfType(triggerEventType).sort((a,b)=> time(a) < time(b) ? -1 : time(a) > time(b) ? 1 : 0)[0] ?? null;
 	}
 
 	getPowerInfo(triggerId){
