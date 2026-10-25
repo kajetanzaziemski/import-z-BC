@@ -100,9 +100,10 @@ const Controller = (function () {
       initActions.forEach(fn => fn(ctx));
       result = actionFn(ctx);
     } catch (err) {
-      error = err;
-      console.error(`[${actionName}]\n ${err.stack || err}`);
-      if(e instanceof UnknownError) throw e.unknownError;
+      console.error(`[${actionName}]\n ${err.stack || err}`);       // the wrapper is logged whole: its message says where the error happened
+      // An UnknownError only wraps an error that was not expected (TriggerWrapper._safeRun ...): what goes on to the caller is the original one.
+      // Set here, not thrown, so that the closing actions and the live check still get their turn.
+      error = err instanceof UnknownError ? err.unknownError : err;
     } finally {
       // by index and length read every time: what a closing action registers is run after the ones already queued
       for(let i = 0; i < closingActions.length; i++) {

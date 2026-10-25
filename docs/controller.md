@@ -21,7 +21,7 @@ run(name, fn, e)
   2. name starts with "menu"     -> the add-on is switched ON  (settings sheet name ensured; one status check registered for the end)
   3. gate: add-on OFF and the name does not start with "request"  -> skipped, returns null (nothing registered before runs)
   4. initial actions (registerInit), then fn(ctx)           ctx = { event, actionName, registerClosing, data }
-  5. an error is logged (console.error) and remembered
+  5. an error is logged whole (console.error) and remembered; an `UnknownError` (the wrapper of an unexpected error, e.g. from `TriggerWrapper`) is replaced by the original error it carries, which is what the caller gets
   6. closing actions, in order, each in its own try/catch - also after an error; actions registered WHILE closing run after the queued ones
   7. live check: judge the outcome; rethrow the remembered error, else return fn's result
 ```
@@ -37,6 +37,5 @@ Name prefixes: `menu…` = the user chose something in the add-on menu (so the a
 Also: user alerts are registered as closing actions, so they appear after the state is saved.
 
 ## Known, left alone
-- `if(e instanceof UnknownError) throw e.unknownError;` in `run` tests the event parameter `e`, not the caught error: the unwrapping never happens.
 - A second top-level run in the same execution (the script editor, tests) does not save what the memoised state objects changed (their save was registered when they were built, in the first run). Production never has a second run.
 - `onOpen` keeps `authMode != NONE` as the condition for the run (`LIMITED` included), as before.

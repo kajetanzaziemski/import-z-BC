@@ -246,4 +246,35 @@ module.exports = function register(t) {
     });
   });
 
+
+  // ---- UnknownError: the caller gets the original error ----------------------------------------------------------------------------------------
+  test('controller: an UnknownError thrown by the action is replaced by the original error it wraps; the wrapper is logged whole; closing actions still run', () => {
+    const { p, ex, log } = setup();
+    ex.eval(`globalThis.__inner = new TypeError('the original');
+             globalThis.__thrown = null;
+             try { Controller.run('requestA', () => { Controller.registerClosing(() => __log.push('closing')); throw new UnknownError('while creating the trigger', __inner); }); }
+             catch (err) { __thrown = err; }`);
+    assert.strictEqual(ex.eval(`__thrown === __inner`), true, 'the very same original error object');
+    assert.deepStrictEqual(plain(log), ['closing']);
+    assert.ok(p.consoleErrors.some(m => /\[requestA\]/.test(m) && /while creating the trigger/.test(m)), 'the wrapper with its context message is in the log: ' + p.consoleErrors.join('|'));
+  });
+
+  test('controller: an UnknownError without an original error gives a SimpleError with its message; other errors are passed on as they are', () => {
+    const { ex } = setup();
+    ex.eval(`globalThis.__t = null; try { Controller.run('requestA', () => { throw new UnknownError('no inner'); }); } catch (err) { __t = err; }`);
+    assert.deepStrictEqual(plain(ex.eval(`[__t instanceof SimpleError, __t.message]`)), [true, 'no inner']);
+    const ordinary = setup();
+    ordinary.ex.eval(`globalThis.__same = new RangeError('plain'); globalThis.__t = null; try { Controller.run('requestA', () => { throw __same; }); } catch (err) { __t = err; }`);
+    assert.strictEqual(ordinary.ex.eval(`__t === __same`), true);
+  });
+
+  test('controller: an UnknownError from a closing-phase-free action also reaches the live check as the original error (the check sees what the caller gets)', () => {
+    const p = new FakePlatform();
+    p.props.document.importSettingsArray = JSON.stringify({ addonStatus: true, importSheetName: 'Ustawienia' });
+    const seen = [];
+    const ex = p.execution(FILES, { __seen: seen });
+    ex.eval(`globalThis.liveCheckBegin = () => ({}); globalThis.liveCheckEnd = (frame, error) => __seen.push(error && error.message);
+             try { Controller.run('requestA', () => { throw new UnknownError('wrapper', new Error('inner message')); }); } catch (err) {}`);
+    assert.deepStrictEqual(plain(seen), ['inner message']);
+  });
 };
