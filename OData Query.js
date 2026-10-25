@@ -51,10 +51,10 @@ class ODataQuery {
           this.addFilter(...q.slice(1));
           break;
         case "filterLogic": 
-          this.setFilterLogic(q[1],q[2] ?? q[3]);
+          if(q[1]) this.setFilterLogic(q[1],q[2] ?? q[3]);
           break;
         case "orderBy": 
-          this.setOrderBy(q[1],q[2] ?? q[3]);
+          if(q[1]) this.setOrderBy(q[1],q[2] ?? q[3]);       // no field chosen: nothing to order by
           break;
         case "limit": 
           this.setLimit(q[1] ?? q[2] ?? q[3]);
@@ -120,7 +120,7 @@ class ODataQuery {
   }
 
   addFilter(filteringField,filterExpression,filterValue){
-    if(filteringField==null || this.letterFormat(filterExpression)==null || filterValue==null) return this;
+    if(filteringField==null || filteringField==='' || this.letterFormat(filterExpression)==null || filterValue==null) return this;
     var filter1 = {
       field: filteringField,
       expr: this.letterFormat(filterExpression),

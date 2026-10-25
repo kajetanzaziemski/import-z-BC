@@ -1,3 +1,9 @@
+// How many cells (counted from column B, with the label in B and the option word in C) each line of the config sheet is made of. What stands to the right of
+// them is stale input (a shorter line pasted over a longer one): it is not part of the query, and the sheet shows it greyed out (Config Grid.js builds its
+// conditional formatting from this table). An option word that is not in the table is just the word (width 2).
+const QUERY_OPTION_WIDTHS = {select: 3, limit: 3, filterLogic: 4, orderBy: 4, filter: 5};
+const LINE_WIDTH_TABLE = 2;       // table / extend: the label and the name
+
 class CoedOption{
   constructor(values,dataValidationTickets,cct,table){
     this.label = values[0];
@@ -314,9 +320,20 @@ class CCTImportConfig extends CoedContentTracker{
     let res = [];
     this.fixRegister.allEntries(queryType).forEach(entry => {
       // dbgLog(entry.key + " _at_ "+entry.rowNumber);
-      res.push(this.lines[entry.rowNumber].option.getLabelChain().slice(1));
+      res.push(this.queryLineCells(this.lines[entry.rowNumber].option.getLabelChain().slice(1)));
     });
     return rectArray(res,4);
+  }
+
+  /**
+   * The cells of a query line (the option word first) that count: no more than the width of that option, and none after the first empty one - a line that is
+   * not finished yet has nothing to say beyond its gap. The empty cell itself stays (the query sees "chosen nothing here").
+   */
+  queryLineCells(cells){
+    const width = (QUERY_OPTION_WIDTHS[cells[0]] ?? 2) - 1;
+    const cut = cells.slice(0,width);
+    const gap = cut.findIndex(cell => cell === "" || cell === null || cell === undefined);
+    return gap < 0 ? cut : cut.slice(0,gap + 1);
   }
 
   getTableQueryArray(){
