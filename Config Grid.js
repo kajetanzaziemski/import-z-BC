@@ -125,6 +125,10 @@ const ConfigGrid = {
    */
   lines(sheetName) {
     const L = CONFIG_LAYOUT;
+    // Flush first: an execution that reads without flushing can see the sheet as it was a moment ago (the probes on a real sheet showed reads a write behind,
+    // ~1.5 s, and a flush in the reading execution bringing them up to date: docs/coedit-tracking.md). The co-edit must not read the lines from before the
+    // previous co-edit's inserts.
+    SpreadsheetApp.flush();
     const grid = Grid.open({ sheetName: sheetName });
     if (!grid) return null;
     // the last row from the first line down that has anything in B-F (L.startRow - 1 when there is nothing)

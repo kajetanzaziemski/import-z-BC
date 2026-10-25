@@ -132,4 +132,12 @@ module.exports = function register(t) {
     assert.ok(!/COUNTBLANK|COLUMN\(\)|ConditionalFormat/.test(text));
     assert.ok(/setLineFormats\(/.test(text));
   });
+
+  ['api', 'service'].forEach(mode => test(`reading the lines flushes first - reads without a flush were seen a moment behind on a real sheet [${mode}]`, () => {
+    const s = scope(mode);
+    s.run(`ConfigGrid.create('K')`);
+    s.run(`globalThis.__order = []; const f = SpreadsheetApp.flush; SpreadsheetApp.flush = () => { __order.push('flush'); f(); }; const o = Grid.open; Grid.open = spec => { __order.push('open'); return o(spec); };
+      ConfigGrid.lines('K');`);
+    assert.deepStrictEqual(JSON.parse(s.run('JSON.stringify(__order)')), ['flush', 'open']);
+  }));
 };

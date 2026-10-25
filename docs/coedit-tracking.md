@@ -40,3 +40,10 @@ How to read it:
 ## What is already done about it (safeguard, harmless if the hypothesis is wrong)
 Each co-edit records what it left (`coeditExpected:<sheet>` = time, rows, hash). The next co-edit that reads FEWER lines than that within 30 s waits 1.5 s (then 2.5 s more) and reads again before it
 decides anything (`SheetCoeditor.confirmFresh_`). If the lines come back, the doubled pair never happens; if they never do, the trace says so.
+
+## Result of the probes on the real sheet (2026-10-25)
+- No reading was older than 2 s, the lock is exclusive (the waiter got it 50 ms after the holder released it): **H2 is out**, and H1 is not "the execution sees an old snapshot for good".
+- But the readings *without a flush* were consistently **one write behind** (about 1.5 s: `same` / `refetched` = 1,2,3 while `afterFlush` / `reopened` / `property` had 2,3,4), and they caught up as soon as the reader called
+  `SpreadsheetApp.flush()`. So an execution that reads without flushing sees the sheet a moment ago - enough for a co-edit that starts right after another one committed to miss the lines that one inserted.
+- Counter-measures now in: `ConfigGrid.lines()` flushes before every read, and the earlier safeguard (`confirmFresh_`) still waits and reads again when the lines are fewer than the previous co-edit left.
+  If the doubled pairs do not come back, `coeditTrace()` shows whether the safeguard was needed (`stale-confirmed`); if it never is, it can go.
