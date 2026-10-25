@@ -49,6 +49,7 @@ module.exports = function register(t) {
 
   const compact = book => {
     const s = book.sheets['K'].snapshot();
+    delete s.condRules;                    // the grey rules for stale cells are new (tests/stale-grey.test.js); the frozen class knows nothing of them
     return JSON.parse(JSON.stringify(s));
   };
 

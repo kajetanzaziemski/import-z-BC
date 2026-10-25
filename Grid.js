@@ -22,6 +22,7 @@
 //   - data validation: lists and dates (plain specs, or a SpreadsheetApp DataValidation), notes in the array form
 //   - Date values are read and written in both paths (the API path converts to / from serial numbers)
 //   - autoResizeColumns
+//   - grid.setFormulaFontColors(range, rules, ownedFormulas): conditional formats (custom formula -> font colour), replacing the caller's own rules and no others
 //   - grid.getTimeZone(): the spreadsheet's time zone
 //   - Grid.exists(sheetName): whether the sheet is there, without reading it
 // The wyceny "reset from a template" path is kept but nothing in import-z-BC uses it and it has no tests here.
@@ -77,8 +78,20 @@ class Grid {
     this.formats = [];                           // [{ r1, c1, r2, c2, props: { bold, size, color, vAlign, wrap, numFmt } }]
     this.validations = {};                       // 'row,col' -> spec ({ list, strict, dropdown } / { date: true }) or null (= remove the validation)
     this.colFits = [];                           // [{ first, count }]: columns fitted to their content at the end of the commit
+    this.condSets = [];                          // [{ range: { r1, c1, r2?, c2 }, rules: [{ formula, fontColor }], owned: [formula] }]: conditional formats set by the operation
     this.tz = init.tz || null;                   // the spreadsheet's time zone (Date <-> serial number); read lazily when needed
     this.maxCols = init.maxCols || init.cols;    // columns of the sheet (grows with inserts and with writes past the last column)
+  }
+
+  /**
+   * Conditional formats: for `range` ({ r1, c1, r2, c2 }; r2 missing = down to the last row of the sheet) the rules `[{ formula, fontColor }]` (a custom
+   * formula, written for the top-left cell of the range, that turns the font to a colour). `ownedFormulas` are the formulas the caller manages: the
+   * sheet's custom-formula rules with one of them are replaced by `rules` wherever they are (a paste splits a rule into pieces); every other rule is
+   * left as it is, in its place. When the sheet already has exactly these rules nothing is written.
+   */
+  setFormulaFontColors(range, rules, ownedFormulas) {
+    rules.forEach(x => colorToApi_(x.fontColor));              // a bad colour fails now, not at the commit
+    this.condSets.push({ range: { r1: range.r1, c1: range.c1, r2: range.r2, c2: range.c2 }, rules: rules.map(x => ({ formula: x.formula, fontColor: x.fontColor })), owned: ownedFormulas.slice() });
   }
 
   // --- the Sheet API slice ---------------------------------------------------
@@ -294,7 +307,7 @@ class Grid {
     const sheet = ss.insertSheet(this.sheetName);
     if (sheetsApiAvailable_()) {
       SpreadsheetApp.flush();                    // the Sheets API has to see the new sheet
-      this.source = { kind: 'api', ssId: ss.getId(), sheetId: sheet.getSheetId(), rowCount: sheet.getMaxRows(), columnCount: sheet.getMaxColumns(), tpl: null, rowGroups: [] };
+      this.source = { kind: 'api', ssId: ss.getId(), sheetId: sheet.getSheetId(), rowCount: sheet.getMaxRows(), columnCount: sheet.getMaxColumns(), tpl: null, rowGroups: [], cond: [] };
     } else {
       this.source = { kind: 'service', sheet: sheet };
     }
@@ -310,7 +323,7 @@ class Grid {
     if (this._frozen && this._frozen.rows !== null && this._frozen.rows !== undefined) this.frozenRows = this._frozen.rows;
     this.ops = []; this.dirty = {}; this.notes = {}; this.checks = {}; this.validations = {};
     this.aligns = []; this.fills = []; this.borders = []; this.formats = []; this.rowFormats = []; this.afterOps = [];
-    this.rowSizes = {}; this.fitRows = []; this.colFits = []; this.active = null;
+    this.rowSizes = {}; this.fitRows = []; this.colFits = []; this.active = null; this.condSets = [];
     this.anchorRow0 = this.anchorRow;
     this.sheetAnchorRow = this.anchorRow;
   }
@@ -549,12 +562,57 @@ class Grid {
       if (rowCount > from) req.push({ autoResizeDimensions: { dimensions: { sheetId: sid, dimension: 'ROWS', startIndex: from, endIndex: rowCount } } });
     }
 
+    this._condRequestsApi(req, sid);
+
     Sheets.Spreadsheets.batchUpdate({ requests: req }, S.ssId);
 
     if (this.active) {                            // the selection is not part of the API
       const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(this.sheetName);
       sheet.setActiveRange(sheet.getRange(this.active[0], this.active[1]));
     }
+  }
+
+  /** The conditional format requests (Sheets API): delete the caller's rules that differ, add the wanted ones at the end. Updates what the grid knows of the sheet's rules. */
+  _condRequestsApi(req, sid) {
+    const S = this.source;
+    this.condSets.forEach(set => {
+      const r2 = set.range.r2 || this.maxRows;
+      const gridRange = { sheetId: sid, startRowIndex: set.range.r1 - 1, endRowIndex: r2, startColumnIndex: set.range.c1 - 1, endColumnIndex: set.range.c2 };
+      const apiRule = x => ({ ranges: [gridRange], booleanRule: { condition: { type: 'CUSTOM_FORMULA', values: [{ userEnteredValue: x.formula }] }, format: { textFormat: { foregroundColor: colorToApi_(x.fontColor) } } } });
+      const isOurs = rule => !!rule.booleanRule && rule.booleanRule.condition.type === 'CUSTOM_FORMULA' && set.owned.indexOf(rule.booleanRule.condition.values[0].userEnteredValue) >= 0;
+      const sig = (formula, color, ranges) => formula + '|' + hexOf_(color) + '|' + ranges.slice().sort().join(';');
+      const rangeKey = g => [g.startRowIndex, g.startColumnIndex, g.endRowIndex, g.endColumnIndex].join(',');
+      const existing = (S.cond || []).filter(isOurs).map(rule => sig(rule.booleanRule.condition.values[0].userEnteredValue, rule.booleanRule.format.textFormat.foregroundColor, rule.ranges.map(rangeKey))).sort();
+      const wanted = set.rules.map(x => sig(x.formula, x.fontColor, [rangeKey(gridRange)])).sort();
+      if (JSON.stringify(existing) === JSON.stringify(wanted)) return;
+      const list = (S.cond || []).slice();
+      for (let i = list.length - 1; i >= 0; i--) {                    // from the end: the indexes of the rules before stay valid
+        if (isOurs(list[i])) { req.push({ deleteConditionalFormatRule: { sheetId: sid, index: i } }); list.splice(i, 1); }
+      }
+      set.rules.forEach(x => { const rule = apiRule(x); req.push({ addConditionalFormatRule: { rule: rule, index: list.length } }); list.push(rule); });
+      S.cond = list;
+    });
+  }
+
+  /** The conditional formats (Spreadsheet service): the same rule as for the API, in two calls (read the rules, set them) - none when nothing changes. */
+  _condServiceCommit(sheet) {
+    if (!this.condSets.length) return;
+    let rules = sheet.getConditionalFormatRules();
+    let changed = false;
+    this.condSets.forEach(set => {
+      const r2 = set.range.r2 || this.maxRows;
+      const rangeKey = rg => [rg.getRow(), rg.getColumn(), rg.getLastRow(), rg.getLastColumn()].join(',');
+      const sig = (formula, color, ranges) => formula + '|' + hexOf_(color) + '|' + ranges.slice().sort().join(';');
+      const isOurs = rule => { const bc = rule.getBooleanCondition(); return !!bc && String(bc.getCriteriaType()) === String(SpreadsheetApp.BooleanCriteria.CUSTOM_FORMULA) && set.owned.indexOf(bc.getCriteriaValues()[0]) >= 0; };
+      const existing = rules.filter(isOurs).map(rule => { const bc = rule.getBooleanCondition(); return sig(bc.getCriteriaValues()[0], bc.getFontColor(), rule.getRanges().map(rangeKey)); }).sort();
+      const target = sheet.getRange(set.range.r1, set.range.c1, r2 - set.range.r1 + 1, set.range.c2 - set.range.c1 + 1);
+      const wanted = set.rules.map(x => sig(x.formula, x.fontColor, [rangeKey(target)])).sort();
+      if (JSON.stringify(existing) === JSON.stringify(wanted)) return;
+      rules = rules.filter(rule => !isOurs(rule)).concat(set.rules.map(x =>
+        SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied(x.formula).setFontColor(x.fontColor).setRanges([target]).build()));
+      changed = true;
+    });
+    if (changed) sheet.setConditionalFormatRules(rules);
   }
 
   /** Spreadsheet-service fallback: structure first, then merges, cell runs, alignment, borders. */
@@ -684,6 +742,8 @@ class Grid {
     Object.keys(this.rowSizes).forEach(r => sheet.setRowHeight(Number(r), this.rowSizes[r]));
     this.colFits.forEach(x => sheet.autoResizeColumns(x.first, x.count));
     if (typeof sheet.autoResizeRows === 'function') this._fitRuns().forEach(run => sheet.autoResizeRows(run.first, run.count));
+
+    this._condServiceCommit(sheet);
 
     if (this.active) sheet.setActiveRange(sheet.getRange(this.active[0], this.active[1]));
   }
@@ -828,6 +888,12 @@ const COLOR_NAMES_ = {
 };
 
 /** "#rrggbb" / "#rgb" / "#aarrggbb" (what getFontColors returns; the alpha is dropped) / a basic colour name -> API colour. */
+/** A colour in either form (the name / hex the service gives, or the API's { red, green, blue } fractions) as "#rrggbb", for comparing. */
+function hexOf_(color) {
+  const c = typeof color === 'object' && color !== null ? color : colorToApi_(color);
+  return '#' + ['red', 'green', 'blue'].map(k => ('0' + Math.round((c[k] || 0) * 255).toString(16)).slice(-2)).join('');
+}
+
 function colorToApi_(color) {
   let h = COLOR_NAMES_[String(color).toLowerCase()] || String(color);
   if (/^#[0-9a-f]{3}$/i.test(h)) h = '#' + h.slice(1).split('').map(x => x + x).join('');
@@ -1018,7 +1084,7 @@ function loadGridViaApi_(spec, fresh) {
   const ranges = [q(from) + '!1:' + windowRows];
   if (fresh) ranges.push(q(spec.sheetName) + '!A1');
   const fields = 'properties(timeZone),sheets(properties(sheetId,title,gridProperties(rowCount,columnCount,frozenRowCount)),merges,rowGroups,' +
-                 'data(rowData(values(userEnteredValue,effectiveValue,effectiveFormat(numberFormat(type)))),columnMetadata(pixelSize)))';
+                 'data(rowData(values(userEnteredValue,effectiveValue,effectiveFormat(numberFormat(type)))),columnMetadata(pixelSize)),conditionalFormats)';
   const res = Sheets.Spreadsheets.get(ssId, { includeGridData: true, ranges: ranges, fields: fields });
 
   const byTitle = {};
@@ -1074,7 +1140,8 @@ function loadGridViaApi_(spec, fresh) {
       rowCount: gp.rowCount, columnCount: gp.columnCount,
       tpl: fresh ? { sheetId: src.properties.sheetId, rowCount: src.properties.gridProperties.rowCount, columnCount: src.properties.gridProperties.columnCount,
                      columnWidths: ((src.data && src.data[0] && src.data[0].columnMetadata) || []).map(c => (c && c.pixelSize) || 0) } : null,
-      rowGroups: fresh ? (edited.rowGroups || []) : []           // the groups of the sheet that is being reset: they are removed with it
+      rowGroups: fresh ? (edited.rowGroups || []) : [],          // the groups of the sheet that is being reset: they are removed with it
+      cond: edited.conditionalFormats || []                      // the conditional formats of the sheet (setFormulaFontColors replaces the caller's own)
     },
     sheetName: spec.sheetName,
     maxRows: Math.max(gp.rowCount, fresh ? src.properties.gridProperties.rowCount : 0), maxCols: gp.columnCount, tz: tz,

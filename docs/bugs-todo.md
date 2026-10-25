@@ -68,6 +68,12 @@ Found while building and testing the live check helpers (`docs/live-check.md`), 
 14. **Doubled `queryOption` / `extend` pairs after overlapping co-edits (real sheet, build `c06ab0e+`): OPEN, instrumented.** Not reproducible in the simulation except by modelling stale reads; hypotheses, probes and the flight recorder
     (`Coedit Trace.js`, `Concurrency Probe.js`) are in `docs/coedit-tracking.md`. A freshness safeguard (`confirmFresh_`) is in.
 
+15. **Stale cells in a query line (a shorter line pasted over a longer one): FIXED** (`my-todo.md` "Guarding against stale data in query area"). (a) The query is built from the cells each option is made of, counted from column B: table / extend 2,
+    select / limit 3 (so `select` is ONE field now - before, every cell to its right was a field), filterLogic / orderBy 4, filter 5, an unknown option word 2; anything to the right of that, and anything after the first empty cell of a line,
+    is not part of the query (`QUERY_OPTION_WIDTHS`, `Content Tracker.js`; tests/query-lines.test.js). orderBy / filterLogic with no field and a filter with an empty field are ignored. (b) The cells that do not count are shown grey by
+    conditional formatting (5 rules on B6:F, `ConfigGrid.greyRules`, set by the co-edit, tests/stale-grey.test.js): immediate, nothing to reset when the cell is filled in. Nothing is ever deleted. The formulas cannot run in the tests; they are checked
+    against the rules in words with a small evaluator (235 lines x 5 columns) and **have to be looked at once on a real sheet**.
+
 ## Status on `refactor-and-grid`
 
 - **#1 Settings writes lost in `sheetEdit` (and `onEdit`): FIXED in `Controller.run`.** A top-level run now keeps the closing actions that were registered before it started (the entry

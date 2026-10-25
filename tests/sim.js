@@ -42,6 +42,7 @@ class SimSheet {
     this.fitted = { rows: [], columns: [] };    // what autoResize was asked for
     this.borders = [];
     this.active = null;
+    this.condRules = [];          // conditional formats: { formula, color, ranges: [{ r1, c1, r2, c2 }] } (custom formula rules, font colour)
   }
   cell(r, c, create) {
     const k = key(r, c);
@@ -108,6 +109,11 @@ class SimSheet {
 
   /** Canonical, comparable content of the sheet (what a parity test compares between the two commit paths). */
   snapshot() {
+    const out = this.snapshot_();
+    if (this.condRules.length) out.condRules = this.snapshotCond_();
+    return out;
+  }
+  snapshot_() {
     const cells = {};
     Object.keys(this.cells).sort((a, b) => { const p = unkey(a), q = unkey(b); return p[0] - q[0] || p[1] - q[1]; }).forEach(k => {
       const x = this.cells[k];
@@ -120,11 +126,15 @@ class SimSheet {
       fitted: { rows: this.fitted.rows.slice(), columns: this.fitted.columns.slice() }
     };
   }
+  snapshotCond_() {
+    return this.condRules.map(x => ({ formula: x.formula, color: x.color, ranges: x.ranges.map(g => [g.r1, g.c1, g.r2, g.c2].join()) }));
+  }
 }
 
 class SimBook {
   /** opts.tz: the spreadsheet's time zone; opts.api: the Sheets advanced service is enabled. */
   constructor(opts) {
+    this.condWrites = 0;                         // conditional format writes (setConditionalFormatRules calls / add + delete requests)
     opts = opts || {};
     this.tz = opts.tz || 'Asia/Tokyo';
     this.api = opts.api !== false;
@@ -171,6 +181,8 @@ class SimBook {
     this.SpreadsheetApp = {
       WrapStrategy: { WRAP: 'WRAP', OVERFLOW: 'OVERFLOW', CLIP: 'CLIP' },
       DataValidationCriteria: { VALUE_IN_LIST: 'VALUE_IN_LIST', DATE_IS_VALID_DATE: 'DATE_IS_VALID_DATE' },
+      BooleanCriteria: { CUSTOM_FORMULA: 'CUSTOM_FORMULA' },
+      newConditionalFormatRule: () => book.ruleBuilder(),
       getActiveSpreadsheet: () => book.spreadsheet(),
       newDataValidation: () => book.dvBuilder(),
       flush() {}
@@ -190,6 +202,22 @@ class SimBook {
         return book.sheetObj(book.add(n));
       }
     };
+  }
+  /** SpreadsheetApp.newConditionalFormatRule(): custom formula + font colour + ranges, the only kind the Grid makes. */
+  ruleBuilder() {
+    const spec = { formula: null, color: null, ranges: [] };
+    const b = {
+      whenFormulaSatisfied: f => { spec.formula = f; return b; },
+      setFontColor: c => { spec.color = c; return b; },
+      setRanges: rs => { spec.ranges = rs.map(x => ({ r1: x.getRow(), c1: x.getColumn(), r2: x.getLastRow(), c2: x.getLastColumn() })); return b; },
+      build: () => this.ruleObj(spec)
+    };
+    return b;
+  }
+  ruleObj(spec) {
+    return { __spec: spec,
+      getBooleanCondition: () => ({ getCriteriaType: () => 'CUSTOM_FORMULA', getCriteriaValues: () => [spec.formula], getFontColor: () => spec.color }),
+      getRanges: () => spec.ranges.map(g => ({ getRow: () => g.r1, getColumn: () => g.c1, getLastRow: () => g.r2, getLastColumn: () => g.c2, getNumRows: () => g.r2 - g.r1 + 1, getNumColumns: () => g.c2 - g.c1 + 1 })) };
   }
   dvBuilder() {
     const spec = { allowInvalid: true };      // the platform default for a new rule: a warning, not a rejection
@@ -235,6 +263,8 @@ class SimBook {
       },
       insertRowsAfter: (after, n) => { call(); s.insertRows(after, n); },
       getParent: () => book.spreadsheet(),
+      getConditionalFormatRules: () => { call(); return s.condRules.map(x => book.ruleObj(JSON.parse(JSON.stringify(x)))); },
+      setConditionalFormatRules: rules => { call(); book.condWrites++; s.condRules = rules.map(r => JSON.parse(JSON.stringify(r.__spec))); },
       insertRowAfter: after => { call(); s.insertRows(after, 1); },
       insertColumnsAfter: (after, n) => { call(); s.insertCols(after, n); },
       deleteColumns: (from, n) => { call(); s.deleteCols(from, n); },
@@ -336,7 +366,8 @@ class SimBook {
     return { properties: { timeZone: this.tz }, sheets: sheets.map(s => {
       const out = {
         properties: { sheetId: s.id, title: s.title, gridProperties: { rowCount: s.rowCount, columnCount: s.colCount, frozenRowCount: s.frozen } },
-        merges: s.merges.map(m => ({ startRowIndex: m.r1 - 1, endRowIndex: m.r2, startColumnIndex: m.c1 - 1, endColumnIndex: m.c2 })), rowGroups: []
+        merges: s.merges.map(m => ({ startRowIndex: m.r1 - 1, endRowIndex: m.r2, startColumnIndex: m.c1 - 1, endColumnIndex: m.c2 })), rowGroups: [],
+        conditionalFormats: s.condRules.map(x => this.apiRule(s, x))
       };
       if (o.includeGridData) {
         const ref = o.ranges.find(x => x.indexOf("'" + s.title + "'!") === 0) || '';
@@ -365,6 +396,18 @@ class SimBook {
     }) };
   }
 
+  apiRule(s, spec) {
+    const f = hex => ({ red: parseInt(hex.slice(1, 3), 16) / 255, green: parseInt(hex.slice(3, 5), 16) / 255, blue: parseInt(hex.slice(5, 7), 16) / 255 });
+    return { ranges: spec.ranges.map(g => ({ sheetId: s.id, startRowIndex: g.r1 - 1, endRowIndex: g.r2, startColumnIndex: g.c1 - 1, endColumnIndex: g.c2 })),
+      booleanRule: { condition: { type: 'CUSTOM_FORMULA', values: [{ userEnteredValue: spec.formula }] }, format: { textFormat: { foregroundColor: f(spec.color) } } } };
+  }
+  specOfApiRule(rule) {
+    const h = x => ('0' + Math.round((x || 0) * 255).toString(16)).slice(-2);
+    const c = rule.booleanRule.format.textFormat.foregroundColor || {};
+    return { formula: rule.booleanRule.condition.values[0].userEnteredValue, color: '#' + h(c.red) + h(c.green) + h(c.blue),
+      ranges: rule.ranges.map(g => ({ r1: g.startRowIndex + 1, c1: g.startColumnIndex + 1, r2: g.endRowIndex, c2: g.endColumnIndex })) };
+  }
+
   apply(reqs) {
     const rect = g => {
       const s = this.byId(g.sheetId);
@@ -372,11 +415,17 @@ class SimBook {
                c1: (g.startColumnIndex === undefined ? 0 : g.startColumnIndex) + 1, c2: g.endColumnIndex === undefined ? s.colCount : g.endColumnIndex };
     };
     const known = ['insertDimension', 'appendDimension', 'deleteDimension', 'unmergeCells', 'mergeCells', 'updateCells', 'repeatCell',
-                   'updateBorders', 'updateSheetProperties', 'updateDimensionProperties', 'autoResizeDimensions'];
+                   'updateBorders', 'updateSheetProperties', 'updateDimensionProperties', 'autoResizeDimensions', 'addConditionalFormatRule', 'deleteConditionalFormatRule'];
     reqs.forEach(q => {
       const k = Object.keys(q)[0], x = q[k];
       if (known.indexOf(k) < 0) throw new Error('SimBook: unsupported request ' + k);
-      if (k === 'insertDimension') {
+      if (k === 'addConditionalFormatRule' || k === 'deleteConditionalFormatRule') this.condWrites++;
+      if (k === 'addConditionalFormatRule') {
+        const s = this.byId(x.rule.ranges[0].sheetId);
+        s.condRules.splice(x.index === undefined ? s.condRules.length : x.index, 0, this.specOfApiRule(x.rule));
+      } else if (k === 'deleteConditionalFormatRule') {
+        this.byId(x.sheetId).condRules.splice(x.index, 1);
+      } else if (k === 'insertDimension') {
         const s = this.byId(x.range.sheetId), n = x.range.endIndex - x.range.startIndex;
         if (x.range.dimension === 'ROWS') s.insertRows(x.range.startIndex, n); else s.insertCols(x.range.startIndex, n);
       } else if (k === 'appendDimension') {

@@ -562,6 +562,8 @@ test('rule: no other platform globals than SpreadsheetApp, Sheets and Utilities'
   assert.deepStrictEqual([...found].sort(), ['Sheets', 'SpreadsheetApp', 'Utilities']);
 });
 
+require('./cond-format.test.js')({ test, both, MODES, Grid });
+
 // ---- ConfigGrid and SheetCoeditor (golden tests against the frozen legacy code) ------------------------------------------
 require('./config-grid.test.js')({ test, both, parity, MODES, Grid });
 
@@ -585,6 +587,9 @@ require('./probe.test.js')({ test });
 
 // ---- the query is built from the cells a line is made of (stale cells beyond its width are ignored) ---------------------------------------
 require('./query-lines.test.js')({ test });
+
+// ---- stale cells of a config line are greyed (conditional formatting) ------------------------------------------------------------
+require('./stale-grey.test.js')({ test });
 
 // ---- state layer: stores, settings, locks, agent detection state (fresh Apps Script executions on fake platform services) ----------
 require('./state.test.js')({ test });

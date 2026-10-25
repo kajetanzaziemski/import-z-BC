@@ -168,6 +168,7 @@ class SheetCoeditor{
     if(!shouldContinue()){ coeditNote_("checkpoint",{n: 3, continue: false}); return false; }      // checkpoint 3: everything is prepared, nothing written yet
     if(this.linesChanged()) return SHEET_CHANGED;
     this.lines.setDropdowns(array,notesArray);
+    this.lines.setLineFormats(QUERY_OPTION_WIDTHS,LINE_WIDTH_TABLE);      // stale cells of a line are shown grey (Config Grid.js builds the rules from the widths)
     this.lines.save();
     this.noteCommitted_("dropdowns");
     return true;
