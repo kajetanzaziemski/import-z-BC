@@ -576,6 +576,9 @@ require('./refresh.test.js')({ test });
 // ---- automatic refresh: time trigger, permit, handlers, refresh loops (fake ScriptApp with real trigger bookkeeping) -------------
 require('./schedule.test.js')({ test });
 
+// ---- what the installable triggers make of an edit / change (which action fires) ---------------------------------------------
+require('./router.test.js')({ test });
+
 // ---- the live check helpers (merged from live-test-helpers): pinned, covered, never throwing ----------------------------------
 require('./live-check.test.js')({ test, both });
 
