@@ -18,7 +18,7 @@ const ROOT = path.join(__dirname, '..');
 const BASE = ['Custom errors.js', 'Helper Data Store.js', 'Store.js', 'Settings.js', 'Main Settings.js', 'Controller.js', 'Trigger Manager.js',
   'Global Add-on Settings.js', 'Quick Start.js', 'functions.js', 'Track onEdit Triggers.js', 'Status Manager.js', 'Data Type.js', 'Menu.js'];
 // the files of the extraction, loaded once they exist
-const USE_CASE_FILES = ['Import Query.js', 'ResultSheet.js', 'RefreshSheet.js', 'EstimateSheet.js', 'RefreshAll.js', 'ScheduleRefresh.js'].filter(f => fs.existsSync(path.join(ROOT, f)));
+const USE_CASE_FILES = ['Import Query.js', 'BulkSheet.js', 'ResultSheet.js', 'RefreshSheet.js', 'EstimateSheet.js', 'RefreshAll.js', 'ScheduleRefresh.js'].filter(f => fs.existsSync(path.join(ROOT, f)));
 
 const FAKES = `
   globalThis.SheetCoeditor = class {
@@ -161,8 +161,8 @@ module.exports = function register(t) {
   });
 
   test('refresh: a failure while writing puts writing back to idle and gives the error back', () => {
-    const { ex, calls } = scenario({ dataArray: [] });            // table1[0].length fails
-    assert.throws(() => ex.eval(`refreshAllDataForConfigSheet('Konfiguracja 1', 'Wynik')`), /Cannot read properties of undefined/);
+    const { ex, calls } = scenario({ dataArray: [] });            // an empty table: BulkSheet refuses it
+    assert.throws(() => ex.eval(`refreshAllDataForConfigSheet('Konfiguracja 1', 'Wynik')`), /nothing to write to "Wynik"/);
     assert.deepStrictEqual(calls().filter(c => /^(reading|writing)$/.test(c[0])), [['reading', false], ['writing', true], ['writing', false]]);
   });
 
@@ -273,9 +273,10 @@ module.exports = function register(t) {
     assert.deepStrictEqual([1, 2, 3].map(c => (s.cell(2, c) || { fmt: {} }).fmt.numFmt), ['#,##0.00', 'General', undefined]);
   });
 
-  test('ResultSheet.write: an empty table fails (nothing to write) and leaves no half-written sheet content', () => {
+  test('ResultSheet.write: an empty table fails (nothing to write) before anything is created or cleared', () => {
     const { book, ex } = scenario();
-    assert.throws(() => ex.eval(`ResultSheet.write('Nowy', [], [])`), /Cannot read properties of undefined/);
+    assert.throws(() => ex.eval(`ResultSheet.write('Nowy', [], [])`), /nothing to write to "Nowy"/);
+    assert.strictEqual(book.sheets['Nowy'], undefined, 'the sheet is not even created');
   });
 
   test('ImportQuery.connectionFor: asks the coeditor for table, query lines, extend and types, and sets the connection up (no fetch)', () => {
@@ -298,14 +299,14 @@ module.exports = function register(t) {
     assert.ok(/function estimateResponseSize\(configSheetName\)\{\s*return EstimateSheet\.run\(configSheetName\);\s*\}/.test(m));
   });
 
-  test('rule: only ResultSheet.js writes a result table (clear + setValues of a data range)', () => {
-    const offenders = fs.readdirSync(ROOT).filter(f => /\.js$/.test(f) && f !== 'ResultSheet.js' && !/^(Live Check|Test Functions|Grid)/.test(f))
+  test('rule: only BulkSheet.js writes a result table (clear + setValues of a data range)', () => {
+    const offenders = fs.readdirSync(ROOT).filter(f => /\.js$/.test(f) && f !== 'BulkSheet.js' && !/^(Live Check|Test Functions|Grid)/.test(f))
       .filter(f => /getDataRange\(\)\.clear\(\)/.test(code(f)));
     assert.deepStrictEqual(offenders, []);
   });
 
   test('rule: the new files load alone, in any order (nothing is used at load time)', () => {
     const vm = require('vm');
-    ['Import Query.js', 'ResultSheet.js', 'RefreshSheet.js', 'EstimateSheet.js'].forEach(f => vm.runInNewContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), {}));
+    ['Import Query.js', 'BulkSheet.js', 'ResultSheet.js', 'RefreshSheet.js', 'EstimateSheet.js'].forEach(f => vm.runInNewContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), {}));
   });
 };

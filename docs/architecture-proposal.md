@@ -1,6 +1,6 @@
 # Architecture proposal: import-z-BC on top of the Grid layer
 
-Status: proposal; steps 1-4 of the migration plan are done, the Store / Settings facade (`docs/state.md`), `RefreshSheet` / `EstimateSheet` / `RefreshAll` / `ScheduleRefresh` (`docs/use-cases.md`), and the router between the technical triggers and the use cases (`docs/router.md`: `Router.js`, `AnalyseConfig.js`). `ConfigGrid` (`Config Grid.js`) now writes the config sheet header and the status cells; `SheetCoeditor` forwards to it, and `ConfigGrid.lines()` now also reads, inserts and writes the query lines (dropdowns, notes). `SettingsGrid` (`Settings Grid.js`) does the same for the settings sheet. The result data do not use the grid yet. Branch `refactor-and-grid`.
+Status: proposal; steps 1-4 of the migration plan are done, the Store / Settings facade (`docs/state.md`), `RefreshSheet` / `EstimateSheet` / `RefreshAll` / `ScheduleRefresh` (`docs/use-cases.md`), and the router between the technical triggers and the use cases (`docs/router.md`: `Router.js`, `AnalyseConfig.js`). `ConfigGrid` (`Config Grid.js`) now writes the config sheet header and the status cells; `SheetCoeditor` forwards to it, and `ConfigGrid.lines()` now also reads, inserts and writes the query lines (dropdowns, notes). `SettingsGrid` (`Settings Grid.js`) does the same for the settings sheet. Result tables go through `BulkSheet` (`BulkSheet.js`: service path, chunked values), not through the grid. `ResultSheet` only maps BC data types to number formats. Branch `refactor-and-grid`.
 
 ## 1. What was copied
 
@@ -63,7 +63,7 @@ Services never open or commit a grid.
   A grid commit must run inside the existing document lock when called from triggers (`withDocumentLock`), because
   Grid overwrites the cells it marked dirty, not the whole window (only `dirty` cells are written, see reference 4.6).
 
-### 3.3 BulkSheet (new L1 adapter, NOT Grid)
+### 3.3 BulkSheet (new L1 adapter, NOT Grid) - done, with one change from this sketch: no Sheets API path, see `docs/testing.md` 2d
 Same ethos (one read / one write, no project words) for tall data:
 - `BulkSheet.writeTable(sheetName, table, { columnFormats })`: ensure sheet, one `batchUpdate` (clear + number formats per
   column via `repeatCell` + `updateCells`/`pasteData`) when the Sheets API is available, chunked `setValues` otherwise
