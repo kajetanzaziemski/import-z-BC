@@ -23,7 +23,7 @@ Done
 - Live check helpers merged (the judge, pinned); fixed on the way: bugs-todo #1 (settings lost in `sheetEdit`), #2 (nested run lost log saves), #4, `UnknownError` unwrapping
 
 Still to do
-- Split `SheetCoeditor` (config rows read / written with direct `SpreadsheetApp` calls; query model entangled with dropdown logic)
+- (done after the tag: `SheetCoeditor` split, see `docs/testing.md` section 2b)
 - `SettingsGrid` (`Settings Sheet.js` still makes direct range calls)
 - Writer for tall result data behind `ResultSheet` (Grid's window is 3000 rows)
 - `AgentService` regroup (`Trigger Manager.js`, `Status Manager.js`, `Track onEdit Triggers.js`)

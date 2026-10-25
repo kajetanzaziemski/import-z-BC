@@ -29,7 +29,7 @@ Found while building and testing the live check helpers (`docs/live-check.md`), 
    project (`getProjectTriggers()`), i.e. also the ones of other documents, and the permit is per document.
 6. **`ODataConnection.readAllPages()`** (and `_test`) catch block calls `shCoed.switchConnectionControl(false)` although
    `shCoed` is optional (`if(shCoed)` is used elsewhere in the same method).
-7. **`SheetCoeditor.getDataRange()`** reads `lastRow - 1` rows from row 6, i.e. 5 rows more than the sheet's data (it is
+7. **The config line range** (`ConfigGrid.lines().values()`, formerly `SheetCoeditor.getDataRange()`; behaviour pinned by `tests/coeditor.test.js`) reads `lastRow - 1` rows from row 6, i.e. 5 rows more than the sheet's data (it is
    harmless while the sheet has spare rows, but the height is not the data height).
 8. **`onOpenAction`** does not return what `lightStatusCheck()` returns, so a caller cannot tell whether the agents are active.
 9. **`sheetChange`** checks the trigger power after running the action (also #5 in `trigger-management-todo.md`).

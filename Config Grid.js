@@ -5,6 +5,7 @@
 //   row 2      status cells B2 (reading), C2 (connection), D2 (writing); E2:F2 "estimated rows" label + number
 //   row 6 ...  query lines (startRow / startCol), read and written by SheetCoeditor
 //
+// Query lines are reached through ConfigGrid.lines(): the model of the sheet (SheetCoeditor / Content Tracker.js) never sees a range.
 // It talks to the sheet through Grid (Grid.js) only. SheetCoeditor keeps its public methods (switchReadingControl, ...)
 // and forwards to this file. The pre-Grid code is frozen in tests/golden/legacy-config-header.js; tests/run.js checks
 // that this file produces the same sheet.
@@ -13,6 +14,7 @@
 const CONFIG_LAYOUT = {
   startRow: 6,
   startCol: 2,
+  queryCols: 5,                           // columns of a query line (B..F)
   headerRows: 4,
   headerCols: 7,
   statusRow: 2,
@@ -75,6 +77,49 @@ const ConfigGrid = {
     if (!grid) return false;
     ConfigGrid.writeHeader(grid).commit();
     return true;
+  },
+
+  /** Whether the sheet exists (one cheap call, nothing is read). */
+  exists(sheetName) {
+    return Grid.exists(sheetName);
+  },
+
+  /**
+   * The query lines of one configuration sheet: one read (the window reaches every used row), changes in the model, one commit per save().
+   * Returns null when the sheet does not exist.
+   *   values()                    the lines as the model reads them: B6.. five columns, max(lastRow - 1, 1) rows (the rows below the last
+   *                               used one are part of it, as they always were), the sheet as it stands after the inserts of this handle
+   *   insertRowAfter(after, row)  a new line after the line `after` (0 = the first), `row` is written from column B; takes effect at save()
+   *   setDropdowns(validations, notes)   a SpreadsheetApp DataValidation (or null) and a note (or null) for every cell from B6; at save()
+   *   save()                      commits, then SpreadsheetApp.flush()
+   */
+  lines(sheetName) {
+    const L = CONFIG_LAYOUT;
+    const grid = Grid.open({ sheetName: sheetName });
+    if (!grid) return null;
+    const lastUsedRow = () => {
+      for (let r = grid.getLastRow(); r >= 1; r--) {
+        const row = grid.getRange(r, 1, 1, grid.getLastColumn()).getValues()[0];
+        if (row.some(x => x !== '' && x !== null)) return r;
+      }
+      return 0;
+    };
+    return {
+      values() {
+        return grid.getRange(L.startRow, L.startCol, Math.max(lastUsedRow() - 1, 1), L.queryCols).getValues();
+      },
+      insertRowAfter(after, row) {
+        grid.insertRowsAfter(after + L.startRow, 1);
+        grid.getRange(after + L.startRow + 1, L.startCol, 1, row.length).setValues([row]);
+      },
+      setDropdowns(validations, notes) {
+        grid.getRange(L.startRow, L.startCol, validations.length, validations[0].length).setDataValidations(validations).setNotes(notes);
+      },
+      save() {
+        grid.commit();
+        SpreadsheetApp.flush();
+      }
+    };
   },
 
   /**

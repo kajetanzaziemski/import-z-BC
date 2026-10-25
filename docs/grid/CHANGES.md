@@ -22,6 +22,7 @@
   sheet throws; a write past the last column appends columns to the sheet. Notes and validations also reach their cells. (Before, such writes were dropped silently.)
 - `insertRowsAfter(..., { plain: true })` on the service path clears the validation of the **whole** row (before: only up to the window's width).
 - `Grid.open` takes an optional `window` (rows to read): a small grid for a few known cells, e.g. a status row.
+- `Grid.exists(sheetName)`: whether the sheet is there, without reading it (`SheetCoeditor` constructor).
 - `Grid.open` on the API path also reads the time zone and the cells' number format type.
 
 ## Not changed, not used by import-z-BC, not tested here

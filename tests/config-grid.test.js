@@ -221,7 +221,7 @@ module.exports = function register(t) {
     coeditorEnv();
     const co = new SheetCoeditor('K', false);
     env.book.sheets['K'].setValue(1, 2, 'zepsute', '');
-    co.setupConfigHeader(co.sheet);
+    co.setupConfigHeader();
     assert.strictEqual(env.book.sheets['K'].cell(1, 2).v, 'Zapytanie do bazy danych BC');
   });
 

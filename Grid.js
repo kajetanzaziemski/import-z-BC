@@ -22,6 +22,7 @@
 //   - data validation: lists and dates (plain specs, or a SpreadsheetApp DataValidation), notes in the array form
 //   - Date values are read and written in both paths (the API path converts to / from serial numbers)
 //   - autoResizeColumns
+//   - Grid.exists(sheetName): whether the sheet is there, without reading it
 // The wyceny "reset from a template" path is kept but nothing in import-z-BC uses it and it has no tests here.
 // ---------------------------------------------------------------------------
 
@@ -947,6 +948,11 @@ Grid.open = function (spec) {
   if (fresh && spec.resetFallback) spec.resetFallback();
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(spec.sheetName);
   return sheet ? loadGridViaService_(spec, sheet) : null;
+};
+
+/** Whether the spreadsheet has a sheet of this name (no read of its content). */
+Grid.exists = function (sheetName) {
+  return !!SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
 };
 
 /**

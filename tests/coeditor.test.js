@@ -58,6 +58,9 @@ module.exports = function register(t) {
     'table and an option': [['table', 'Customers'], ['queryOption', 'select']],
     'table, select, fields, filter': [['table', 'Customers'], ['queryOption', 'select'], ['select', 'Name'], ['queryOption', 'filter'], ['filter', 'PostingDate']],
     'table with expand and its own table': [['table', 'Customers'], ['queryOption', 'expand'], ['expand', 'Lines'], ['queryOption', 'select'], ['select', 'No']],
+    'two inserts at different lines (extend option, query option)': [['table', 'Customers'], ['extend', 'Lines'], ['select', 'Name']],
+    'extend first, then the table': [['extend', 'Lines'], ['table', 'Customers'], ['queryOption', 'select'], ['select', 'No'], ['queryOption', 'filter']],
+    'two tables and an extend': [['table', 'Customers'], ['queryOption', 'select'], ['extend', 'Lines'], ['select', 'Name'], ['table', 'Items']],
     'a half written line': [['table', ''], ['queryOption', 'sel']],
     'an unknown table': [['table', 'Nonsense'], ['queryOption', 'select']]
   };
@@ -138,6 +141,33 @@ module.exports = function register(t) {
       assert.deepStrictEqual(seen[0], ['table', 'Customers', '', '', ''], mode);
       assert.deepStrictEqual(seen[2], ['select', 'Name', '', '', ''], mode);
       assert.ok(seen.every(r => r.length === 5), mode);
+    });
+  });
+
+  test('API path: an edit that inserts lines writes in three batchUpdates (estimate grey, the lines, dropdowns + notes); the old code made a service call per line and per range', () => {
+    const s = scope('api');
+    s.run(`ConfigGrid.create('K')`);
+    fillLines(s.book, SCENARIOS['table, select, fields, filter']);
+    s.book.requests.length = 0; s.book.gets.length = 0;
+    s.run(`new SheetCoeditor('K', false).sheetEdit({})`);
+    assert.strictEqual(s.book.gets.length, 5, 'constructor read + edit read (2 gets each: sheet size, window) + status cells; no read after the inserts');
+    assert.strictEqual(s.book.requests.length, 3, 'estimate grey, the inserted lines, the dropdowns and notes');
+  });
+
+  test('a config sheet that vanished before the lines are read says so', () => {
+    const s = scope('service');
+    s.run(`ConfigGrid.create('K')`);
+    s.run(`globalThis.__co = new SheetCoeditor('K', false)`);
+    delete s.book.sheets['K'];
+    assert.throws(() => s.run(`__co.sheetEdit({})`), /Nie znaleziono arkusza konfiguracji "K"/);
+  });
+
+  test('rule: Sheet Coeditor.js and Content Tracker.js / Data Validations.js do not touch the spreadsheet (ConfigGrid.lines / status do)', () => {
+    ['Sheet Coeditor.js', 'Content Tracker.js', 'Data Validations.js', 'Fix Register.js'].forEach(f => {
+      const text = fs.readFileSync(path.join(ROOT, f), 'utf8').split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
+      const uses = (text.match(/SpreadsheetApp\.\w+/g) || []).filter(x => x !== 'SpreadsheetApp.newDataValidation' && x !== 'SpreadsheetApp.DataValidationCriteria');
+      assert.deepStrictEqual(uses, [], f);
+      assert.ok(!/\.getRange\(|\.getSheetByName|\bsheet\.insertRow|\bsheet\.getLastRow|\.setValues\(/.test(text), f);
     });
   });
 };

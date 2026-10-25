@@ -8,6 +8,16 @@ Each scenario runs through both commit paths (`[api]`, `[service]`), and "parity
 The sim throws on any request or method it does not know, so `Grid.js` cannot start using a new call unnoticed.
 Architecture rules are tests too (no project words in `Grid.js`, nothing used at load time, only `SpreadsheetApp`/`Sheets`/`Utilities`).
 
+## 2b. Config sheet co-editing (`tests/coeditor.test.js`)
+- `tests/golden/legacy-sheet-coeditor.js` is the **frozen `SheetCoeditor` from before its sheet access moved to `ConfigGrid.lines()`** (Spreadsheet service calls: `getRange`, `insertRowAfter`, `setDataValidations`, `setNotes`).
+- Old and new class run in fresh vm scopes (like separate Apps Script executions) with the **real query model** (`Content Tracker.js`, `Data Validations.js`, `Fix Register.js`) and a faked metadata
+  (online, or offline = `ConnectionError`), on the same simulated sheets, for about a dozen contents (no lines, a table, several inserts, a half written line, an unknown table ...).
+  After an edit the whole sheet (values, notes, validations, formats) and the model's answers (`getTable`, `getTableQueryArray`, `getDataTypes` ...) must be identical; the new class goes through both commit paths.
+- Also: the second edit changes nothing, inserted rows keep what the row above had, status cells during an edit, the line range (B6, five columns, `max(lastRow - 1, 1)` rows) is pinned, the API path costs 3 `batchUpdate`s per
+  edit with inserts, a vanished sheet is reported, and a rule test keeps `Sheet Coeditor.js` and the query model free of sheet calls.
+- Mutation checks run when this was written: dropping the notes, a wrong insert position, a wrong range height were caught. Not caught: removing the `toSorted` in `insertRows` (no content the model produces needs it - it is insurance against instructions in ascending order).
+- **Not verified on a real spreadsheet**: the empty-list dropdown (`VALUE_IN_LIST` with `[]`, used while BC is unreachable) now goes through `requireValueInList([], true)` (service) instead of `withCriteria(VALUE_IN_LIST, [[], true])`. Check it once with BC offline (see the manual check below).
+
 ## 2. Golden tests of ConfigGrid (`tests/config-grid.test.js`, 33 tests)
 - `tests/golden/legacy-config-header.js` is a **frozen copy of the pre-Grid code** (`setupConfigHeader`, the four `switch*` methods, `setTotRowsInfo`).
 - The test runs it on the simulated Spreadsheet service and requires `ConfigGrid` (through the API path AND the service path) to leave the same sheet:
