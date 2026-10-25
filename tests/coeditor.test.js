@@ -239,9 +239,9 @@ module.exports = function register(t) {
   function analyseScope(mode, hookAt) {
     const book = new SimBook({ api: mode === 'api' });
     const p = new FakePlatform();
-    const files = ['Custom errors.js', 'Helper Data Store.js', 'Store.js', 'Controller.js', 'functions.js', ...FILES.filter(f => !['functions.js', 'Custom errors.js'].includes(f)), 'AnalyseConfig.js'];
+    const files = ['Custom errors.js', 'Helper Data Store.js', 'Store.js', 'Controller.js', 'functions.js', ...FILES.filter(f => !['functions.js', 'Custom errors.js'].includes(f)), 'AnalyseConfig.js', 'Coedit Trace.js'];
     const run = (code, extra) => {
-      const ex = p.execution(files, Object.assign({ SpreadsheetApp: book.SpreadsheetApp, Utilities: book.Utilities, Sheets: mode === 'api' ? book.Sheets : undefined, __hookAt: hookAt, __book: book }, extra || {}));
+      const ex = p.execution(files, Object.assign({ SpreadsheetApp: book.SpreadsheetApp, Utilities: Object.assign({}, book.Utilities, { sleep: ms => { p.advance(ms / 1000); } }), Sheets: mode === 'api' ? book.Sheets : undefined, __hookAt: hookAt, __book: book }, extra || {}));
       ex.eval(`globalThis.dbgLog = () => {}; globalThis.__calls = {}; globalThis.getMetadata = () => ({
         listTables: () => { __tick('listTables'); return ['Customers', 'Items']; },
         listProperties: t => { __tick('listProperties'); return ['No', 'Name']; }, listNavProperties: t => ['Lines'], getDataType: () => 'Edm.String' });
@@ -325,6 +325,84 @@ module.exports = function register(t) {
       s.ctx.__onCall = (name, n) => { if (name === 'listTables' && n >= 2) s.book.sheets['K'].setValue(30 + n, 2, 'x' + n, ''); };      // every pass: another edit lands
       assert.strictEqual(s.run(`new SheetCoeditor('K', false).sheetEdit({})`), true);
       assert.ok(s.run('__calls.t') <= 5, 'listTables calls: ' + s.run('__calls.t'));
+    });
+  });
+
+  // ---- the doubled queryOption / extend pairs seen on a real sheet (c06ab0e+) ------------------------------------------------------------------
+  // Hypothesis: a co-edit that waited for the lock reads the lines through a spreadsheet service that still shows the state from before the co-edit that
+  // held the lock committed (the pair that one inserted is not there), so it inserts a pair of its own. The simulation cannot show whether the platform does
+  // that; this models it (reads are stale until the execution has waited 1.5 s) to pin what the code does about it. The probes in "Concurrency Probe.js" and
+  // the trace in "Coedit Trace.js" tell on the real sheet (docs/coedit-tracking.md).
+  const countLabels = sh => { const n = {}; for (let r = 6; r <= sh.lastRow(); r++) { const l = (sh.cell(r, 2) || {}).v; const blank = ![3, 4, 5, 6].some(c => (sh.cell(r, c) || {}).v); const k = l + (blank ? '(empty)' : ''); n[k] = (n[k] || 0) + 1; } return n; };
+  ['api', 'service'].forEach(mode => {
+    const staleRun = (extraBefore) => {
+      const s = analyseScope(mode, { name: 'none', nth: 0 });
+      s.run(`ConfigGrid.create('K')`);
+      fillLines(s.book, [['table', 'Customers'], ['queryOption', 'select'], ['select', 'Name']]);
+      s.run(`globalThis.__slept = 0; Utilities.sleep = ms => { __slept += ms; };
+        const stale = ConfigGrid.lines('K');                       // what the second execution would still see
+        AnalyseConfig.run('K', {});                                // the first co-edit: inserts the extend line and an empty queryOption line, commits, flushes
+        ${extraBefore || ''}
+        const real = ConfigGrid.lines.bind(ConfigGrid);
+        ConfigGrid.lines = n => (__slept < 1500 ? stale : real(n));   // the platform shows the old state until a moment has passed
+        AnalyseConfig.run('K', {});                                // the second co-edit, started while the first one was still going
+        globalThis.__sleptAfter = __slept;`);
+      return s;
+    };
+
+    test(`stale reads reproduce the symptom: without the safeguard the second co-edit inserts the extend line and the empty queryOption line AGAIN [${mode}]`, () => {
+      const s = staleRun(`SheetCoeditor.prototype.confirmFresh_ = function () {};`);
+      const n = countLabels(s.book.sheets['K']);
+      assert.strictEqual(n['extend(empty)'], 2, JSON.stringify(n));
+      assert.strictEqual(n['queryOption(empty)'], 2, JSON.stringify(n));
+    });
+
+    test(`with the safeguard the second co-edit notices that the lines are fewer than the first one left, waits, reads again and inserts nothing twice [${mode}]`, () => {
+      const s = staleRun();
+      const n = countLabels(s.book.sheets['K']);
+      assert.strictEqual(n['extend(empty)'], 1, JSON.stringify(n));
+      assert.strictEqual(n['queryOption(empty)'], 1, JSON.stringify(n));
+    });
+  });
+
+  ['api', 'service'].forEach(mode => {
+    test(`the flight recorder: every co-edit leaves its events in its own property; coeditTrace() prints them in time order; a stale reading shows as stale-suspected / reread / stale-confirmed [${mode}]`, () => {
+      const s = analyseScope(mode, { name: 'none', nth: 0 });
+      s.run(`ConfigGrid.create('K')`);
+      fillLines(s.book, [['table', 'Customers'], ['queryOption', 'select'], ['select', 'Name']]);
+      s.run(`globalThis.__slept = 0; Utilities.sleep = ms => { __slept += ms; };
+        const stale = ConfigGrid.lines('K'); AnalyseConfig.run('K', {});
+        const real = ConfigGrid.lines.bind(ConfigGrid); ConfigGrid.lines = n => (__slept < 1500 ? stale : real(n));
+        AnalyseConfig.run('K', {});`);
+      const keys = Object.keys(s.p.props.document).filter(k => k.indexOf('coeditTrace:') === 0).sort();
+      assert.strictEqual(keys.length, 2, 'one property per co-edit: ' + keys.join(', '));
+      const [a, b] = keys.map(k => JSON.parse(s.p.props.document[k]));
+      const names = r => r.events.map(x => x.e);
+      assert.deepStrictEqual(names(a).slice(0, 5), ['start', 'read', 'ticket', 'lock', 'read'], 'start, the constructor\'s read, the ticket, the lock, the in-lock read');
+      assert.ok(names(a).includes('insert') && names(a).includes('commit'), names(a).join(','));
+      assert.strictEqual(a.events.find(x => x.e === 'insert').lines.length, 2, 'the extend and the empty queryOption line');
+      ['stale-suspected', 'reread', 'stale-confirmed'].forEach(e => assert.ok(names(b).includes(e), e + ' in ' + names(b).join(',')));
+      assert.strictEqual(names(a).at(-1), 'end');
+      assert.strictEqual(a.events.at(-1).outcome, 'completed');
+      const text = s.run(`coeditTrace()`);
+      const lines = text.split('\n');
+      assert.ok(lines.length >= 15 && lines.every(l => /^\d\d:\d\d:\d\d\.\d\d\d \[[0-9a-z]{4}\] /.test(l)), text);
+      assert.ok(lines.findIndex(l => /\binsert\b/.test(l)) < lines.findIndex(l => /stale-suspected/.test(l)), 'in time order');
+    });
+
+    test(`the flight recorder keeps the last 20 runs only and coeditTraceClear() empties it; a dropped run and an error leave their story too [${mode}]`, () => {
+      const s = analyseScope(mode, { name: 'none', nth: 0 });
+      s.run(`ConfigGrid.create('K')`);
+      fillLines(s.book, [['table', 'Customers']]);
+      s.run(`for (let i = 0; i < 23; i++) AnalyseConfig.run('K', {});`);
+      assert.strictEqual(Object.keys(s.p.props.document).filter(k => k.indexOf('coeditTrace:') === 0).length, 20);
+      s.run(`coeditTraceClear()`);
+      assert.strictEqual(Object.keys(s.p.props.document).filter(k => k.indexOf('coeditTrace:') === 0).length, 0);
+      s.run(`SheetCoeditor.prototype.sheetEdit = function (e, isLatest) { Store.set('document', 'K_coedit', 'a-newer-run'); coeditNote_('checkpoint', { n: 1, continue: isLatest() }); return isLatest(); }; AnalyseConfig.run('K', {})`);
+      s.run(`SheetCoeditor.prototype.sheetEdit = () => { throw new Error('boom'); }; try { AnalyseConfig.run('K', {}); } catch (e) {}`);
+      const all = Object.keys(s.p.props.document).filter(k => k.indexOf('coeditTrace:') === 0).map(k => JSON.parse(s.p.props.document[k]).events.map(x => x.e).join(','));
+      assert.ok(all.some(x => /error/.test(x)), 'the error run: ' + all.join(' | '));
+      assert.ok(all.some(x => /checkpoint.*end$/.test(x) || /checkpoint/.test(x)), 'the dropped run: ' + all.join(' | '));
     });
   });
 };

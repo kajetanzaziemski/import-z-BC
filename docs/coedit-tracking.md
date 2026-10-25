@@ -1,0 +1,42 @@
+# Tracking down the doubled queryOption / extend lines
+
+**Symptom (real sheet, build `c06ab0e+`):** after pasting many `queryOption | select | (empty)` lines under the table and filling the fields one by one, the co-edit adds the pair
+"empty `queryOption` line + `extend` line" more than once (14 -> 19 rows). Easy to repeat.
+
+**What the simulation says.** One co-edit adds exactly one pair; 300 random interleavings of pastes, field fills and "a newer run started" (with the real lock, ticket and re-read code) never doubled it.
+A second pair needs a second co-edit that works from a picture WITHOUT the first one's pair. The lock, the ticket and the "have the lines changed since I read them" check all assume that a co-edit which
+gets the lock reads what the previous one committed. If the platform does not guarantee that, all of them are blind. `tests/coeditor.test.js` ("stale reads reproduce the symptom") models exactly that
+(reads show the old state until a moment has passed) and gets the exact symptom: two `extend` and two empty `queryOption` lines.
+
+## Three hypotheses and the experiment for each
+| # | Hypothesis | What would show it |
+|---|---|---|
+| H1 | An execution reads the spreadsheet (or properties) as it was some seconds earlier: it started before the previous co-edit committed, and its service keeps showing the old state | probe 1 (`STALE` in `same` / `refetched`), or in the trace `stale-suspected` followed by `reread` with more rows |
+| H2 | The script lock is not exclusive between these executions (two co-edits inside at once) | probe 2 (`OVERLAP`), or in the trace two runs whose `lock` ... `released` intervals overlap |
+| H3 | Something else inserts the lines (another trigger, a run of an older build, a second pair of agent triggers running the co-edit twice per edit) | the trace shows two `insert` events from runs that read the SAME `hash` with no stale suspicion and no overlap; or `Wszystkie triggery` shows two agent pairs |
+
+## 1. The probes (5 minutes, no add-on code involved)
+Open the script editor in two tabs of the browser (same spreadsheet open).
+1. Tab 1: run `probeWriter()`. At once, tab 2: run `probeReader()`. Wait about 20 s until both have finished. Then `probeReport()` (either tab) and send the log.
+   - Every line ends with the four ways of reading the cell and the property; `STALE` = it showed an older value than the writer had written 2+ s earlier.
+2. Tab 1: run `probeLockHolder()`. At once, tab 2: run `probeLockWaiter()`. Wait until both are done. Then `probeLockReport()` and send the log.
+3. Delete the sheet `_probe` and run `probeClear()`.
+
+## 2. The flight recorder (`Coedit Trace.js`, always on)
+Every co-edit keeps its own events and writes them in one document property when it ends (the last 20 runs are kept). To use it:
+1. `coeditTraceClear()` in the editor (optional, to start clean).
+2. Reproduce: paste the `select` lines, fill the fields one by one, wait until the sheet is quiet.
+3. In the editor run `coeditTrace()` and send the log (one line per event, time ordered, `[xxxx]` = the run).
+
+Events: `start`, `read` (rows, hash of the lines), `ticket`, `lock` (how long it waited), `dropped`, `timeout`, `stale-suspected` / `reread` / `stale-confirmed`, `changed`, `insert` (which lines, after which row),
+`commit` (rows and hash after it), `checkpoint`, `error`, `released`, `end` (outcome).
+
+How to read it:
+- Two `insert` events with the same lines, the second run's `read` showing FEWER rows than the first run's `commit` -> **H1**. The `stale-suspected` events (and `stale-confirmed` when waiting helped) are the safeguard noticing it.
+- `lock` ... `released` intervals of two runs overlapping in time -> **H2**.
+- A run's `read` having the same hash as the previous run's `commit`, and still inserting -> the model decides to insert although the lines are there (**H3**, a model bug: send the rows).
+- No `start` from a run that inserted -> an older build or another trigger did it.
+
+## What is already done about it (safeguard, harmless if the hypothesis is wrong)
+Each co-edit records what it left (`coeditExpected:<sheet>` = time, rows, hash). The next co-edit that reads FEWER lines than that within 30 s waits 1.5 s (then 2.5 s more) and reads again before it
+decides anything (`SheetCoeditor.confirmFresh_`). If the lines come back, the doubled pair never happens; if they never do, the trace says so.

@@ -2,6 +2,8 @@
 // for (new lines, dropdowns, notes) and drives the status cells. It does not touch the spreadsheet itself: the lines and the
 // status cells are reached through ConfigGrid (Config Grid.js).
 const MAX_COEDIT_PASSES = 3;
+const STALE_RETRY_MS = [1500, 2500];       // waits before reading again when the lines look older than what the previous co-edit left
+const STALE_WINDOW_MS = 30000;             // ... but only when that co-edit committed less than this long ago
 const SHEET_CHANGED = Symbol("the lines changed while the co-edit was working");
 
 class SheetCoeditor{
@@ -60,7 +62,9 @@ class SheetCoeditor{
   loadFromSheet(){
     this.lines = ConfigGrid.lines(this.sheetName);
     if(!this.lines) throw new SimpleError("Nie znaleziono arkusza konfiguracji \""+this.sheetName+"\".");
-    return new CCTImportConfig(this.lines.values());
+    const values = this.lines.values();
+    coeditNote_("read",{rows: values.length, hash: coeditHash_(values)});
+    return new CCTImportConfig(values);
   }
 
   loadFromStore(){
@@ -91,7 +95,8 @@ class SheetCoeditor{
   respondToManyCellsEdit(shouldContinue=()=>true){
     dbgLog("Many cells edit...");
     this.cct = this.loadFromSheet();
-    if(!shouldContinue()) return false;      // checkpoint 1: nothing has been written yet
+    this.confirmFresh_();
+    if(!shouldContinue()){ coeditNote_("checkpoint",{n: 1, continue: false}); return false; }      // checkpoint 1: nothing has been written yet
     if(this.linesChanged()) return SHEET_CHANGED;
     return this.applyCoeditsWithLock(shouldContinue);
   }
@@ -104,7 +109,7 @@ class SheetCoeditor{
   applyCoedits(shouldContinue=()=>true){
     this.switchEstimateInfoActive(false);
     if(this.insertRows()>0) this.cct = new CCTImportConfig(this.lines.values());   // the sheet as the inserts left it (no second read)
-    if(!shouldContinue()) return false;      // checkpoint 2: the lines are in; building the dropdowns asks BC and is the slow part
+    if(!shouldContinue()){ coeditNote_("checkpoint",{n: 2, continue: false}); return false; }      // checkpoint 2: the lines are in; building the dropdowns asks BC and is the slow part
     return this.setDataValidationsToSheet(shouldContinue);
   }
 
@@ -112,7 +117,37 @@ class SheetCoeditor{
   linesChanged(){
     const fresh = ConfigGrid.lines(this.sheetName);
     if(!fresh) return true;
-    return JSON.stringify(fresh.values()) !== JSON.stringify(this.lines.values());
+    const changed = JSON.stringify(fresh.values()) !== JSON.stringify(this.lines.values());
+    if(changed) coeditNote_("changed",{rows: fresh.values().length, expectedRows: this.lines.values().length});
+    return changed;
+  }
+
+  /**
+   * What the previous co-edit left, as it recorded it when it committed: { t, rows, hash } (functions.js keeps the record in a document property).
+   * A read that shows FEWER lines than that, soon after, is suspicious: the reading may be of the state from before that commit. Then the lines are read
+   * again after a moment (the platform is not known to need one - Coedit Trace.js records what happens, docs/coedit-tracking.md - but a read that is old
+   * makes the co-edit insert the extend / queryOption lines a second time). The user deleting lines within seconds costs the same few seconds, nothing more.
+   */
+  confirmFresh_(){
+    const expected = coeditMarkerGet_(this.sheetName);
+    if(!expected) return;
+    for(const wait of STALE_RETRY_MS){
+      const rows = this.cct.originalArray.length;
+      const ageMs = Date.now() - expected.t;
+      if(rows >= expected.rows || ageMs > STALE_WINDOW_MS || ageMs < 0) return;
+      coeditNote_("stale-suspected",{rows: rows, expectedRows: expected.rows, ageMs: ageMs, waitMs: wait});
+      Utilities.sleep(wait);
+      this.cct = this.loadFromSheet();
+      coeditNote_("reread",{rows: this.cct.originalArray.length});
+      if(this.cct.originalArray.length >= expected.rows) coeditNote_("stale-confirmed",{afterMs: wait});
+    }
+  }
+
+  /** Records what the sheet looks like now that this co-edit has committed something, for the next co-edit's freshness check and for the trace. */
+  noteCommitted_(what){
+    const values = this.lines.values();
+    coeditMarkerSet_(this.sheetName,{t: Date.now(), rows: values.length, hash: coeditHash_(values)});
+    coeditNote_("commit",{what: what, rows: values.length, hash: coeditHash_(values)});
   }
 
   insertRows(){
@@ -120,6 +155,8 @@ class SheetCoeditor{
       this.lines.insertRowAfter(instructions.afterRow,instructions.rowContent);
     });
     this.lines.save();
+    if(this.cct.insertRows.length) coeditNote_("insert",{lines: this.cct.insertRows.map(x => x.rowContent[0] + " after " + x.afterRow)});
+    if(this.cct.insertRows.length) this.noteCommitted_("inserts");
     return this.cct.insertRows.length;
   }
 
@@ -128,10 +165,11 @@ class SheetCoeditor{
     const validations = this.cct.getDataValidationsArray();
     let notesArray = map2D(validations,x => x ? x.getDescription()=="empty selection" ? noteMsg : null : null)
     let array = map2D(validations,x => x ? x.getSpreadsheetAppDataValidation() : null)
-    if(!shouldContinue()) return false;      // checkpoint 3: everything is prepared, nothing written yet
+    if(!shouldContinue()){ coeditNote_("checkpoint",{n: 3, continue: false}); return false; }      // checkpoint 3: everything is prepared, nothing written yet
     if(this.linesChanged()) return SHEET_CHANGED;
     this.lines.setDropdowns(array,notesArray);
     this.lines.save();
+    this.noteCommitted_("dropdowns");
     return true;
   }
 

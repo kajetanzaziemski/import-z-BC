@@ -580,6 +580,9 @@ require('./agents.test.js')({ test });
 // ---- developer tools: build version, reportFailedChecks, sidebar scrolling ----------------------------------------------------------
 require('./version.test.js')({ test });
 
+// ---- concurrency probes (for a real spreadsheet) ----------------------------------------------------------------------------------
+require('./probe.test.js')({ test });
+
 // ---- state layer: stores, settings, locks, agent detection state (fresh Apps Script executions on fake platform services) ----------
 require('./state.test.js')({ test });
 // the same suite with the live check helpers loaded (switched off): nothing may change

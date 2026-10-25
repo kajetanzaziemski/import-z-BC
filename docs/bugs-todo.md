@@ -65,6 +65,9 @@ Found while building and testing the live check helpers (`docs/live-check.md`), 
     copied) and only a later run could repair it. (c) A co-edit that dropped out for a newer one is reported by the live check as SKIP ("dropped"), not judged on a sheet the newer run is still completing - the earlier FAILs of such runs
     ("no extend row", "E8 should be a dropdown") were this, not errors. The remaining reads cost two extra window reads per co-edit.
 
+14. **Doubled `queryOption` / `extend` pairs after overlapping co-edits (real sheet, build `c06ab0e+`): OPEN, instrumented.** Not reproducible in the simulation except by modelling stale reads; hypotheses, probes and the flight recorder
+    (`Coedit Trace.js`, `Concurrency Probe.js`) are in `docs/coedit-tracking.md`. A freshness safeguard (`confirmFresh_`) is in.
+
 ## Status on `refactor-and-grid`
 
 - **#1 Settings writes lost in `sheetEdit` (and `onEdit`): FIXED in `Controller.run`.** A top-level run now keeps the closing actions that were registered before it started (the entry
