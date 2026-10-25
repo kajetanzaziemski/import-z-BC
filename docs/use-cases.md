@@ -52,7 +52,7 @@ Entry points stay where they are and keep their names, action names and live-che
 
 ## Behaviour kept on purpose (pinned by `tests/schedule.test.js`, written first against the old code)
 - The permit rules of CLAUDE.md: a trigger refreshes only if `permit.issuedFor === e.triggerUid`, otherwise it deletes itself (only itself); `touchRefreshPermit` re-reads the store, so a permit reissued by another run meanwhile is not overwritten.
-- Quirks, pinned so that fixing them is a conscious change: `setUp` removes the refresh triggers of **all** documents of the user (bugs-todo #5); without a refresh-frequency row (`null`) it removes them and then fails with a `TypeError`;
+- Quirks, pinned so that fixing them is a conscious change: `setUp` replaces only the trigger this document's permit names (bugs-todo #5, fixed: it used to remove the refresh triggers of all documents of the user); without a refresh-frequency row (`null`) it removes them and then fails with a `TypeError`;
   the time is noted also when nothing was ticked and not when a refresh fails; the first legacy run records no `lastRun` (the permit it issued is not stored yet when it is touched); the first failing sheet stops the loop.
 
 ## The one difference

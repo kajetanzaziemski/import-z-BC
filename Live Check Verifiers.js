@@ -375,21 +375,38 @@ function lcVerifyOnlySettingsSheetAdded_(c,settings,name){
 }
 
 /** Time-based refresh trigger and permit after the refresh frequency cells were edited. */
+/** The refresh permit this document had before the run (from the stored settings snapshot), or null. */
+function lcPreviousPermit_(c){
+  try{
+    const raw = c.before.docProps && c.before.docProps.importSettingsArray;
+    return raw ? (JSON.parse(raw).refreshPermit ?? null) : null;
+  } catch(err) {
+    return null;
+  }
+}
+
+/**
+ * The time trigger after the refresh frequency was edited. A time trigger is not bound to a document, so only the trigger THIS document's permit names
+ * is replaced; other refresh triggers (other documents', or this document's old / legacy ones, which delete themselves when they fire) may be around.
+ */
 function lcVerifyRefreshTrigger_(c,settings){
   c.attempt("refresh trigger matches the settings sheet",() => {
     const timers = ScriptApp.getProjectTriggers().filter(t => ["autoRefresh","autoRefreshHandler"].includes(t.getHandlerFunction()));
-    const handlers = timers.filter(t => t.getHandlerFunction() === "autoRefreshHandler");
     const permit = c.settings().refreshPermit;
-    c.expect("no legacy autoRefresh trigger left",timers.length == handlers.length,"autoRefresh (legacy) trigger still installed");
+    const previous = lcPreviousPermit_(c);
+    if(previous && previous.issuedFor) c.expect("the trigger the previous permit named is gone",!timers.some(t => t.getUniqueId() === previous.issuedFor),`${previous.issuedFor} is still installed`);
     const unitOk = settings.unit === "godzin" || settings.unit === "dni";
     if(!settings.freq || !unitOk){
-      c.expect("refresh frequency empty / unit unknown: no refresh trigger",timers.length == 0,`${timers.length} refresh trigger(s) installed`);
+      c.expect("refresh frequency empty / unit unknown: no refresh trigger is left for this document",!(permit && permit.issuedFor && timers.some(t => t.getUniqueId() === permit.issuedFor)),`the permit still names an installed trigger: ${permit && permit.issuedFor}`);
       return;
     }
-    if(!c.expect("exactly one autoRefreshHandler trigger",handlers.length == 1,`${handlers.length} installed`)) return;
-    c.expect("trigger is time-based",handlers[0].getEventType() === ScriptApp.EventType.CLOCK,String(handlers[0].getEventType()));
-    c.expect("permit issued for the new trigger",!!permit && permit.issuedFor === handlers[0].getUniqueId(),`permit: ${JSON.stringify(permit)}`);
-    c.expectEqual("permit interval in hours",permit?.intervalHours,settings.unit === "dni" ? 24 * settings.freq : settings.freq);
+    const named = permit && permit.issuedFor ? timers.find(t => t.getUniqueId() === permit.issuedFor) : null;
+    if(!c.expect("an autoRefreshHandler trigger exists for this document's permit",!!named && named.getHandlerFunction() === "autoRefreshHandler",`permit: ${JSON.stringify(permit)}, refresh triggers: ${timers.map(t => t.getUniqueId() + " " + t.getHandlerFunction()).join("; ") || "none"}`)) return;
+    c.expect("trigger is time-based",named.getEventType() === ScriptApp.EventType.CLOCK,String(named.getEventType()));
+    c.expect("permit issued for the new trigger",!!previous ? permit.issuedFor !== previous.issuedFor : true,`the permit still names ${permit.issuedFor}`);
+    c.expectEqual("permit interval in hours",permit.intervalHours,settings.unit === "dni" ? 24 * settings.freq : settings.freq);
+    const others = timers.filter(t => t.getUniqueId() !== named.getUniqueId());
+    if(others.length) c.pass("other refresh triggers are left alone",`${others.length}: other documents', or old ones of this document that delete themselves when they fire`);
   });
 }
 

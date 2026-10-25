@@ -45,6 +45,10 @@ Found while building and testing the live check helpers (`docs/live-check.md`), 
 
 ### Fixed after the first real-sheet runs (each with tests)
 - **#3 `ConnectionError` aborting the co-edit: FIXED.** The field list, the navigation property list and the data-type lookup of `ConfigDValStore` fall back to the empty list with its note, like the table list (not remembered, so the next run asks BC again).
+- **#5 `setUp` deleting the refresh triggers of all documents: FIXED.** A time trigger is not bound to a document (its source id is null), so the only link is the permit stored in the document: `setUp` now removes just the trigger that permit names
+  (a refresh trigger only, never an agent). Other triggers of the document - older ones, legacy `autoRefresh` ones that never claimed a permit - cannot be recognised and are left; they delete themselves when they fire because the permit is not issued
+  for them (`run` / `runLegacy`). Switching the refresh OFF in a document with no permit issues a permit for nobody, so an unclaimed legacy trigger deletes itself instead of claiming the permit and refreshing on. A legacy trigger that
+  did claim the permit (it ran with none) is the one it names and is replaced like any other. The live check's refresh-trigger verifier was changed accordingly (hashes re-pinned): it judges this document's permit and trigger, not the whole project.
 - **#7 the line range: CHANGED** to what was asked: B6 down to the last row with anything in B-F (at least one row). Side effect: a dropdown left on a line the user emptied is no longer swept by the extra five rows the old range happened to include.
 - **#9 `sheetChange` power check: FIXED.** The power is looked at before the action; a powered-off or unlogged trigger skips the change and announces the job `agent.skipped`, like an edit.
 - **#11 stale `SettingsSheet` row positions: FIXED** (the remembered rows follow a line `addNewSheetInfo` inserts above them).

@@ -8,8 +8,8 @@
 //
 // The refresh permit (Settings.js, CLAUDE.md) is what keeps old triggers from refreshing: a new permit makes every other trigger delete itself.
 // Time-based triggers are not returned by ScriptApp.getUserTriggers(ss): getProjectTriggers() is used.
-// Known quirks kept: setUp removes the refresh triggers of ALL documents of the user (bugs-todo #5); without a frequency (null) it removes them
-// and then fails with a TypeError; the first legacy run records no lastRun (the permit it just issued is not stored yet when it is touched).
+// setUp replaces only the trigger this document's permit names (bugs-todo #5, fixed); other triggers, legacy ones included, delete themselves when they fire.
+// Known quirks kept: without a frequency (null) it removes that trigger and then fails with a TypeError; the first legacy run records no lastRun (the permit it just issued is not stored yet when it is touched).
 // ---------------------------------------------------------------------------
 
 const ScheduleRefresh = {
@@ -18,20 +18,29 @@ const ScheduleRefresh = {
    *   Empty freq or unknown unit: the old triggers are removed and no new one is created.
    */
   setUp(frequency){
-    // Time-based triggers are not bound to the spreadsheet, so getUserTriggers(ss) does not list them. Use project triggers.
-    ScriptApp.getProjectTriggers().filter(trigger => ["autoRefresh","autoRefreshHandler"].includes(trigger.getHandlerFunction())).forEach(trigger => ScriptApp.deleteTrigger(trigger));
+    // A time trigger is not bound to a document (getTriggerSourceId() is null for it, getUserTriggers(ss) does not list it) - the only link to a
+    // document is the permit stored in that document. So the trigger to replace is the one THIS document's permit names, and no other (the refresh
+    // triggers of other documents stay). Triggers of this document that the permit does not name - older ones, legacy `autoRefresh` ones - cannot be
+    // recognised here; they delete themselves the next time they fire, because the permit is not issued for them.
+    const permit = MainSettings.getRefreshPermit();
+    ScheduleRefresh.removeRefreshTrigger_(permit?.issuedFor);
 
     let interval = frequency.freq;
     let intervalHrs = interval;
 
-    if(!frequency.freq) return;
+    if(!frequency.freq || (frequency.unit != "days" && frequency.unit != "hrs")){
+      // Refresh switched off here. A document that never had a permit gets one for nobody: an old trigger of this document that has not claimed
+      // one yet would otherwise claim it when it fires (the legacy handler does) and go on refreshing; with a permit for nobody it deletes itself.
+      if(!permit) MainSettings.setRefreshPermit(null,0);
+      return;
+    }
     let trigger = ScriptApp.newTrigger('autoRefreshHandler').timeBased();
     if(frequency.unit=="days"){
       trigger.everyDays(interval);
       intervalHrs = 24 * interval;
-    }else if(frequency.unit=="hrs"){
+    }else{
       trigger.everyHours(interval);
-    }else return;
+    }
 
     let newTrigger = trigger.create();
     // Issue a permit for this trigger. This will override any other permits, so all old triggers will automatically uninstall.
@@ -74,6 +83,14 @@ const ScheduleRefresh = {
     RefreshAll.scheduled();
     
     MainSettings.touchRefreshPermit(e.triggerUid);
+  },
+
+  /** Deletes the refresh trigger (current or legacy handler) with this id, if there is one. Any other trigger with that id (an agent) is left alone. */
+  removeRefreshTrigger_(triggerUid){
+    if(!triggerUid) return;
+    ScriptApp.getProjectTriggers()
+      .filter(t => t.getUniqueId() === triggerUid && ["autoRefresh","autoRefreshHandler"].includes(t.getHandlerFunction()))
+      .forEach(t => ScriptApp.deleteTrigger(t));
   },
 
   /** Deletes the project trigger with this id (a time trigger removes itself this way). */

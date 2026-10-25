@@ -379,7 +379,8 @@ module.exports = function register(t) {
   function agentRun(o) {
     const { SimBook } = require('./sim');
     const p = new FakePlatform();
-    p.props.document.importSettingsArray = JSON.stringify({ addonStatus: true, importSheetName: 'Ustawienia' });
+    p.props.document.importSettingsArray = JSON.stringify(Object.assign({ addonStatus: true, importSheetName: 'Ustawienia' }, o.permit ? { refreshPermit: o.permit } : {}));
+    (o.triggers || []).forEach(x => p.triggers.push(Object.assign({ type: 'CLOCK', source: null, params: {} }, x)));
     p.props.document.docTriggerArray = JSON.stringify([{ triggerId: 't1', trigEventType: 'ON_EDIT', trigFunction: 'sheetEdit', dateCreated: '2020-01-01', lastUsed: '2020-01-01', SsId: 'ss-1', powerOn: o.power !== false }]);
     p.props.document.liveCheckEnabled = 'on';
     const book = new SimBook({ api: false });
@@ -428,7 +429,7 @@ module.exports = function register(t) {
     const f = agentRun({ entry: 'edit', active: 'Ustawienia', range: { sheet: 'Ustawienia', row: 4, col: 4 } });
     assert.deepStrictEqual([f.entry.i, f.entry.d], ['settings.refreshFrequency', 'Ustawienia']);
     assert.ok(f.names.includes('the edit touched the refresh frequency (number or unit)'));
-    assert.ok(f.names.includes('exactly one autoRefreshHandler trigger'), 'the time trigger is judged: ' + f.names.join(' | '));
+    assert.ok(f.names.includes("an autoRefreshHandler trigger exists for this document's permit"), 'the time trigger is judged: ' + f.names.join(' | '));
     const o = agentRun({ entry: 'edit', active: 'Ustawienia', range: { sheet: 'Ustawienia', row: 3, col: 3 } });
     assert.strictEqual(o.entry.i, 'settings.edit');
     assert.strictEqual(o.status('edit in the settings sheet outside the refresh frequency: nothing to do'), 'PASS');
@@ -437,10 +438,26 @@ module.exports = function register(t) {
   test('live check jobs: setting a new refresh frequency leaves a stored permit for the new trigger - the exact checks that failed in the live run now pass (bugs-todo #1)', () => {
     const r = agentRun({ entry: 'edit', active: 'Ustawienia', range: { sheet: 'Ustawienia', row: 4, col: 5 } });
     assert.strictEqual(r.entry.i, 'settings.refreshFrequency');
-    assert.strictEqual(r.status('exactly one autoRefreshHandler trigger'), 'PASS');
+    assert.strictEqual(r.status("an autoRefreshHandler trigger exists for this document's permit"), 'PASS');
     assert.strictEqual(r.status('permit issued for the new trigger'), 'PASS', JSON.stringify(r.entry.c.filter(x => x[0] !== 'PASS')));
     assert.strictEqual(r.status('permit interval in hours'), 'PASS');
     assert.strictEqual(r.entry.s, 'PASS', 'and the whole run: ' + JSON.stringify(r.entry.c.filter(x => x[0] !== 'PASS')));
+  });
+
+  test('live check jobs: setting the refresh up replaces the trigger the previous permit named; refresh triggers of other documents and old ones are left alone and only noted', () => {
+    const f = agentRun({ entry: 'edit', active: 'Ustawienia', range: { sheet: 'Ustawienia', row: 4, col: 5 },
+      permit: { issuedFor: 'mine-old', lastRefresh: 1, intervalHours: 3 },
+      triggers: [{ id: 'mine-old', fn: 'autoRefreshHandler' }, { id: 'theirs', fn: 'autoRefreshHandler' }, { id: 'old-legacy', fn: 'autoRefresh' }] });
+    assert.strictEqual(f.entry.s, 'PASS', JSON.stringify(f.entry.c.filter(x => x[0] !== 'PASS')));
+    assert.strictEqual(f.status('the trigger the previous permit named is gone'), 'PASS');
+    assert.strictEqual(f.status('other refresh triggers are left alone'), 'PASS');
+  });
+
+  test('live check jobs: the trigger the previous permit named still installed after setting the refresh up is a FAIL (the old trigger would go on refreshing)', () => {
+    const f = agentRun({ entry: 'edit', active: 'Ustawienia', range: { sheet: 'Ustawienia', row: 4, col: 5 },
+      permit: { issuedFor: 'mine-old', lastRefresh: 1, intervalHours: 3 }, triggers: [{ id: 'mine-old', fn: 'autoRefreshHandler' }],
+      breakIt: `ScheduleRefresh.removeRefreshTrigger_ = () => {}` });
+    assert.strictEqual(f.status('the trigger the previous permit named is gone'), 'FAIL');
   });
 
   test('live check jobs: an edit elsewhere is sheet.ignored, an EDIT/FORMAT change is change.ignored, a powered-off trigger is agent.skipped', () => {

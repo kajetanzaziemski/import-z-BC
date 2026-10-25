@@ -57,15 +57,35 @@ module.exports = function register(t) {
   const event = id => `({ triggerUid: '${id}' })`;
 
   // ---- setting the time trigger up (SettingsSheet.setRefreshTrigger) --------------------------------------------------------------------
-  test('schedule: every N hours -> one time trigger "autoRefreshHandler", a permit issued for it with that interval; the old refresh triggers are gone, others stay', () => {
-    const sc = scenario();
-    sc.p.triggers.push(Object.assign({}, OTHER), { id: 'old-legacy', fn: 'autoRefresh', type: 'CLOCK', source: null, params: {} }, { id: 'agent', fn: 'sheetEdit', type: 'ON_EDIT', source: 'ss-1', params: {} });
+  const NAMED = (id, fn = 'autoRefreshHandler') => ({ id, fn, type: 'CLOCK', source: null, params: {} });
+  const PERMIT = id => ({ refreshPermit: { issuedFor: id, lastRefresh: 1, intervalHours: 3 } });
+
+  test('schedule: every N hours -> one new time trigger "autoRefreshHandler" and a permit issued for it with that interval; ONLY the trigger the old permit names is removed (other triggers, other documents\' included, stay)', () => {
+    const sc = scenario({ settings: PERMIT('mine-old') });
+    sc.p.triggers.push(Object.assign({}, OTHER), NAMED('mine-old'), NAMED('old-legacy', 'autoRefresh'), { id: 'agent', fn: 'sheetEdit', type: 'ON_EDIT', source: 'ss-1', params: {} });
     const s = sc.settingsSheet({ freq: 6, unit: 'hrs' });
     sc.ex.eval(`MainSettings`);
     s.setRefreshTrigger();
     sc.save();
-    assert.deepStrictEqual(triggers(sc.p), [{ id: 'agent', fn: 'sheetEdit', type: 'ON_EDIT', params: {} }, { id: 'trig-1', fn: 'autoRefreshHandler', type: 'CLOCK', params: { everyHours: 6 } }]);
+    assert.deepStrictEqual(triggers(sc.p).map(x => x.id), ['other-doc-trigger', 'old-legacy', 'agent', 'trig-1']);
+    assert.deepStrictEqual(triggers(sc.p).pop(), { id: 'trig-1', fn: 'autoRefreshHandler', type: 'CLOCK', params: { everyHours: 6 } });
     assert.deepStrictEqual([permit(sc).issuedFor, permit(sc).intervalHours, typeof permit(sc).lastRefresh], ['trig-1', 6, 'number']);
+  });
+
+  test('schedule: with no permit yet nothing is removed (there is no way to tell whose a time trigger is); the new trigger gets the permit', () => {
+    const sc = scenario();
+    sc.p.triggers.push(Object.assign({}, OTHER), NAMED('old-legacy', 'autoRefresh'));
+    sc.settingsSheet({ freq: 6, unit: 'hrs' }).setRefreshTrigger();
+    sc.save();
+    assert.deepStrictEqual(triggers(sc.p).map(x => x.id), ['other-doc-trigger', 'old-legacy', 'trig-1']);
+    assert.strictEqual(permit(sc).issuedFor, 'trig-1');
+  });
+
+  test('schedule: a permit that names an agent trigger (or anything that is not a refresh trigger) removes nothing', () => {
+    const sc = scenario({ settings: PERMIT('agent') });
+    sc.p.triggers.push({ id: 'agent', fn: 'sheetEdit', type: 'ON_EDIT', source: 'ss-1', params: {} });
+    sc.settingsSheet({ freq: 6, unit: 'hrs' }).setRefreshTrigger();
+    assert.deepStrictEqual(triggers(sc.p).map(x => x.id), ['agent', 'trig-1']);
   });
 
   test('schedule: every N days -> everyDays(N), the permit interval is given in hours (24 x N)', () => {
@@ -76,36 +96,74 @@ module.exports = function register(t) {
     assert.strictEqual(permit(sc).intervalHours, 48);
   });
 
-  test('schedule: no frequency (empty) -> the refresh triggers are removed, nothing is created, the old permit is left as it was', () => {
-    const sc = scenario({ settings: { refreshPermit: { issuedFor: 'old', lastRefresh: 1, intervalHours: 3 } } });
-    sc.p.triggers.push(Object.assign({}, OTHER));
+  test('schedule: no frequency (empty) -> the trigger the permit names is removed, nothing is created, the old permit is left as it was', () => {
+    const sc = scenario({ settings: PERMIT('old') });
+    sc.p.triggers.push(Object.assign({}, OTHER), NAMED('old'));
     sc.settingsSheet({ freq: '', unit: 'hrs' }).setRefreshTrigger();
     sc.save();
-    assert.deepStrictEqual(triggers(sc.p), []);
+    assert.deepStrictEqual(triggers(sc.p).map(x => x.id), ['other-doc-trigger']);
     assert.strictEqual(permit(sc).issuedFor, 'old');
   });
 
-  test('schedule: an unknown unit -> the refresh triggers are removed, nothing is created, the permit is not changed', () => {
-    const sc = scenario({ settings: { refreshPermit: { issuedFor: 'old', lastRefresh: 1, intervalHours: 3 } } });
-    sc.p.triggers.push(Object.assign({}, OTHER));
+  test('schedule: an unknown unit -> the same: the permitted trigger is removed, nothing is created, the permit is not changed', () => {
+    const sc = scenario({ settings: PERMIT('old') });
+    sc.p.triggers.push(Object.assign({}, OTHER), NAMED('old'));
     sc.settingsSheet({ freq: 3, unit: null }).setRefreshTrigger();
     sc.save();
-    assert.deepStrictEqual(triggers(sc.p), []);
+    assert.deepStrictEqual(triggers(sc.p).map(x => x.id), ['other-doc-trigger']);
     assert.strictEqual(permit(sc).issuedFor, 'old');
   });
 
-  test('schedule: KNOWN QUIRK pinned - without a refresh frequency row (null) the refresh triggers are removed first and then it fails with a TypeError', () => {
+  test('schedule: switching the refresh OFF in a document that has no permit yet issues a permit for nobody - so an old (legacy) trigger of this document that never claimed one deletes itself when it fires instead of claiming it', () => {
     const sc = scenario();
-    sc.p.triggers.push(Object.assign({}, OTHER));
-    assert.throws(() => sc.settingsSheet(null).setRefreshTrigger(), /Cannot read properties of null/);
-    assert.deepStrictEqual(triggers(sc.p), []);
+    sc.p.triggers.push(NAMED('old-legacy', 'autoRefresh'));
+    sc.settingsSheet({ freq: '', unit: 'hrs' }).setRefreshTrigger();
+    sc.save();
+    assert.strictEqual(permit(sc).issuedFor, null);
+    assert.deepStrictEqual(triggers(sc.p).map(x => x.id), ['old-legacy'], 'it cannot be told from another document\'s: it stays until it fires');
+    const later = scenario({ settings: { refreshPermit: permit(sc) } });
+    later.p.triggers.push(NAMED('old-legacy', 'autoRefresh'));
+    later.ex.eval(`autoRefresh(${event('old-legacy')})`);
+    assert.deepStrictEqual(later.calls(), [], 'nothing refreshed');
+    assert.deepStrictEqual(triggers(later.p), [], 'and it removed itself');
   });
 
-  test('schedule: KNOWN QUIRK pinned - it removes the refresh triggers of ALL documents of the user (project-wide), bugs-todo #5', () => {
+  test('schedule: legacy trigger of this document that was NOT named by the permit: setting the refresh up leaves it, and it deletes itself the next time it fires (the new permit is not its own)', () => {
     const sc = scenario();
-    sc.p.triggers.push(Object.assign({}, OTHER, { source: 'another-document' }));
+    sc.p.triggers.push(NAMED('old-legacy', 'autoRefresh'));
+    sc.settingsSheet({ freq: 6, unit: 'hrs' }).setRefreshTrigger();
+    sc.save();
+    const later = scenario({ settings: { refreshPermit: permit(sc) } });
+    later.p.triggers.push(NAMED('old-legacy', 'autoRefresh'), NAMED('trig-1'));
+    later.ex.eval(`autoRefresh(${event('old-legacy')})`);
+    assert.deepStrictEqual(later.calls(), []);
+    assert.deepStrictEqual(triggers(later.p).map(x => x.id), ['trig-1']);
+  });
+
+  test('schedule: a legacy trigger that claimed the permit (it ran with none) is the one the permit names, so the next setting-up replaces it', () => {
+    const sc = scenario();
+    sc.p.triggers.push(NAMED('old-legacy', 'autoRefresh'));
+    sc.ex.eval(`autoRefresh(${event('old-legacy')})`);                     // no permit: it issues one for itself and refreshes
+    sc.save();
+    assert.strictEqual(permit(sc).issuedFor, 'old-legacy');
+    const again = scenario({ settings: { refreshPermit: permit(sc) } });
+    again.p.triggers.push(NAMED('old-legacy', 'autoRefresh'));
+    again.settingsSheet({ freq: 2, unit: 'days' }).setRefreshTrigger();
+    assert.deepStrictEqual(triggers(again.p).map(x => [x.id, x.fn]), [['trig-1', 'autoRefreshHandler']]);
+  });
+
+  test('schedule: KNOWN QUIRK pinned - without a refresh frequency row (null) the permitted trigger is removed first and then it fails with a TypeError', () => {
+    const sc = scenario({ settings: PERMIT('old') });
+    sc.p.triggers.push(Object.assign({}, OTHER), NAMED('old'));
+    assert.throws(() => sc.settingsSheet(null).setRefreshTrigger(), /Cannot read properties of null/);
+    assert.deepStrictEqual(triggers(sc.p).map(x => x.id), ['other-doc-trigger']);
+  });
+
+  test('schedule: the refresh triggers of OTHER documents are no longer removed (bugs-todo #5): only the one this document\'s permit names', () => {
+    const sc = scenario({ settings: PERMIT('mine') });
+    sc.p.triggers.push(Object.assign({}, OTHER, { source: 'another-document' }), NAMED('mine'), NAMED('theirs-legacy', 'autoRefresh'));
     sc.settingsSheet({ freq: 1, unit: 'hrs' }).setRefreshTrigger();
-    assert.deepStrictEqual(triggers(sc.p).map(x => x.id), ['trig-1']);
+    assert.deepStrictEqual(triggers(sc.p).map(x => x.id), ['other-doc-trigger', 'theirs-legacy', 'trig-1']);
   });
 
   test('schedule: setting it up twice leaves one trigger and a permit for the newest one', () => {
