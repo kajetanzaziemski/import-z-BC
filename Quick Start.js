@@ -1,14 +1,14 @@
+/**
+ * The one entry point that is only partly under the Controller: the menu is built first, outside it, in every auth mode - it has to be fast and
+ * needs no services, and it must appear whether the add-on is ON or not. Where the script is authorised the rest (the status check that warns when
+ * the agents are not active) is an ordinary run.
+ */
 function onOpen(e) {
-  return Controller.checked("onOpen",() => {
-    // dbgLog(e.authMode);
-    // testFunc_errorReporting();
-    menuSelector();
-    if(e.authMode != ScriptApp.AuthMode.NONE) Controller.run("onOpenAction",onOpenAction,e);
-  },{e});
-}
-
-function onOpenAction(e){
-  StatusManager.lightStatusCheck();
+  // dbgLog(e.authMode);
+  // testFunc_errorReporting();
+  menuSelector();
+  Controller.checkInput("onOpen",{e});
+  if(e.authMode != ScriptApp.AuthMode.NONE) Controller.run("onOpen",() => StatusManager.lightStatusCheck(),e);
 }
 
 function onEdit(e) {                    
@@ -22,11 +22,12 @@ function getGlobalSettings(){
 }
 
 function setGlobalSettings(form){
-  return Controller.checked("setGlobalSettings",() => {
+  Controller.checkInput("requestSetGlobalSettings",{form});
+  return Controller.run("requestSetGlobalSettings",() => {
     // throw new Error("Cannot set values: "+form.tenantid+" "+form.environment+" "+form.company);
     // dbgLog(`Setting ${form.scope} properties to (t/e/c): ${form.tenantid}, ${form.environment}, ${form.company}.`)
     getGlobalSettings().setAllPropertiesForScope(form.scope,form.tenantid,form.environment,form.company);
-  },{form});
+  });
 }
 
 function sheetEdit(e){

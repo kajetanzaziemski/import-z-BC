@@ -57,7 +57,7 @@ Each run gets two sets of checks: the trigger's (bookkeeping, power) and the job
 
 | Entry point (action name) | Crude check of the outcome |
 |---|---|
-| `onOpen`, `onOpenAction` | nothing changed (sheets, properties); menu / alert cannot be read back |
+| `onOpen` (the status check; the menu is built before the controller) | nothing changed (sheets, properties); menu / alert cannot be read back |
 | `simpleOnEdit` | no sheet touched; only the suspect flag (and agent power after a level 2 alarm) changed; the outcome fits the decision the code logged; duration under the 30 s limit |
 | `sheetEditAction` (the trigger side; the content is judged under the job, see above) | power OFF/unlogged → skipped; last-use recorded; settings sheet exists; edit of refresh frequency → one time trigger, permit issued for it with the right interval; edit in a config sheet → co-edit result (below); other sheet → nothing added |
 | `sheetChangeAction` | `EDIT`/`FORMAT` ignored; otherwise the co-edit result for the active config sheet |
@@ -66,13 +66,13 @@ Each run gets two sets of checks: the trigger's (bookkeeping, power) and the job
 | `requestCheckConfigSheet` | co-edit result for a config sheet, nothing changed otherwise |
 | `menuEstimateForCurrentSheet` | F2 is a number formatted `#,##0`, estimate info shown, indicators idle |
 | `menuRefreshCurrentSheet`, `menuRefreshAll` | result sheet exists; data rows = estimate in F2 (±5 % warns, approximate when `extend` is used); every column has a header and a uniform number format; formats match the cached data types; indicators idle |
-| `menuAuthFlow`, `menuLogoutFlow`, `authCallback` | nothing changed / OAuth token key removed / stored |
+| `menuAuthFlow`, `menuLogoutFlow`, `requestAuthCallback` | nothing changed / OAuth token key removed / stored |
 | `menuConnectionSetup`, `menuTestItem`, `requestStatusCheck`, `requestListAllTriggers`, `requestLiveCheckSidebar` | read-only |
 | `requestAddonStatus`, `requestChangeAddonStatus`, `requestSettingsSheetName`, `requestSetSettingsSheetName`, `requestPermitsInfo` | returned / stored value matches; ON → settings sheet name stored, agents active; a sheet with the chosen name must have the settings signature |
 | `forceAgentRefresh` | one edit + one change trigger installed for this document, returned id matches, both logged ON for document and user, pair in the agent array (≤ 5), no logged trigger missing from the project, suspect flag cleared |
 | `requestDeleteAllAgents` | agent array empty, only the agents' triggers removed, log entries gone |
 | `deleteAllInDocumentTriggerLog`, `deleteAllInUserTriggerLog` | log is empty, no trigger installed or removed |
-| `getAgentStatus`, `listProjectTriggers`, `setGlobalSettings` | returned value matches the logs / header row and every project trigger listed / properties stored in the chosen scope |
+| `requestAgentStatus`, `requestListProjectTriggers`, `requestSetGlobalSettings` | returned value matches the logs / header row and every project trigger listed / properties stored in the chosen scope |
 
 Co-edit result of a config sheet: header intact, activity indicators (B2:D2) back to idle, estimate info greyed out, a
 `table` row, and after a table is chosen an `extend` row and an empty `queryOption` row (empty `extendOption` row if
@@ -116,3 +116,7 @@ ends with `ConnectionError` is a `WARN` ("not authorised"), the parts that need 
 Defects the checks reported on the code as it was when the helpers were written are logged in `docs/bugs-todo.md`
 (settings writes lost in `sheetEdit`, nested `Controller.run`, `ConnectionError` while editing a config sheet offline, and
 smaller ones noticed on the way). They are not fixed on this branch.
+
+## Entry-point names on `refactor-and-grid`
+Every platform entry goes through `Controller.run` now (`docs/controller.md`): `setGlobalSettings`, `getAgentStatus`, `listProjectTriggers` and `authCallback` are reported as `requestSetGlobalSettings`, `requestAgentStatus`,
+`requestListProjectTriggers`, `requestAuthCallback` (the functions keep their names), `onOpenAction` is merged into `onOpen`, and there are no nested runs, so the `known issue: nested Controller.run` fallbacks no longer apply.

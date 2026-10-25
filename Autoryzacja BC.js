@@ -86,7 +86,8 @@ function showSidebar() {
  * Funkcja odbierająca wynik autoryzacji (ustawiona przez .setCallbackFunction w getBCService_())
  **/
 function authCallback(request) {
-  return Controller.checked("authCallback",() => {
+  Controller.checkInput("requestAuthCallback",{request});
+  return Controller.run("requestAuthCallback",() => {
     var bcService = getBCService_();
     var isAuthorized = bcService.handleCallback(request);
     postAuthorizationFlow(isAuthorized);
@@ -95,7 +96,7 @@ function authCallback(request) {
     } else {
       return HtmlService.createHtmlOutput('Połączenie nieudane (odmowa autoryzacji)! Możesz zamknąć tę stronę.');
     }
-  },{request});
+  });
 }
 
 /** 

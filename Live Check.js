@@ -504,8 +504,7 @@ function liveCheckIntents(){
  * with their verifier (Live Check Verifiers.js).
  */
 const LIVE_CHECK_ENTRY_POINTS = [
-  {action: "onOpen",                          entry: "onOpen(e) - simple trigger, menu is built here"},
-  {action: "onOpenAction",                    entry: "onOpen(e) -> status check when authorised"},
+  {action: "onOpen",                          entry: "onOpen(e) - simple trigger: the menu is built first (outside the controller), then the status check where authorised"},
   {action: "simpleOnEdit",                    entry: "onEdit(e) - simple trigger"},
   {action: "sheetEditAction",                 entry: "sheetEdit(e) - installable onEdit trigger (the agent)"},
   {action: "sheetChangeAction",               entry: "sheetChange(e) - installable onChange trigger (the agent)"},
@@ -531,8 +530,8 @@ const LIVE_CHECK_ENTRY_POINTS = [
   {action: "requestDeleteAllAgents",          entry: "sidebar: deleteAllAgents()"},
   {action: "deleteAllInDocumentTriggerLog",   entry: "sidebar: deleteAllInDocumentTriggerLog()"},
   {action: "deleteAllInUserTriggerLog",       entry: "sidebar: deleteAllInUserTriggerLog()"},
-  {action: "getAgentStatus",                  entry: "sidebar: getAgentStatus()"},
-  {action: "listProjectTriggers",             entry: "sidebar: listProjectTriggers()"},
-  {action: "setGlobalSettings",               entry: "sidebar: setGlobalSettings(form)"},
-  {action: "authCallback",                    entry: "OAuth callback: authCallback(request)"}
+  {action: "requestAgentStatus",              entry: "sidebar: getAgentStatus()"},
+  {action: "requestListProjectTriggers",     entry: "sidebar: listProjectTriggers()"},
+  {action: "requestSetGlobalSettings",       entry: "sidebar: setGlobalSettings(form)"},
+  {action: "requestAuthCallback",            entry: "OAuth callback: authCallback(request)"}
 ];

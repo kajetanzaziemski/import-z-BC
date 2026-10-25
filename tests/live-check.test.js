@@ -29,12 +29,12 @@ module.exports = function register(t) {
       'change them only together with an INTENDED change of behaviour, then re-pin with UPDATE_GOLDEN=1 node tests/run.js'));
   });
 
-  test('live check: every action name the code gives to Controller.run / Controller.checked has a verifier, and no verifier is orphaned', () => {
-    const files = fs.readdirSync(ROOT).filter(f => /\.js$/.test(f) && !/^Live Check( Verifiers)?\.js$/.test(f) && f !== 'Test Functions.js');   // the framework and the verifiers only LIST the names
+  test('live check: every action name the code gives to Controller.run has a verifier, and no verifier is orphaned', () => {
+    const files = fs.readdirSync(ROOT).filter(f => /\.js$/.test(f) && !/^Live Check( Verifiers)?\.js$/.test(f) && f !== 'Test Functions.js' && f !== 'Controller.js');   // the framework and the verifiers only LIST the names
     const used = new Set();
     files.forEach(f => {
       const text = read(f).replace(/\/\*[\s\S]*?\*\//g, '').split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
-      (text.match(/Controller\.(?:run|checked)\(\s*["']([^"']+)["']/g) || []).forEach(m => used.add(m.match(/["']([^"']+)["']/)[1]));
+      (text.match(/Controller\.run\(\s*["']([^"']+)["']/g) || []).forEach(m => used.add(m.match(/["']([^"']+)["']/)[1]));
     });
     const p = new FakePlatform();
     const ex = p.execution(FILES);
@@ -481,6 +481,41 @@ module.exports = function register(t) {
     const ex = new FakePlatform().execution(FILES);
     const text = ex.eval(`liveCheckIntents()`);
     ['config.coedit', 'settings.refreshFrequency', 'settings.edit', 'sheet.ignored', 'change.ignored', 'agent.skipped'].forEach(n => assert.ok(new RegExp('^' + n.replace('.', '\\.') + ': .{20,}', 'm').test(text), n));
+  });
+
+  // ---- agents repaired inside ONE run (no nested run any more) ----------------------------------------------------------------------------
+  function repairRun(code, addonOn) {
+    const { SimBook } = require('./sim');
+    const p = new FakePlatform();
+    p.props.document.importSettingsArray = JSON.stringify({ addonStatus: addonOn, importSheetName: 'Ustawienia' });
+    p.props.document.liveCheckEnabled = 'on';
+    const book = new SimBook({ api: false });
+    const st = book.add('Ustawienia');
+    [['Opis linii']].forEach((row, i) => row.forEach((v, j) => st.setValue(i + 2, j + 2, v, '')));
+    book.activeName = 'Ustawienia';
+    const ss = book.spreadsheet();
+    const app = { getActiveSpreadsheet: () => ss, flush() {}, WrapStrategy: book.SpreadsheetApp.WrapStrategy, newDataValidation: book.SpreadsheetApp.newDataValidation,
+      DataValidationCriteria: book.SpreadsheetApp.DataValidationCriteria, getUi: () => ({ alert() {} }) };
+    const ex = p.execution([...FILES, 'Menu.js', 'Settings Sheet.js', 'Data Type.js'], { SpreadsheetApp: app, Utilities: book.Utilities, Session: { getActiveUser: () => ({ getEmail: () => 'u' }) } });
+    ex.eval(code);
+    const entries = Object.keys(p.props.document).filter(k => /^liveCheck:\d/.test(k)).sort().map(k => JSON.parse(p.props.document[k]));
+    return { p, entries, notPassing: entries.map(e => e.c.filter(x => x[0] === 'WARN' || x[0] === 'FAIL').map(x => e.a + ': ' + x[1] + ' - ' + x[2])).flat() };
+  }
+
+  test('live check: the sidebar\'s "repair agents" is ONE checked run and every check passes strictly (triggers, both logs, the agent pair)', () => {
+    const r = repairRun('forceAgentRefresh()', true);
+    assert.deepStrictEqual(r.entries.map(e => [e.a, e.s]), [['forceAgentRefresh', 'PASS']]);
+    assert.deepStrictEqual(r.notPassing, []);
+    assert.deepStrictEqual(r.p.consoleErrors.filter(m => /NESTED RUN/.test(m)), []);
+  });
+
+  test('live check: switching the add-on ON installs the agents in the same run - one checked run, no "known issue" fallbacks needed (bugs-todo #2)', () => {
+    const r = repairRun('changeAddonStatus(true)', false);
+    assert.deepStrictEqual(r.entries.map(e => [e.a, e.s]), [['requestChangeAddonStatus', 'PASS']]);
+    assert.deepStrictEqual(r.notPassing, []);
+    assert.ok(r.entries[0].c.some(x => /agents active after switching ON/.test(x[1]) && x[0] === 'PASS'));
+    assert.strictEqual(r.entries[0].nested, undefined);
+    assert.deepStrictEqual(r.p.triggers.map(t => t.fn), ['sheetEdit', 'sheetChange']);
   });
 
   // The sidebar: the details are coloured line by line. The two functions are taken out of the page and run against a minimal DOM.

@@ -21,6 +21,7 @@ class FakePlatform {
     this.tryLockAttempts = 0;
     this.triggers = [];                                    // the project's triggers: { id, fn, type, source, params }
     this.triggerSeq = 0;
+    this.consoleErrors = [];                               // everything the code wrote with console.error
     this.broken = {};                                      // { 'cache.document': 'null' | 'throw' }
   }
   advance(seconds) { this.now += seconds * 1000; }
@@ -100,7 +101,7 @@ class FakePlatform {
   globals() {
     const p = this;
     const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
-    const g = { Logger: { log() {} }, console: { log() {}, error() {} } };
+    const g = { Logger: { log() {} }, console: { log() {}, error: (...a) => { p.consoleErrors.push(a.join(' ')); } } };
     g.PropertiesService = {}; g.CacheService = {};
     ['document', 'user', 'script'].forEach(scope => {
       g.PropertiesService['get' + cap(scope) + 'Properties'] = () => p.guard('properties', scope, () => p.propertiesService(scope));

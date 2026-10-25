@@ -1,5 +1,5 @@
 function listProjectTriggers(){
-  return Controller.checked("listProjectTriggers",() => StatusManager.getAllProjectTriggers());
+  return Controller.run("requestListProjectTriggers",() => StatusManager.getAllProjectTriggers());
 }
 
 function logObjectsArray(arrayOfObjects) {

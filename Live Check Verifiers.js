@@ -397,14 +397,7 @@ function buildLiveCheckVerifiers_(){
       needs: ["sheets","docProps"],
       verify(c){
         lcVerifyNothingChanged_(c);
-        c.skip("menu built","the add-on menu cannot be read back by a script");
-      }
-    },
-
-    onOpenAction: {
-      needs: ["sheets","docProps"],
-      verify(c){
-        lcVerifyNothingChanged_(c);
+        c.skip("menu built","the add-on menu is built before the controller runs and cannot be read back by a script");
         c.skip("warning shown when the agents are not active","the alert cannot be read back by a script");
       }
     },
@@ -754,7 +747,7 @@ function buildLiveCheckVerifiers_(){
       }
     },
 
-    getAgentStatus: {
+    requestAgentStatus: {
       needs: ["sheets","docProps"],
       verify(c){
         lcVerifyNothingChanged_(c);
@@ -762,7 +755,7 @@ function buildLiveCheckVerifiers_(){
       }
     },
 
-    listProjectTriggers: {
+    requestListProjectTriggers: {
       needs: ["sheets","docProps"],
       verify(c){
         lcVerifyNothingChanged_(c);
@@ -778,7 +771,7 @@ function buildLiveCheckVerifiers_(){
       }
     },
 
-    setGlobalSettings: {
+    requestSetGlobalSettings: {
       needs: ["sheets"],
       verify(c){
         const form = c.input.form;
@@ -795,7 +788,7 @@ function buildLiveCheckVerifiers_(){
       }
     },
 
-    authCallback: {
+    requestAuthCallback: {
       needs: ["userProps"],
       verify(c){
         const text = c.result && typeof c.result.getContent === "function" ? c.result.getContent() : "";

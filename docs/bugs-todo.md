@@ -44,3 +44,5 @@ Found while building and testing the live check helpers (`docs/live-check.md`), 
   `FAIL permit issued for the new trigger` / `permit interval in hours` after setting a refresh frequency are gone (`tests/controller.test.js`,
   `tests/router.test.js`, `tests/live-check.test.js`). Nested runs (#2) are untouched.
 - #2, #3, #5-#10: unchanged (the refactor keeps them on purpose; tests pin them where they are observable).
+- **#2 Nested `Controller.run` loses log saves: FIXED.** There are no nested runs any more (the status check calls `StatusManager.forceRefresh()` instead of the entry point `forceAgentRefresh`; a nested call is reported as `NESTED RUN`
+  and done inline), and the closing phase runs actions registered while it runs, so the trigger logs and the agent pair installed by the status check are saved. `docs/controller.md`.

@@ -67,20 +67,11 @@ module.exports = function register(t) {
     assert.deepStrictEqual(plain(log), ['after']);
   });
 
-  test('controller: registerClosingOnce registers a flag once per execution (the status check after turning the add-on on relies on it)', () => {
+  test('controller: registerClosingOnce registers a flag once per EXECUTION (one run per execution; the saves of the settings and logs and the status check rely on it)', () => {
     const { ex, log } = setup();
     ex.eval(`Controller.run('requestA', () => { Controller.registerClosingOnce(() => __log.push('once'), 'f'); Controller.registerClosingOnce(() => __log.push('twice'), 'f'); });
              Controller.run('requestB', () => { Controller.registerClosingOnce(() => __log.push('later'), 'f'); });`);
     assert.deepStrictEqual(plain(log), ['once']);
-  });
-
-  test('controller: a run started from a closing action (nested) has its own closing actions; the outer run\'s remaining ones still run', () => {
-    const { ex, log } = setup();
-    ex.eval(`Controller.run('requestOuter', () => {
-      Controller.registerClosing(() => { __log.push('outer-1'); Controller.run('requestInner', () => { Controller.registerClosing(() => __log.push('inner-closing')); __log.push('inner-action'); }); });
-      Controller.registerClosing(() => __log.push('outer-2'));
-    })`);
-    assert.deepStrictEqual(plain(log), ['outer-1', 'inner-action', 'inner-closing', 'outer-2']);
   });
 
   test('controller: with the add-on OFF an ordinary action is not run (null) and its closing actions are not either; "request..." actions run; "menu..." turns the add-on ON', () => {
@@ -109,4 +100,150 @@ module.exports = function register(t) {
              Controller.run('requestB', () => __log.push('action'));`);
     assert.deepStrictEqual(plain(log), ['init:requestA', 'action', 'init:requestB', 'action'], 'a registered initial action runs before every action, with that run\'s context');
   });
+
+  // ---- no nested runs, nothing is lost in the closing phase (bugs-todo #2) ---------------------------------------------------------------
+  const AGENT_FILES = ['Custom errors.js', 'Helper Data Store.js', 'Store.js', 'Settings.js', 'Main Settings.js', 'Controller.js', 'Trigger Manager.js',
+    'Global Add-on Settings.js', 'Quick Start.js', 'functions.js', 'Track onEdit Triggers.js', 'Status Manager.js'];
+
+  test('controller: turning the add-on ON repairs the agents (edit + change trigger) and the logs and the agent pair are SAVED (bugs-todo #2: they were lost)', () => {
+    const p = new FakePlatform();
+    p.props.document.importSettingsArray = JSON.stringify({ addonStatus: false, importSheetName: 'Ustawienia' });
+    const ex = p.execution(AGENT_FILES);
+    ex.eval(`Controller.run('menuSomething', () => 'ok')`);          // a menu action: switches ON, the status check at the end installs the agents
+    assert.deepStrictEqual(p.triggers.map(x => [x.fn, x.type]), [['sheetEdit', 'ON_EDIT'], ['sheetChange', 'ON_CHANGE']]);
+    const ids = p.triggers.map(x => x.id);
+    const doc = JSON.parse(p.props.document.docTriggerArray), usr = JSON.parse(p.props.user.usrTriggerArray), pairs = JSON.parse(p.props.user.agentArray);
+    assert.deepStrictEqual(doc.map(x => [x.triggerId, x.powerOn]), ids.map(id => [id, true]), 'document log');
+    assert.deepStrictEqual(usr.map(x => x.triggerId), ids, 'user log');
+    assert.deepStrictEqual(pairs, [ids], 'agent array');
+    assert.strictEqual(JSON.parse(p.props.document.importSettingsArray).addonStatus, true);
+    assert.deepStrictEqual(p.consoleErrors, [], 'and no nested run was needed');
+  });
+
+  test('controller: closing actions registered while the closing actions run are executed too (in order, after the ones already queued)', () => {
+    const { ex, log } = setup();
+    ex.eval(`Controller.run('requestA', () => {
+      Controller.registerClosing(() => { __log.push('c1'); Controller.registerClosing(() => __log.push('late')); });
+      Controller.registerClosing(() => __log.push('c2'));
+    })`);
+    assert.deepStrictEqual(plain(log), ['c1', 'c2', 'late']);
+  });
+
+  test('controller: a closing action that keeps registering itself cannot loop forever (the closing phase gives up and says so)', () => {
+    const { p, ex, log } = setup();
+    ex.eval(`const again = () => { __log.push('x'); Controller.registerClosing(again); };
+             Controller.run('requestA', () => { Controller.registerClosing(again); })`);
+    assert.ok(log.length >= 100 && log.length <= 10000, 'ran ' + log.length + ' times');
+    assert.ok(p.consoleErrors.some(m => /closing actions/i.test(m)));
+  });
+
+  test('controller: a run started inside a run is a mistake: the work is done inline (nothing breaks), it is reported loudly, and it has no gate / closing list / live-check frame of its own', () => {
+    const { p, ex, log } = setup();
+    const r = ex.eval(`Controller.run('requestOuter', () => {
+      const inner = Controller.run('requestInner', () => { Controller.registerClosing(() => __log.push('inner-closing')); __log.push('inner-action'); return 42; });
+      __log.push('outer-after:' + inner);
+      return 'outer';
+    })`);
+    assert.strictEqual(r, 'outer');
+    assert.deepStrictEqual(plain(log), ['inner-action', 'outer-after:42', 'inner-closing'], 'the inner closing action belongs to the outer run');
+    assert.ok(p.consoleErrors.some(m => /NESTED RUN/.test(m) && /requestInner/.test(m) && /requestOuter/.test(m)), p.consoleErrors.join('|'));
+  });
+
+  test('controller: a nested run started from a closing action is reported the same way', () => {
+    const { p, ex, log } = setup();
+    ex.eval(`Controller.run('requestOuter', () => { Controller.registerClosing(() => { Controller.run('requestInner', () => __log.push('inner')); }); })`);
+    assert.deepStrictEqual(plain(log), ['inner']);
+    assert.ok(p.consoleErrors.some(m => /NESTED RUN/.test(m)));
+  });
+
+  test('controller: an error in a nested (inline) action reaches the outer run, which still runs its closing actions and rethrows', () => {
+    const { ex, log } = setup();
+    assert.throws(() => ex.eval(`Controller.run('requestOuter', () => { Controller.registerClosing(() => __log.push('closing')); Controller.run('requestInner', () => { throw new Error('inner boom'); }); })`), /inner boom/);
+    assert.deepStrictEqual(plain(log), ['closing']);
+  });
+
+  // ---- every platform entry goes through the Controller; nothing else does ------------------------------------------------------------------
+  const fs = require('fs');
+  const path = require('path');
+  const ROOT = path.join(__dirname, '..');
+  const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
+  const strip = text => text.replace(/\/\*[\s\S]*?\*\//g, '').split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
+  // the add-on's code (the live check framework and verifiers are not entry points; its sidebar server file has the menu item liveCheckSidebar)
+  const SOURCES = fs.readdirSync(ROOT).filter(f => /\.js$/.test(f) && !/^(Live Check\.js|Live Check Verifiers\.js|Test Functions|Grid)/.test(f) && f !== 'Controller.js');
+
+  /** The body of a top-level `function name(...) { ... }` (braces counted), or null. */
+  function functionBody(name) {
+    for (const f of SOURCES) {
+      const text = strip(read(f));
+      const m = text.match(new RegExp('(?:^|\\n)function ' + name + '\\s*\\('));
+      if (!m) continue;
+      let i = text.indexOf('{', m.index + m[0].length), depth = 0;
+      for (let j = i; j < text.length; j++) { if (text[j] === '{') depth++; else if (text[j] === '}' && --depth === 0) return { file: f, body: text.slice(i, j + 1) }; }
+    }
+    return null;
+  }
+
+  /** What the platform calls: triggers, menu items, sidebar server calls, the OAuth callback. */
+  function platformEntries() {
+    const names = new Set(['onOpen', 'onEdit', 'sheetEdit', 'sheetChange', 'autoRefreshHandler', 'autoRefresh', 'authCallback']);
+    (strip(read('Menu.js')).match(/addItem\('[^']*',\s*'(\w+)'\)/g) || []).forEach(m => names.add(m.match(/'(\w+)'\)$/)[1]));
+    // sidebar calls: a method call `.name(` in a page that uses google.script.run, where `name` is a function the code defines
+    const defined = new Set();
+    SOURCES.forEach(f => (strip(read(f)).match(/(?:^|\n)function (\w+)\s*\(/g) || []).forEach(m => defined.add(m.match(/function (\w+)/)[1])));
+    fs.readdirSync(ROOT).filter(f => /\.html$/.test(f) && !/^Live Check/.test(f)).forEach(f => {
+      const text = read(f);
+      if (!/google\.script\.run/.test(text)) return;
+      (text.match(/\.(\w+)\s*\(/g) || []).forEach(m => { const n = m.match(/\.(\w+)/)[1]; if (defined.has(n)) names.add(n); });
+    });
+    return [...names].filter(n => !/^with/.test(n)).sort();
+  }
+
+  test('rule: every function the platform calls (triggers, menu items, sidebar calls, the OAuth callback) goes through Controller.run', () => {
+    const entries = platformEntries();
+    assert.ok(entries.length >= 25, 'found ' + entries.length + ' entries: ' + entries.join(', '));
+    const missing = [], notFound = [];
+    entries.forEach(n => {
+      const f = functionBody(n);
+      if (!f) return notFound.push(n);
+      if (!/Controller\.run\(/.test(f.body)) missing.push(n + ' (' + f.file + ')');
+    });
+    assert.deepStrictEqual(notFound, [], 'entry points that are not top-level functions (renamed?)');
+    assert.deepStrictEqual(missing, [], 'entry points that bypass the Controller');
+  });
+
+  test('rule: onOpen is the one exception - the menu is built first, outside the Controller, in every auth mode; the rest is an ordinary run', () => {
+    const f = functionBody('onOpen');
+    assert.ok(/menuSelector\(\);[\s\S]*Controller\.run\("onOpen"/.test(f.body), f.body);
+    assert.ok(/e\.authMode != ScriptApp\.AuthMode\.NONE\)\s*Controller\.run\("onOpen"/.test(f.body), 'the run only where the script is authorised');
+  });
+
+  test('rule: Controller.run is called only from entry points (no helper wraps itself) and Controller.checked is gone', () => {
+    const entries = new Set(platformEntries());
+    const offenders = [];
+    SOURCES.forEach(f => {
+      const text = strip(read(f));
+      let at = -1;
+      while ((at = text.indexOf('Controller.run(', at + 1)) >= 0) {
+        const before = text.slice(0, at);
+        const m = [...before.matchAll(/(?:^|\n)function (\w+)\s*\(/g)].pop();
+        const inFunction = m ? m[1] : '(class or top level)';
+        if (!entries.has(inFunction)) offenders.push(f + ': ' + inFunction);
+      }
+    });
+    assert.deepStrictEqual(offenders, [], 'Controller.run inside a function that is not an entry point');
+    assert.ok(!/function checked\(/.test(read('Controller.js')) && !/\bchecked\b[,\s}]/.test(read('Controller.js').match(/return \{[^}]*\}/)[0]));
+    SOURCES.forEach(f => assert.ok(!/Controller\.checked/.test(strip(read(f))), f));
+  });
+
+  test('rule: the only server functions outside the Controller are the three the live check sidebar polls every few seconds (they would fill their own list)', () => {
+    const html = read('Live Check Sidebar.html');
+    const polled = ['liveCheckSidebarData', 'liveCheckSidebarDetail', 'liveCheckSidebarSetEnabled'];
+    polled.forEach(n => assert.ok(new RegExp('\\.' + n + '\\s*\\(').test(html), n + ' is called by the sidebar'));
+    const server = strip(read('Live Check Sidebar Server.js'));
+    polled.forEach(n => {
+      const m = server.match(new RegExp('(?:^|\\n)function ' + n + '\\s*\\([^)]*\\)\\s*\\{[\\s\\S]*?\\n\\}'));
+      assert.ok(m && !/Controller\./.test(m[0]), n);
+    });
+  });
+
 };

@@ -37,7 +37,7 @@ class StatusManager{
 	}
 
 	static fullStatusCheck(){
-		if(!this.basicStatusCheck()) forceAgentRefresh();
+		if(!this.basicStatusCheck()) this.forceRefresh();
 	}
 
 	static powerOffAllAgentsInFile(){
@@ -129,6 +129,16 @@ class StatusManager{
 		let map = new Map();
 		TriggerWrapper.getProjectTriggers().forEach(trigger => map.set(trigger.getUniqueId(),true));
 		return map;
+	}
+
+	/** Powers off every agent of this file, cleans the three trigger logs up and installs a working agent. Returns the id of the edit trigger. */
+	static forceRefresh(){
+		dbgLog("Running forceAgentRefresh. Powering off all agents...");
+		this.powerOffAllAgentsInFile();
+		dbgLog("Agents powered OFF. Clenup...");
+		this.logCleanUp();
+		dbgLog("Cleanup complete. Repairing status...");
+		return this.repairStatus();
 	}
 
 	static repairStatus(){
@@ -232,7 +242,7 @@ class StatusManager{
 
 function getAgentStatus(){
   // let trigInfo = StatusManager.getAgentInfo();
-  return Controller.checked("getAgentStatus",() => [StatusManager.basicStatusCheck(),MainSettings.getAddonStatus()]);
+  return Controller.run("requestAgentStatus",() => [StatusManager.basicStatusCheck(),MainSettings.getAddonStatus()]);
   let res = StatusManager.basicStatusCheck() ? "Agent active <br />" : "Agent NOT active <br />";
   res += "Edit Triggers:<br />";
   res += trigInfo.editTriggers?.length<=0 ? "- <br />" : trigInfo.editTriggers.map(trigInfo => trigInfo.triggerId + " " + (trigInfo.powerOn ? "ON" : "OFF") + "<br />");
@@ -241,15 +251,9 @@ function getAgentStatus(){
   return res;  
 }
 
+/** Entry point (sidebar button): repairs the agents. The work is StatusManager.forceRefresh(), which the status check after turning the add-on on uses too. */
 function forceAgentRefresh(){
-  Controller.run("forceAgentRefresh", () => {
-    dbgLog("Running forceAgentRefresh. Powering off all agents...");
-    StatusManager.powerOffAllAgentsInFile();
-    dbgLog("Agents powered OFF. Clenup...");
-    StatusManager.logCleanUp();
-    dbgLog("Cleanup complete. Repairing status...");
-    return StatusManager.repairStatus();
-  });
+  Controller.run("forceAgentRefresh", () => StatusManager.forceRefresh());
 }
 
 

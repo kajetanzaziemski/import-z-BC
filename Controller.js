@@ -3,7 +3,9 @@ const Controller = (function () {
   let closingActions = [];     // reset per run
 
   const flags = [];
-  let depth = 0;               // runs in progress: > 0 while an action or its closing actions are running (a run started from there is nested)
+  let depth = 0;               // 1 while a run (its action or its closing actions) is in progress; a run started then would be nested (see run())
+  let currentAction = null;
+  const MAX_CLOSING_ACTIONS = 200;
 
   function registerInit(fn) {
     initActions.push(fn);
@@ -47,18 +49,28 @@ const Controller = (function () {
     if(typeof liveCheckIntent === "function") liveCheckIntent(name, data);
   }
 
-  /** Live check around an entry point that does not use run(). Passes the result and errors through. */
-  function checked(actionName, actionFn, input) {
-    if(typeof liveCheckGuard !== "function") return actionFn();
-    return liveCheckGuard(actionName, actionFn, input);
-  }
-
+  /**
+   * Wraps ONE entry point of the add-on (a trigger, a menu item, a sidebar call, the OAuth callback): the ON/OFF gate, the initial actions, the action,
+   * its error handling and the closing actions (the saves of the settings and logs, the alerts). Every platform entry goes through here; the only
+   * exception is building the menu in onOpen (it must be fast and work in every auth mode).
+   *
+   * Entry points do not call each other, so runs do not nest: a run started while another is in progress (from its action or its closing actions) is a
+   * mistake. It is reported (console.error "NESTED RUN") and its action is done inline, without a gate, closing list or live-check frame of its own.
+   * Shared work belongs in a use case that both callers use.
+   *
+   * One run per execution is the rule (every platform call is a fresh execution). The state objects (the settings, the trigger logs) live for the
+   * execution and register their save when they are built, so a second top-level run in the same execution (the script editor, tests) does not
+   * save what those objects change; registerClosingOnce flags last for the execution too.
+   *
+   * Closing actions registered BEFORE the run (an entry point may touch the settings in its own log line, which builds the settings object and registers
+   * its save) belong to it, and so do those registered while the closing actions run (e.g. the saves of the trigger logs when the status check repairs the
+   * agents): the closing phase goes on until nothing is left (docs/bugs-todo.md #1, #2).
+   */
   function run(actionName, actionFn, e) {
-    // A top-level run keeps the closing actions registered BEFORE it started: an entry point may touch the settings in its own log line before calling run(),
-    // which builds the settings object and registers its save - throwing that away lost every setting changed in the execution (docs/bugs-todo.md #1).
-    // A nested run (started from a closing action) starts with an empty list, as it always did.
-    const nested = depth > 0;
-    if(nested) closingActions = [];
+    if(depth > 0) {
+      console.error(`NESTED RUN: Controller.run("${actionName}") was called while "${currentAction}" is running. Entry points must not call each other - move the shared work to a use case. Doing it inline.`);
+      return actionFn({event: e, actionName: actionName, registerClosing: registerClosing, data: {}});
+    }
     const check = checkBegin(actionName);
 
     dbgLog(`Running ${actionName}. Test returns ${/^menu/.test(actionName)}`);
@@ -69,7 +81,7 @@ const Controller = (function () {
     if(!MainSettings.getAddonStatus() && !/^request/.test(actionName)) {
       dbgLog("Addon OFF. Quitting.");
       checkEnd(check, undefined, null, "addon-off");
-      if(!nested) closingActions = [];      // nothing runs, what was registered before is dropped
+      closingActions = [];      // nothing runs, what was registered before is dropped
       return null;
     }
     dbgLog(`Running ${actionName}...`);
@@ -83,6 +95,7 @@ const Controller = (function () {
 
     let result, error;
     depth++;
+    currentAction = actionName;
     try {
       initActions.forEach(fn => fn(ctx));
       result = actionFn(ctx);
@@ -91,12 +104,14 @@ const Controller = (function () {
       console.error(`[${actionName}]\n ${err.stack || err}`);
       if(e instanceof UnknownError) throw e.unknownError;
     } finally {
-      closingActions.forEach((fn,i)=> {
-        try { fn(ctx, error, result); }
+      // by index and length read every time: what a closing action registers is run after the ones already queued
+      for(let i = 0; i < closingActions.length; i++) {
+        if(i >= MAX_CLOSING_ACTIONS) { console.error(`[${actionName}] closing actions: gave up after ${MAX_CLOSING_ACTIONS} (an action keeps registering more?)`); break; }
+        try { closingActions[i](ctx, error, result); }
         catch (closeErr) { console.error(`[${actionName}] closing action failed:\n ${closeErr}`); }
-      });
+      }
       depth--;
-      if(depth === 0) closingActions = [];      // done: the next top-level run starts clean
+      closingActions = [];      // done: the next run starts clean
     }
 
     checkEnd(check, error, result);
@@ -104,5 +119,5 @@ const Controller = (function () {
     return result;
   }
 
-  return { registerInit, registerClosing, registerClosingOnce, run, checked, checkInput, checkNote, intent };
+  return { registerInit, registerClosing, registerClosingOnce, run, checkInput, checkNote, intent };
 })();

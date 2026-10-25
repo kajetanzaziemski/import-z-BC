@@ -70,6 +70,11 @@ Pins the time trigger set-up, the permit-guarded handlers (current and legacy), 
 and the rules (entry points are one-liners, no edit logic left in Quick Start.js). `live-check.test.js` runs the real triggers with the live check ON and checks labels, which verifier ran, misrouting detection,
 the fallback without a job, the catalogue / verifier / announcement agreement, the report format and the sidebar headline. See `docs/router.md`.
 
+## 2g. Controller (`tests/controller.test.js`)
+Closing actions before / during / after a run, the closing phase's late registrations and cap, the nested-run report, the add-on gate, and the **architecture rules**: every platform entry (derived from the code: triggers, `addItem` handlers,
+sidebar calls, the OAuth callback) goes through `Controller.run`, `Controller.run` is called from entry points only, `onOpen` builds the menu first outside the Controller. Plus an end-to-end test that switching the add-on ON installs the agents
+and saves both logs and the agent pair. See `docs/controller.md`.
+
 ## 3. Real-spreadsheet check (do before anything is pushed to the live add-on)
 Production runs the **Spreadsheet-service path** (the Sheets advanced service is not enabled in `appsscript.json`), so that is the path to check.
 1. Push to a **copy** of the script (a second Apps Script project / test spreadsheet, not the Marketplace one): `clasp push` there (`.claspignore` keeps `tests/` out).
