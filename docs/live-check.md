@@ -128,3 +128,10 @@ Every platform entry goes through `Controller.run` now (`docs/controller.md`): `
 - **`reportFailedChecks()`** (Live Check.js) runs from the script editor without arguments: it logs and returns the FAIL / WARN runs among the last 40 stored results (`liveCheckReport(40, true)`).
 - **Sidebar scrolling.** The Live check sidebar no longer rebuilds its list every second while a run is going (only the clock text is updated) and a rebuild keeps the sideways scroll of the open details and the page
   position. Checked once in headless Chromium against the old and the new page (scroll 150 px, one poll with new data: old page 0, new page 150); the automated test only asserts the code shape.
+
+## Two verifier changes after real-sheet runs (intended, hashes re-pinned)
+- **Number format uniformity** (`menuRefreshCurrentSheet`, `menuRefreshAll`, `requestAutoRefesh`): judged on the **data rows** (row 2 vs the last row). The header cell of a date column comes back from Sheets
+  with the automatic format (`0.###############`) whatever was set (the old and the new writer both set it), so row 1 vs the last row failed for every `Edm.Date` column. The message now shows the formats of the two data rows and of the header.
+- **`<sheet>_coedit` flags** (`simpleOnEdit`, `change.ignored`, and the old combined judgement): the lock helper's flag of a co-edit that runs at the same time is no longer reported as a change **when another checked run overlapped
+  this one** (still running, or ended after this one started; `lcParallelCoeditFlags_`). On a quiet document it still is one. Trade-off: a run that wrongly started a co-edit while another one was going is not caught by this check
+  (the sheet and indicator checks still see its effects).

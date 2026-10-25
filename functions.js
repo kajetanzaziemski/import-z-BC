@@ -63,27 +63,31 @@ function md5Hash(string){
   .join('');
 }
 
+/**
+ * Runs `action` under the script lock, so that two executions never work on the same thing at once - and so that a request made while the action
+ * runs is not lost. `flag` (a document property) says "a run is requested":
+ *  - every caller first sets it to "yes" (its request) and then tries the lock, 1 s and then up to 10 s more;
+ *  - the caller that gets the lock sets the flag to "no" BEFORE each pass and then runs the action (which reads whatever it works on at its start),
+ *    so a request made during the pass leaves the flag "yes" and the holder does another pass; at most LOCK_MAX_PASSES in one run (the rest stays "yes");
+ *  - a caller that finds the flag "no" once it has the lock has been served by a pass that started after its request: it does nothing;
+ *  - a caller that never gets the lock leaves its request "yes": the holder serves it.
+ * (Before, the holder set "no" AFTER its pass, which erased the requests made during it: a paste while an analyse was running was never analysed.)
+ */
+const LOCK_MAX_PASSES = 5;
+
 function runFunctionWithLock(action,flag="scriptLocked__"){
+  Store.set("document",flag,"yes");
   const lock = LockService.getScriptLock();
   lock.tryLock(1000);
-  if (lock.hasLock()) { 
-    // dbgLog("Lock received. Applying coedits.");
-    action();
-    Store.set("document",flag,"no");
-    // dbgLog("Coedits applied. Setting requireCoedit to "+properties.getProperty(flag));
-  } else {
-    Store.set("document",flag,"yes");
-    // dbgLog("Script locked. Setting requireCoedit to "+properties.getProperty(flag)+" and waiting...");
-    lock.tryLock(10000);
-    let requireCoedit = Store.get("document",flag)=="yes";
-    // dbgLog("Lock status: "+lock.hasLock()+". requireCoedit: "+requireCoedit);
-    if (lock.hasLock() && requireCoedit) {
-      // dbgLog("Lock available, coedits required. Applying coedits.");
-      action();
+  if (!lock.hasLock()) lock.tryLock(10000);
+  if (!lock.hasLock()) return;
+  try {
+    for (let pass = 0; pass < LOCK_MAX_PASSES && Store.get("document",flag)=="yes"; pass++) {
       Store.set("document",flag,"no");
-      // dbgLog("Additional script finished. Setting requireCoedit to "+properties.getProperty(flag));
+      action();
     }
-    // else dbgLog("Quitting.");
+  } finally {
+    lock.releaseLock();
   }
 }
 

@@ -311,12 +311,36 @@ module.exports = function register(t) {
     assert.ok(/data writing \(D2: background #ff0000, font #000000; before the run: background #cccccc, font #999999\)/.test(r.detail), r.detail);
   });
 
-  test('live check, end to end: a result column whose number format differs between the header and the last row -> FAIL naming the column and the actual formats', () => {
-    const r = e2e({ run: 'refreshCurrentSheet()', action: 'menuRefreshCurrentSheet', line: /number format uniform in every column/, table: true,
-      breakIt: `{ const w = ResultSheet.write; ResultSheet.write = function (n) { w.apply(this, arguments); SpreadsheetApp.getActiveSpreadsheet().getSheetByName(n).getRange(2, 1).setNumberFormat('0.00'); }; }` });
+  test('live check: the "<sheet>_coedit" lock flags count as a change only when no other checked run overlapped this one', () => {
+    const p = new FakePlatform();
+    const ex = p.execution(FILES);
+    const put = (k, t, s, ms) => ex.eval(`PropertiesService.getDocumentProperties().setProperty(LIVE_CHECK_RESULT_PREFIX + "${k}", JSON.stringify({t: "${t}", a: "x", s: "${s}", ms: ${ms}, c: []}))`);
+    const startedAt = Date.parse('2026-10-25T10:00:10.000Z');
+    ex.eval(`globalThis.__c = { key: 'mine', startedAt: ${startedAt} }; lcStoredResults_ = () => JSON.parse(globalThis.__stored)`);
+    const flags = stored => { ex.ctx.__stored = JSON.stringify(stored); return ex.eval(`lcParallelCoeditFlags_(__c).length`); };
+    const e = (k, t, s, ms) => ({ k, t, s, ms, a: 'sheetEditAction', c: [] });
+    ex.eval(`Date.now = () => ${startedAt + 5000}`);
+    assert.strictEqual(flags([]), 0, 'quiet document');
+    assert.strictEqual(flags([e('o1', '2026-10-25T10:00:05.000Z', 'RUN', 0)]), 1, 'another run still going');
+    assert.strictEqual(flags([e('o2', '2026-10-25T10:00:00.000Z', 'PASS', 12000)]), 1, 'another run that ended after this one started');
+    assert.strictEqual(flags([e('o3', '2026-10-25T10:00:00.000Z', 'PASS', 3000)]), 0, 'another run that ended before this one started');
+    assert.strictEqual(flags([e('mine', '2026-10-25T10:00:10.000Z', 'RUN', 0)]), 0, 'this run itself does not count');
+  });
+
+  const THREE_ROWS = `ODataConnection.prototype.getDataArray = () => [['No'], ['C1'], ['C2']];`;
+  const FMT = /number format uniform in every column/;
+  test('live check, end to end: a result column whose number format differs between data rows -> FAIL naming the column and the actual formats (header shown, not judged)', () => {
+    const r = e2e({ run: 'refreshCurrentSheet()', action: 'menuRefreshCurrentSheet', line: FMT, table: true,
+      breakIt: THREE_ROWS + `{ const w = ResultSheet.write; ResultSheet.write = function (n) { w.apply(this, arguments); SpreadsheetApp.getActiveSpreadsheet().getSheetByName(n).getRange(3, 1).setNumberFormat('0.00'); }; }` });
     assert.strictEqual(r.status, 'FAIL');
-    assert.strictEqual(r.detail, 'differs between first and last row: No (row 1: "@", row 2: "0.00", row 2: "0.00")');
-    assert.strictEqual(e2e({ run: 'refreshCurrentSheet()', action: 'menuRefreshCurrentSheet', line: /number format uniform in every column/, table: true }).status, 'PASS');
+    assert.strictEqual(r.detail, 'differs between the first and last data row: No (row 2: "@", row 3: "0.00"; header: "@")');
+    assert.strictEqual(e2e({ run: 'refreshCurrentSheet()', action: 'menuRefreshCurrentSheet', line: FMT, table: true, breakIt: THREE_ROWS }).status, 'PASS');
+  });
+
+  test('live check, end to end: a header cell that Sheets reset to its automatic format (as it does in date columns) is not a FAIL; the data rows decide', () => {
+    const r = e2e({ run: 'refreshCurrentSheet()', action: 'menuRefreshCurrentSheet', line: FMT, table: true,
+      breakIt: THREE_ROWS + `{ const w = ResultSheet.write; ResultSheet.write = function (n) { w.apply(this, arguments); SpreadsheetApp.getActiveSpreadsheet().getSheetByName(n).getRange(1, 1).setNumberFormat('0.###############'); }; }` });
+    assert.strictEqual(r.status, 'PASS');
   });
 
   test('live check, end to end: code that forgets to reset the writing cell after a refresh -> FAIL, also when D2 was hand-edited before', () => {

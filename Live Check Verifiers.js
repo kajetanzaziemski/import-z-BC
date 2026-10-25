@@ -207,6 +207,23 @@ function lcOtherRunsInProgress_(c){
   }
 }
 
+/**
+ * Document properties that a run of ANOTHER execution may change while this one is judged: the "<sheet>_coedit" flags of the lock-and-retry helper
+ * (runFunctionWithLock) that a co-edit running at the same time writes. Allowed only when some other checked run overlapped this one
+ * (still running, or finished after this one started); on a quiet document they still count as a change.
+ */
+function lcParallelCoeditFlags_(c){
+  try{
+    const mine = lcStack.map(f => f.key);
+    const from = c.startedAt, to = Date.now();
+    const overlapping = lcStoredResults_().some(e => e.k !== c.key && mine.indexOf(e.k) < 0 && Date.parse(e.t) <= to &&
+      (e.s == "RUN" || Date.parse(e.t) + (e.ms || 0) >= from));
+    return overlapping ? [/_coedit$/] : [];
+  } catch(err) {
+    return [];
+  }
+}
+
 /** Header of a config sheet that was created by the add-on. */
 function lcVerifyConfigHeader_(c,sheet,tag){
   const g = LC_CONFIG_HEADER;
@@ -320,11 +337,13 @@ function lcVerifyResultSheet_(c,configName,resultName){
   else c.skip(`${tag} data rows vs estimate`,`no numeric estimate in F2 (${JSON.stringify(estimate)})`);
 
   // formats: uniform down every column, and right for the data type when the metadata cache knows it
-  const first = sheet.getRange(1,1,1,cols).getNumberFormats()[0];
+  // The header row is text: Sheets resets the number format of a date column's header cell to its automatic one ("0.###############") whatever was set,
+  // so the uniformity is judged on the DATA rows (row 2 to the last); the header's format is only reported when the columns differ.
+  const headerFormats = sheet.getRange(1,1,1,cols).getNumberFormats()[0];
+  const first = rows > 1 ? sheet.getRange(2,1,1,cols).getNumberFormats()[0] : headerFormats;
   const last = sheet.getRange(rows,1,1,cols).getNumberFormats()[0];
-  const second = rows > 1 ? sheet.getRange(2,1,1,cols).getNumberFormats()[0] : first;
-  const ragged = first.map((f,i) => f !== last[i] ? `${header[i]} (row 1: "${f}", row 2: "${second[i]}", row ${rows}: "${last[i]}")` : null).filter(h => h !== null);
-  c.expect(`${tag} number format uniform in every column`,ragged.length == 0,`differs between first and last row: ${ragged.slice(0,5).join("; ")}`);
+  const ragged = first.map((f,i) => f !== last[i] ? `${header[i]} (row 2: "${f}", row ${rows}: "${last[i]}"; header: "${headerFormats[i]}")` : null).filter(h => h !== null);
+  c.expect(`${tag} number format uniform in every column`,ragged.length == 0,`differs between the first and last data row: ${ragged.slice(0,5).join("; ")}`);
 
   const wrong = [];
   let known = 0;
@@ -409,7 +428,7 @@ function buildLiveCheckVerifiers_(){
         const e = c.input.e;
         const poweredOff = /Powering OFF all agents/.test(c.notes.join("\n"));
         c.unchanged("sheets","simple onEdit changes no sheet");
-        c.unchanged("docProps","only the agent-detection flag (and the power of the agents after a level 2 alarm) may change",poweredOff ? ["agentSuspect","docTriggerArray"] : ["agentSuspect"]);
+        c.unchanged("docProps","only the agent-detection flag (and the power of the agents after a level 2 alarm) may change",(poweredOff ? ["agentSuspect","docTriggerArray"] : ["agentSuspect"]).concat(lcParallelCoeditFlags_(c)));
 
         const suspect = c.docProp("agentSuspect");
         let flag = null, malformed = false;
@@ -877,7 +896,7 @@ function lcVerifyAgentContent_(c,kind,settings){
     const type = String(e.changeType);
     if(type == "EDIT" || type == "FORMAT"){
       c.unchanged("sheets",`${type} change is ignored`);
-      c.unchanged("docProps",`${type} change is ignored`,["docTriggerArray","agentSuspect"]);
+      c.unchanged("docProps",`${type} change is ignored`,["docTriggerArray","agentSuspect"].concat(lcParallelCoeditFlags_(c)));
       return;
     }
   }
@@ -963,7 +982,7 @@ function lcJobVerifiers_(){
         const type = String(c.input.e && c.input.e.changeType);
         if(!c.expect("only EDIT and FORMAT changes are ignored",type == "EDIT" || type == "FORMAT",type)) return;
         c.unchanged("sheets",`${type} change is ignored`);
-        c.unchanged("docProps",`${type} change is ignored`,["docTriggerArray","agentSuspect"]);
+        c.unchanged("docProps",`${type} change is ignored`,["docTriggerArray","agentSuspect"].concat(lcParallelCoeditFlags_(c)));
       }
     },
 

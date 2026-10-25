@@ -295,6 +295,58 @@ module.exports = function register(t) {
     assert.strictEqual(q.p.props.document.flagC, 'yes', 'whoever holds the lock sees that a re-run is needed');
   });
 
+  // A request that comes in while the holder works (the user pastes a row while an analyse runs) must not be lost: the holder reads the sheet at
+  // the START of its action, so the paste is not in what it works on. Before: the holder cleared the flag after its action and the waiting run found "no".
+  test('state: runFunctionWithLock: a request that arrives during the action makes the holder run it again (nothing is lost)', () => {
+    const { p, ex, next } = setup();
+    p.tryLockAttempts = 0;
+    ex.ctx.__otherRun = () => {                                      // a second execution while this one holds the lock: it cannot get it
+      p.lockHeld = true;
+      const y = next();
+      y.ex.eval(`globalThis.__yRan = 0; runFunctionWithLock(() => { __yRan++; }, 'flagD')`);
+      p.lockHeld = false;
+      return y.ex.eval(`__yRan`);
+    };
+    ex.eval(`globalThis.__runs = 0; globalThis.__yRuns = 0;
+      runFunctionWithLock(() => { __runs++; if (__runs === 1) __yRuns = __otherRun(); }, 'flagD')`);
+    assert.strictEqual(ex.eval(`__yRuns`), 0, 'the other run could not take the lock');
+    assert.strictEqual(ex.eval(`__runs`), 2, 'the holder did the action again for the request made during the first one');
+    assert.strictEqual(p.props.document.flagD, 'no');
+  });
+
+  test('state: runFunctionWithLock: a run that gets the lock after the holder handled its request does nothing; one request = one action even with many waiting', () => {
+    const { p, ex, next } = setup();
+    ex.ctx.__others = () => {
+      p.lockHeld = true; p.lockFreesAfter = Infinity;
+      for (let i = 0; i < 3; i++) next().ex.eval(`runFunctionWithLock(() => { throw new Error('waiting run must not act'); }, 'flagE')`);
+      p.lockHeld = false;
+    };
+    ex.eval(`globalThis.__runs = 0; runFunctionWithLock(() => { __runs++; if (__runs === 1) __others(); }, 'flagE')`);
+    assert.strictEqual(ex.eval(`__runs`), 2, 'three waiting requests are one more pass, not three');
+    // a late run: the flag is "no" (its request was served), it takes the lock and leaves
+    const late = next();
+    late.ex.eval(`globalThis.__n = 0; runFunctionWithLock(() => { __n++; }, 'flagE')`);
+    assert.strictEqual(late.ex.eval(`__n`), 1, 'a new request on a quiet document is served once');
+    p.props.document.flagE = 'no';
+    const q = next();
+    q.p.lockHeld = true; q.p.lockFreesAfter = 1;                   // takes the lock on the second try, but its request was already served by someone else
+    q.ex.eval(`globalThis.__n = 0; runFunctionWithLock(() => { __n++; }, 'flagE')`);
+    assert.strictEqual(q.ex.eval(`__n`), 1);
+  });
+
+  test('state: runFunctionWithLock: a stream of requests is served at most 5 times in one run; the rest stays requested', () => {
+    const { p, ex } = setup();
+    ex.eval(`globalThis.__n = 0; runFunctionWithLock(() => { __n++; Store.set('document', 'flagF', 'yes'); }, 'flagF')`);
+    assert.strictEqual(ex.eval(`__n`), 5);
+    assert.strictEqual(p.props.document.flagF, 'yes');
+  });
+
+  test('state: runFunctionWithLock: the lock is released after the action, also when it throws', () => {
+    const { p, ex } = setup();
+    assert.throws(() => ex.eval(`runFunctionWithLock(() => { throw new Error('boom'); }, 'flagG')`), /boom/);
+    assert.ok(p.calls.includes('lock.released'));
+  });
+
   // =====================================================================================================================
   // Part 2: the Store / Settings facade, and the callers that were moved onto it
   // =====================================================================================================================
