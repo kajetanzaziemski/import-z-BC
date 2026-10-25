@@ -21,6 +21,7 @@ const AnalyseConfig = {
       throw e;
     }
     // "dropped": a newer run has taken over and its reading indicator is the one that counts - it puts it back to idle when it is done.
-    if(outcome !== "dropped") shCoed.switchReadingControl(false);
+    if(outcome === "dropped") Controller.checkNote("co-edit dropped: a newer co-edit took over");     // (the live check does not judge a sheet the newer one is still completing)
+    else shCoed.switchReadingControl(false);
   }
 };

@@ -67,8 +67,9 @@ function md5Hash(string){
  * Runs `action` so that only the LAST run to start completes: runs started meanwhile are not queued up one after the other, the older ones drop out,
  * even in the middle of their work.
  *  - Every run first writes its own ticket to the document property `flag` ("I am the newest"). The ticket in the property is the newest run's.
- *  - Then it takes the DOCUMENT lock (not the script lock, which would make all documents wait for each other), trying for about LATEST_WAIT_MS. While it waits
- *    it gives up as soon as it is not the newest any more ("dropped"); if the lock does not come in time: "timeout".
+ *  - Then it takes the SCRIPT lock, trying for about LATEST_WAIT_MS. While it waits it gives up as soon as it is not the newest any more ("dropped"); if the lock
+ *    does not come in time: "timeout". (Not the DOCUMENT lock: the agent detection (Track onEdit Triggers.js) uses that one for a few milliseconds at a time and
+ *    waits for it only 5 s - a co-edit holding it for 10-20 s would starve the detector and get the agents powered off.)
  *  - With the lock it checks once more, then runs `action(isLatest)`. The action calls isLatest() at its checkpoints (before it changes anything, and before
  *    every write that cannot be taken back or is slow to prepare) and drops out by returning false when a newer run has started; the lock is then freed for it.
  * Returns "completed" (the action finished and no newer run came), "dropped" (a newer run exists: leave what the newer one needs - the reading indicator -
@@ -82,7 +83,7 @@ function runLatestOnly(action,flag="scriptLocked__"){
   Store.set("document",flag,ticket);
   const isLatest = () => Store.get("document",flag) === ticket;
 
-  const lock = LockService.getDocumentLock();
+  const lock = LockService.getScriptLock();
   for(let tries = 0; !lock.hasLock(); tries++){
     if(!isLatest()) return "dropped";
     if(tries * LATEST_POLL_MS >= LATEST_WAIT_MS) return "timeout";

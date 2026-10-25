@@ -480,6 +480,16 @@ module.exports = function register(t) {
     assert.strictEqual(r.status('the trigger is powered off or not logged'), 'PASS');
   });
 
+  test('live check jobs: a co-edit that dropped out because a newer one took over is reported as dropped (SKIP), not judged on a sheet the newer run is still completing', () => {
+    const done = agentRun({ entry: 'edit' });
+    assert.ok(done.status('has a "table" row') !== undefined, 'a normal run is judged on the content');
+    const dropped = agentRun({ entry: 'edit', breakIt: `SheetCoeditor.prototype.sheetEdit = function (e, isLatest) { Store.set('document', 'Konfiguracja 1_coedit', 'a-newer-run'); return isLatest(); }` });
+    assert.strictEqual(dropped.entry.i, 'config.coedit');
+    assert.strictEqual(dropped.status('result'), 'SKIP');
+    assert.ok(dropped.names.every(n => !/has a "table" row|dropdowns match|activity indicators/.test(n)), 'nothing about the content or the lights: ' + dropped.names.join(' | '));
+    assert.notStrictEqual(dropped.entry.s, 'FAIL', JSON.stringify(dropped.entry.c.filter(x => x[0] !== 'PASS')));
+  });
+
   test('live check jobs: a WRONGLY routed edit is a FAIL (each job re-derives its premise from the event, not from the router)', () => {
     const asConfig = agentRun({ entry: 'edit', active: 'Arkusz1', range: { sheet: 'Arkusz1', row: 1, col: 1 }, breakIt: `Router.routeEdit = e => ({ intent: 'config.coedit', sheet: 'Arkusz1', event: e })` });
     assert.strictEqual(asConfig.status('Arkusz1 is a config sheet listed in the settings sheet'), 'FAIL');

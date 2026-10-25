@@ -157,7 +157,7 @@ module.exports = function register(t) {
     fillLines(s.book, SCENARIOS['table, select, fields, filter']);
     s.book.requests.length = 0; s.book.gets.length = 0;
     s.run(`new SheetCoeditor('K', false).sheetEdit({})`);
-    assert.strictEqual(s.book.gets.length, 5, 'constructor read + edit read (2 gets each: sheet size, window) + status cells; no read after the inserts');
+    assert.strictEqual(s.book.gets.length, 9, 'constructor read + edit read + the two "has the sheet changed" reads (2 gets each: sheet size, window) + status cells; no read after the inserts');
     assert.strictEqual(s.book.requests.length, 3, 'estimate grey, the inserted lines, the dropdowns and notes');
   });
 
@@ -239,7 +239,7 @@ module.exports = function register(t) {
   function analyseScope(mode, hookAt) {
     const book = new SimBook({ api: mode === 'api' });
     const p = new FakePlatform();
-    const files = ['Custom errors.js', 'Helper Data Store.js', 'Store.js', 'functions.js', ...FILES.filter(f => !['functions.js', 'Custom errors.js'].includes(f)), 'AnalyseConfig.js'];
+    const files = ['Custom errors.js', 'Helper Data Store.js', 'Store.js', 'Controller.js', 'functions.js', ...FILES.filter(f => !['functions.js', 'Custom errors.js'].includes(f)), 'AnalyseConfig.js'];
     const run = (code, extra) => {
       const ex = p.execution(files, Object.assign({ SpreadsheetApp: book.SpreadsheetApp, Utilities: book.Utilities, Sheets: mode === 'api' ? book.Sheets : undefined, __hookAt: hookAt, __book: book }, extra || {}));
       ex.eval(`globalThis.dbgLog = () => {}; globalThis.__calls = {}; globalThis.getMetadata = () => ({
@@ -272,4 +272,59 @@ module.exports = function register(t) {
     assert.ok(dropdowns() > 0);
     assert.strictEqual(sh.cell(2, 2).fmt.bg, '#cccccc');
   })));
+
+  // ---- the sheet changed under the co-edit (a paste while it works) ------------------------------------------------------------------------------
+  // The model is built from what was read; BC calls take seconds. If the lines are not what was read any more when the co-edit is about to write, it starts
+  // again from a fresh read instead of writing rows and dropdowns that fit the old picture (the paste would lose its dropdowns, inserted rows would land in
+  // the wrong place). Independent of any other run: it needs no trigger to come and fix things.
+  const PASTED = ['queryOption', 'filter', 'PostingDate', '>=', '2025-01-01'];
+  const pasteInto = (s, row, values, dvFrom) => {          // what a paste does: values and the validations copied from the source line
+    values.forEach((v, j) => s.book.sheets['K'].setValue(row, 2 + j, v, ''));
+    values.forEach((v, j) => { s.book.sheets['K'].cell(row, 2 + j, true).dv = 'list:copied:strict:dropdown'; });
+  };
+  const dropdownCells = (s, row) => [2, 3, 4, 5, 6].map(c => ((s.book.sheets['K'].cell(row, c) || {}).dv || '-').slice(0, 9));
+  function pasteScope(mode, atCall, row, what) {
+    const s = scope(mode, {});
+    s.run(`ConfigGrid.create('K')`);
+    fillLines(s.book, [['table', 'Customers'], ['queryOption', 'select'], ['select', 'Name'], ['extend', 'Lines']]);
+    s.run(`globalThis.__calls = {}; globalThis.__passes = 0;
+      globalThis.getMetadata = () => ({
+        listTables: () => { __calls.t = (__calls.t || 0) + 1; __onCall('listTables', __calls.t); return ['Customers', 'Items']; },
+        listProperties: t => { __calls.p = (__calls.p || 0) + 1; __onCall('listProperties', __calls.p); return ['No', 'Name', 'PostingDate']; },
+        listNavProperties: t => ['Lines'], getDataType: (f, t) => (f === 'PostingDate' ? 'Edm.Date' : 'Edm.String') });`);
+    s.ctx.__onCall = (name, n) => { if (name === atCall.name && n === atCall.nth) what(s); };
+    return s;
+  }
+
+  ['api', 'service'].forEach(mode => {
+    [['while the model is being built (before anything is written)', { name: 'listTables', nth: 3 }],     // (#1 and #2: the two constructors)
+     ['while the dropdowns are being prepared (the missing lines are already in)', { name: 'listProperties', nth: 1 }]].forEach(([when, at]) =>
+      test(`a paste ${when}: the co-edit starts again and the pasted line ends up with all its dropdowns, in ONE sheetEdit [${mode}]`, () => {
+        const s = pasteScope(mode, at, 11, sc => pasteInto(sc, 11, PASTED));
+        s.run(`new SheetCoeditor('K', false)`);                                   // (constructor: listTables #1)
+        assert.strictEqual(s.run(`new SheetCoeditor('K', false).sheetEdit({})`), true);       // (constructor #2, then the pass: #3 ...)
+        const sh = s.book.sheets['K'];
+        let row = null;
+        for (let r = 6; r <= sh.lastRow(); r++) if ((sh.cell(r, 3) || {}).v === 'filter') row = r;
+        assert.ok(row, 'the pasted line is there');
+        assert.deepStrictEqual(dropdownCells(s, row).map(x => x.slice(0, 5)), ['-', 'list:', 'list:', 'list:', 'date'], 'field list, operators and the date check on the date field');
+        assert.ok(!dropdownCells(s, row).some(x => /copied/.test(x)), 'the copied validations were replaced');
+      }));
+
+    test('the co-edit that finds nothing changed reads the lines twice more (before writing, before the dropdowns) and does one pass [' + mode + ']', () => {
+      const s = scope(mode);
+      s.run(`ConfigGrid.create('K')`);
+      fillLines(s.book, SCENARIOS['table and an option']);
+      s.run(`globalThis.__n = 0; ConfigGrid.__lines = ConfigGrid.lines; ConfigGrid.lines = n => { __n++; return ConfigGrid.__lines(n); }`);
+      s.run(`new SheetCoeditor('K', false).sheetEdit({})`);
+      assert.strictEqual(s.run('__n'), 1 + 1 + 2, 'the constructor, the pass, and the two "has it changed" reads');
+    });
+
+    test('a sheet that keeps changing is tried 3 times and then left to the next trigger (no endless loop), the result is still "done" [' + mode + ']', () => {
+      const s = pasteScope(mode, { name: 'listTables', nth: 0 }, 12, () => {});
+      s.ctx.__onCall = (name, n) => { if (name === 'listTables' && n >= 2) s.book.sheets['K'].setValue(30 + n, 2, 'x' + n, ''); };      // every pass: another edit lands
+      assert.strictEqual(s.run(`new SheetCoeditor('K', false).sheetEdit({})`), true);
+      assert.ok(s.run('__calls.t') <= 5, 'listTables calls: ' + s.run('__calls.t'));
+    });
+  });
 };

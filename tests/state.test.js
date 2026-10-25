@@ -279,7 +279,7 @@ module.exports = function register(t) {
   // isLatest() and drops out (returns false) at its checkpoints as soon as a newer ticket is there; a run that waits for the lock gives up as soon as it is
   // not the latest any more. (Before: a request made during a pass was served by another pass of the holder; the user wants the newest only.)
 
-  test('state: runLatestOnly: runs the action under the document lock, hands it isLatest(), leaves its own ticket in the flag, returns "completed"', () => {
+  test('state: runLatestOnly: runs the action under the script lock, hands it isLatest(), leaves its own ticket in the flag, returns "completed"', () => {
     const { p, ex } = setup();
     const r = ex.eval(`globalThis.__n = 0; globalThis.__sawLatest = null; const r = runLatestOnly(isLatest => { __n++; __sawLatest = isLatest(); }, 'flagA'); r`);
     assert.strictEqual(r, 'completed');
@@ -307,10 +307,17 @@ module.exports = function register(t) {
     assert.deepStrictEqual(JSON.parse(JSON.stringify(out)), ['dropped', ['checkpoint 1: true', 'checkpoint 2: false'], [0, 'timeout']]);
   });
 
+  test('rule: the co-edit lock is the SCRIPT lock - the document lock belongs to the agent detection, which waits for it only 5 s', () => {
+    const fs = require('fs'), path = require('path');
+    const text = fs.readFileSync(path.join(__dirname, '..', 'functions.js'), 'utf8');
+    const body = text.slice(text.indexOf('function runLatestOnly'), text.indexOf('function average'));
+    assert.ok(/getScriptLock\(\)/.test(body) && !/getDocumentLock/.test(body));
+  });
+
   test('state: runLatestOnly: a run that waits for the lock and finds a newer ticket meanwhile gives up at once ("dropped"), without running', () => {
     const { p, ex } = setup();
     let attempts = 0;
-    ex.ctx.LockService = { getDocumentLock: () => ({ tryLock: () => { attempts++; if (attempts === 3) p.props.document.flagC = 'newer-ticket'; return false; }, hasLock: () => false, releaseLock() {} }) };
+    ex.ctx.LockService = { getScriptLock: () => ({ tryLock: () => { attempts++; if (attempts === 3) p.props.document.flagC = 'newer-ticket'; return false; }, hasLock: () => false, releaseLock() {} }) };
     const r = ex.eval(`globalThis.__n = 0; runLatestOnly(() => { __n++; }, 'flagC')`);
     assert.strictEqual(r, 'dropped');
     assert.strictEqual(ex.eval(`__n`), 0);
@@ -332,7 +339,7 @@ module.exports = function register(t) {
   test('state: runLatestOnly: a run that gets the lock but is no longer the latest does not run the action', () => {
     const { p, ex } = setup();
     let has = false;
-    ex.ctx.LockService = { getDocumentLock: () => ({ tryLock: () => { p.props.document.flagF = 'newer-ticket'; has = true; return true; }, hasLock: () => has, releaseLock() { has = false; p.calls.push('lock.released'); } }) };
+    ex.ctx.LockService = { getScriptLock: () => ({ tryLock: () => { p.props.document.flagF = 'newer-ticket'; has = true; return true; }, hasLock: () => has, releaseLock() { has = false; p.calls.push('lock.released'); } }) };
     assert.strictEqual(ex.eval(`globalThis.__n = 0; runLatestOnly(() => { __n++; }, 'flagF')`), 'dropped');
     assert.strictEqual(ex.eval(`__n`), 0);
     assert.ok(p.calls.includes('lock.released'));

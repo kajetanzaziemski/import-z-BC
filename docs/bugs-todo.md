@@ -59,6 +59,12 @@ Found while building and testing the live check helpers (`docs/live-check.md`), 
 - Agent pool (`docs/agent-lifecycle.md`): the missing clean-up row `ON|OFF|V` (document OFF wins: its entry removed, trigger uninstalled, user entry kept as an OFF tombstone), eviction by least-recently-used (`getOldest` sorted nothing),
   log entries removed when a trigger *object* is deleted (`installNew`'s pre-delete), `installNew` all or nothing (rolls the edit trigger back if the change trigger fails) and refuses a pair that would pass the 20-trigger quota.
 
+13. **A paste during a co-edit lost its dropdowns (real-sheet run): FIXED in three parts.** (a) The co-edit lock had been switched to the *document* lock, which the agent detection also takes (it waits 5 s): a 10-20 s co-edit could starve it and
+    get the agents powered off - back to the script lock. (b) The co-edit checks, before it writes anything and again before it writes the dropdowns, that the lines on the sheet are still what it read (plus its own inserted lines); if not
+    (the user pasted meanwhile) it starts again from a fresh read, at most 3 passes - independent of any other run or trigger. Before, the dropdowns of the old picture were written over the pasted line (clearing the ones the paste had
+    copied) and only a later run could repair it. (c) A co-edit that dropped out for a newer one is reported by the live check as SKIP ("dropped"), not judged on a sheet the newer run is still completing - the earlier FAILs of such runs
+    ("no extend row", "E8 should be a dropdown") were this, not errors. The remaining reads cost two extra window reads per co-edit.
+
 ## Status on `refactor-and-grid`
 
 - **#1 Settings writes lost in `sheetEdit` (and `onEdit`): FIXED in `Controller.run`.** A top-level run now keeps the closing actions that were registered before it started (the entry

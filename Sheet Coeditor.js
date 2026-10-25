@@ -1,6 +1,9 @@
 // The co-editor of one config sheet: loads the query model (Content Tracker.js) from the sheet's lines, applies what the model asks
 // for (new lines, dropdowns, notes) and drives the status cells. It does not touch the spreadsheet itself: the lines and the
 // status cells are reached through ConfigGrid (Config Grid.js).
+const MAX_COEDIT_PASSES = 3;
+const SHEET_CHANGED = Symbol("the lines changed while the co-edit was working");
+
 class SheetCoeditor{
   constructor(sheetName,readingActive){
     this.sheetName = sheetName;
@@ -72,7 +75,14 @@ class SheetCoeditor{
    * @returns {boolean} true when everything was done, false when it stopped at a checkpoint.
    */
   sheetEdit(e,shouldContinue=()=>true){
-    return this.respondToManyCellsEdit(shouldContinue);
+    // The model is built from what was read, and building it asks BC (seconds). When the lines are not what was read any more by the time something is to be
+    // written (the user pasted a line meanwhile), the pass is thrown away and done again from a fresh read: nothing is written from an old picture.
+    // Bounded: a sheet that never keeps still is left to the next trigger.
+    for(let pass = 1; pass <= MAX_COEDIT_PASSES; pass++){
+      const result = this.respondToManyCellsEdit(shouldContinue);
+      if(result !== SHEET_CHANGED) return result;
+    }
+    return true;
     
     // if(e?.range?.getA1Notation().indexOf(":")<0) this.respondToSingleCellEdit(e);
     // else this.respondToManyCellsEdit();
@@ -82,6 +92,7 @@ class SheetCoeditor{
     dbgLog("Many cells edit...");
     this.cct = this.loadFromSheet();
     if(!shouldContinue()) return false;      // checkpoint 1: nothing has been written yet
+    if(this.linesChanged()) return SHEET_CHANGED;
     return this.applyCoeditsWithLock(shouldContinue);
   }
 
@@ -95,6 +106,13 @@ class SheetCoeditor{
     if(this.insertRows()>0) this.cct = new CCTImportConfig(this.lines.values());   // the sheet as the inserts left it (no second read)
     if(!shouldContinue()) return false;      // checkpoint 2: the lines are in; building the dropdowns asks BC and is the slow part
     return this.setDataValidationsToSheet(shouldContinue);
+  }
+
+  /** Are the lines on the sheet now different from what this co-edit works on (what it read, plus the lines it inserted itself)? One fresh read of the lines. */
+  linesChanged(){
+    const fresh = ConfigGrid.lines(this.sheetName);
+    if(!fresh) return true;
+    return JSON.stringify(fresh.values()) !== JSON.stringify(this.lines.values());
   }
 
   insertRows(){
@@ -111,6 +129,7 @@ class SheetCoeditor{
     let notesArray = map2D(validations,x => x ? x.getDescription()=="empty selection" ? noteMsg : null : null)
     let array = map2D(validations,x => x ? x.getSpreadsheetAppDataValidation() : null)
     if(!shouldContinue()) return false;      // checkpoint 3: everything is prepared, nothing written yet
+    if(this.linesChanged()) return SHEET_CHANGED;
     this.lines.setDropdowns(array,notesArray);
     this.lines.save();
     return true;

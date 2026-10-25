@@ -242,6 +242,10 @@ function lcVerifyConfigCoedit_(c,name){
   const tag = `[${name}]`;
   const cfg = lcReadConfigSheet_(name);
   if(!c.expect(`${tag} config sheet exists`,cfg)) return;
+  if(c.notes.some(n => /co-edit dropped/.test(n))){
+    c.skip(`${tag} result of the co-edit`,"this co-edit dropped out because a newer one took over (only the last one completes; the reading light is the newer one's)");
+    return;
+  }
 
   lcVerifyIdleIndicators_(c,cfg.sheet,tag,["B2"]);                 // a co-edit lights the reading cell and puts it back
   c.expectEqual(`${tag} header intact (B1, B4)`,[cfg.sheet.getRange("B1").getValue(),cfg.sheet.getRange("B4").getValue()],[LC_CONFIG_HEADER.values[0][1],"Opis linii"]);
