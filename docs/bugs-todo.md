@@ -43,6 +43,14 @@ Found while building and testing the live check helpers (`docs/live-check.md`), 
     did nothing, although the holder had read the sheet before the change (a row pasted during an analyse was never analysed: no empty queryOption row, no dropdowns on the pasted line). Now every caller sets "yes", the holder
     sets "no" before each pass and does another pass when "yes" came back (max 5), the lock is released after the action. `functions.js`, tests in `tests/state.test.js`.
 
+### Fixed after the first real-sheet runs (each with tests)
+- **#3 `ConnectionError` aborting the co-edit: FIXED.** The field list, the navigation property list and the data-type lookup of `ConfigDValStore` fall back to the empty list with its note, like the table list (not remembered, so the next run asks BC again).
+- **#7 the line range: CHANGED** to what was asked: B6 down to the last row with anything in B-F (at least one row). Side effect: a dropdown left on a line the user emptied is no longer swept by the extra five rows the old range happened to include.
+- **#9 `sheetChange` power check: FIXED.** The power is looked at before the action; a powered-off or unlogged trigger skips the change and announces the job `agent.skipped`, like an edit.
+- **#11 stale `SettingsSheet` row positions: FIXED** (the remembered rows follow a line `addNewSheetInfo` inserts above them).
+- Agent pool (`docs/agent-lifecycle.md`): the missing clean-up row `ON|OFF|V` (document OFF wins: its entry removed, trigger uninstalled, user entry kept as an OFF tombstone), eviction by least-recently-used (`getOldest` sorted nothing),
+  log entries removed when a trigger *object* is deleted (`installNew`'s pre-delete), `installNew` all or nothing (rolls the edit trigger back if the change trigger fails) and refuses a pair that would pass the 20-trigger quota.
+
 ## Status on `refactor-and-grid`
 
 - **#1 Settings writes lost in `sheetEdit` (and `onEdit`): FIXED in `Controller.run`.** A top-level run now keeps the closing actions that were registered before it started (the entry

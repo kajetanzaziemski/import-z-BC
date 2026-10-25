@@ -87,8 +87,8 @@ const ConfigGrid = {
   /**
    * The query lines of one configuration sheet: one read (the window reaches every used row), changes in the model, one commit per save().
    * Returns null when the sheet does not exist.
-   *   values()                    the lines as the model reads them: B6.. five columns, max(lastRow - 1, 1) rows (the rows below the last
-   *                               used one are part of it, as they always were), the sheet as it stands after the inserts of this handle
+   *   values()                    the lines as the model reads them: B6.. five columns, down to the last row with anything in B-F (at least one
+   *                               row), the sheet as it stands after the inserts of this handle
    *   insertRowAfter(after, row)  a new line after the line `after` (0 = the first), `row` is written from column B; takes effect at save()
    *   setDropdowns(validations, notes)   a SpreadsheetApp DataValidation (or null) and a note (or null) for every cell from B6; at save()
    *   save()                      commits, then SpreadsheetApp.flush()
@@ -97,16 +97,16 @@ const ConfigGrid = {
     const L = CONFIG_LAYOUT;
     const grid = Grid.open({ sheetName: sheetName });
     if (!grid) return null;
-    const lastUsedRow = () => {
-      for (let r = grid.getLastRow(); r >= 1; r--) {
-        const row = grid.getRange(r, 1, 1, grid.getLastColumn()).getValues()[0];
-        if (row.some(x => x !== '' && x !== null)) return r;
+    // the last row from the first line down that has anything in B-F (L.startRow - 1 when there is nothing)
+    const lastLineRow = () => {
+      for (let r = grid.getLastRow(); r >= L.startRow; r--) {
+        if (grid.getRange(r, L.startCol, 1, L.queryCols).getValues()[0].some(x => x !== '' && x !== null)) return r;
       }
-      return 0;
+      return L.startRow - 1;
     };
     return {
       values() {
-        return grid.getRange(L.startRow, L.startCol, Math.max(lastUsedRow() - 1, 1), L.queryCols).getValues();
+        return grid.getRange(L.startRow, L.startCol, Math.max(lastLineRow() - L.startRow + 1, 1), L.queryCols).getValues();
       },
       insertRowAfter(after, row) {
         grid.insertRowsAfter(after + L.startRow, 1);

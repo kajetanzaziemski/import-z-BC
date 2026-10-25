@@ -29,3 +29,7 @@ Still to do
 - (done after the tag: `AgentService` regroup, facade `Agents`, `docs/agent-lifecycle.md`)
 - Remaining use cases still inside `Menu.js` / `Status Manager.js` (wizard, auth flow, logout, status check); BC layer reorganisation
 - The time trigger as two live-check jobs (`refresh.scheduled`, `refresh.retired`)
+
+
+## Reminders
+- **Before merging `refactor-and-grid` into `main`: keep `Test Functions.js` on a separate branch or tag** (agreed: it is the testers' manual code, ignored by the refactor and by the tests). Remind when the merge comes up.

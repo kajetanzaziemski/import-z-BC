@@ -30,12 +30,12 @@ module.exports = function register(t) {
     new vm.Script(fs.readFileSync(path.join(ROOT, 'tests/golden/legacy-sheet-coeditor.js'), 'utf8'), { filename: 'legacy-sheet-coeditor.js' }).runInContext(ctx);
     vm.runInContext(`
       globalThis.dbgLog = () => {};
-      globalThis.__offline = ${!!opts.offline};
+      globalThis.__offline = ${!!opts.offline}; globalThis.__offlineAll = ${!!opts.offlineAll};
       globalThis.getMetadata = () => ({
         listTables: () => { if (__offline) throw new ConnectionError('offline'); return ['Customers', 'Items']; },
-        listProperties: t => ['No', 'Name', 'PostingDate'],
-        listNavProperties: t => ['Lines', 'Dimensions'],
-        getDataType: (f, t) => (f === 'PostingDate' ? 'Edm.Date' : 'Edm.String')
+        listProperties: t => { if (__offlineAll) throw new ConnectionError('offline'); return ['No', 'Name', 'PostingDate']; },
+        listNavProperties: t => { if (__offlineAll) throw new ConnectionError('offline'); return ['Lines', 'Dimensions']; },
+        getDataType: (f, t) => { if (__offlineAll) throw new ConnectionError('offline'); return f === 'PostingDate' ? 'Edm.Date' : 'Edm.String'; }
       });`, ctx);
     const run = code => vm.runInContext(code, ctx);
     return { book, ctx, run, calls };
@@ -130,17 +130,24 @@ module.exports = function register(t) {
     });
   });
 
-  test('the data range is read the way it always was: from B6, five columns, max(lastRow - 1, 1) rows', () => {
+  test('the lines are read from B6 down to the last row that has anything in columns B-F (at least one row), five columns wide - not "sheet last row minus one"', () => {
     ['api', 'service'].forEach(mode => {
       const s = scope(mode);
       s.run(`ConfigGrid.create('K')`);
+      const rowsOf = () => JSON.parse(s.run(`JSON.stringify(new SheetCoeditor('K', false).cct.originalArray)`));
+      assert.deepStrictEqual(rowsOf(), [['', '', '', '', '']], mode + ': an empty sheet is one empty line');
       fillLines(s.book, [['table', 'Customers'], ['queryOption', 'select'], ['select', 'Name']]);
-      const lastRow = s.book.sheets['K'].lastRow();
-      const seen = JSON.parse(s.run(`JSON.stringify(new SheetCoeditor('K', false).cct.originalArray)`));
-      assert.strictEqual(seen.length, Math.max(lastRow - 1, 1), mode);
+      let seen = rowsOf();
+      assert.strictEqual(seen.length, 3, mode);
       assert.deepStrictEqual(seen[0], ['table', 'Customers', '', '', ''], mode);
       assert.deepStrictEqual(seen[2], ['select', 'Name', '', '', ''], mode);
       assert.ok(seen.every(r => r.length === 5), mode);
+      s.book.sheets['K'].setValue(12, 7, 'a remark in column G', '');           // outside B-F: not part of the lines
+      assert.strictEqual(rowsOf().length, 3, mode + ': content outside B-F does not stretch the lines');
+      s.book.sheets['K'].setValue(12, 6, 'far down', '');                        // a line far below a gap
+      seen = rowsOf();
+      assert.strictEqual(seen.length, 7, mode + ': everything down to the last line is read, gaps included');
+      assert.strictEqual(seen[6][4], 'far down', mode);
     });
   });
 
@@ -168,6 +175,32 @@ module.exports = function register(t) {
       const uses = (text.match(/SpreadsheetApp\.\w+/g) || []).filter(x => x !== 'SpreadsheetApp.newDataValidation' && x !== 'SpreadsheetApp.DataValidationCriteria');
       assert.deepStrictEqual(uses, [], f);
       assert.ok(!/\.getRange\(|\.getSheetByName|\bsheet\.insertRow|\bsheet\.getLastRow|\.setValues\(/.test(text), f);
+    });
+  });
+
+  // BC unreachable AND nothing cached: listTables falls back to the empty list, and so must the field / navigation property lists (before, they threw
+  // ConnectionError and the whole co-edit aborted half way: bugs-todo #3). The frozen class still throws, so these are not golden comparisons.
+  ['api', 'service'].forEach(mode => {
+    test('BC unreachable (tables, fields, navigation properties, data types): the co-edit completes, every BC-dependent dropdown is an empty list with the explaining note [' + mode + ']', () => {
+      const s = scope(mode, { offline: true, offlineAll: true });
+      s.run(`ConfigGrid.create('K')`);
+      fillLines(s.book, SCENARIOS['table, select, fields, filter'].concat([['extend', 'Lines']]));
+      s.run(`new SheetCoeditor('K', false).sheetEdit({})`);
+      const sh = s.book.sheets['K'];
+      const empty = (r, c) => /^list::/.test((sh.cell(r, c) || {}).dv || '') && /Pusta lista/.test((sh.cell(r, c) || {}).note || '');
+      const at = label => { for (let r = 6; r <= sh.lastRow(); r++) if ((sh.cell(r, 2) || {}).v === label) return r; };
+      assert.ok(empty(at('table'), 3), 'the table list');
+      assert.ok(empty(at('extend'), 3), 'the navigation property list');
+      assert.ok(empty(at('queryOption'), 4), 'the field list of the first query option line (select / filter)');
+      assert.ok(sh.lastRow() >= 12, 'the co-edit went through to the end: the lines the model asked for are there');
+    });
+
+    test('BC unreachable: the field-type lookup for a date column does not abort the co-edit either (no date validation, no error) [' + mode + ']', () => {
+      const s = scope(mode, { offline: true, offlineAll: true });
+      s.run(`ConfigGrid.create('K')`);
+      fillLines(s.book, [['table', 'Customers'], ['queryOption', 'filter'], ['filter', 'PostingDate']]);
+      s.run(`new SheetCoeditor('K', false).sheetEdit({})`);
+      assert.ok(s.book.sheets['K'].lastRow() >= 8);
     });
   });
 };

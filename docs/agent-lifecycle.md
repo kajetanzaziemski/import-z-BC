@@ -29,7 +29,7 @@ Only `AgentManager.installNew()` creates triggers; it is reached through `recrui
 
 `installNew()` does, in this order: delete **every** user `sheetEdit`/`sheetChange` (any edit/change trigger of this project, whatever its function) bound to this document ->
 create the edit trigger -> create the change trigger -> log both in the document log and the user log -> push `[editId, changeId]` to the pair list. Rule in `TriggerGateway`:
-at most one edit and one change trigger per user and document (otherwise `SimpleError`). If creating the change trigger fails after the edit one was created, the edit trigger stays (no rollback).
+at most one edit and one change trigger per user and document (otherwise `SimpleError`). If creating the change trigger fails after the edit one was created, the edit trigger is deleted again (all or nothing). Before anything is deleted or created the user's triggers are counted: a pair that would pass the platform's quota of 20 triggers per user and script (the document's own edit/change triggers, about to be replaced, do not count) is refused with a message.
 
 `recruitAgent()` first asks "active?" — if yes it returns the existing edit trigger's id and does nothing. Otherwise: if the **pair list already has 5 pairs** (all documents of the user together) it evicts one first (below), else it installs.
 
@@ -44,7 +44,7 @@ check after the detector powered the agents off, both end with a *different* pai
 ## When agents are DESTROYED or stop working
 | Situation | What happens to triggers | What happens to logs |
 |---|---|---|
-| **Eviction**: a 6th pair is needed (6th document of the user, or a repair) | the **oldest** pair (the first `ON_EDIT` entry of the user log; the sort is not really by date, see todo #2) is deleted from the project, wherever it was installed | removed from the pair list and, **only if it belongs to the current document**, from the document log and user log. A pair of another document keeps its ON entries in *that* document's log (a script cannot write another document's properties) and its entries in the user log |
+| **Eviction**: a 6th pair is needed (6th document of the user, or a repair) | the pair whose edit trigger was **used least recently** (`lastUsed`, else `dateCreated`; an entry without a readable date counts as oldest) is deleted from the project, wherever it was installed | removed from the pair list and, **only if it belongs to the current document**, from the document log and user log. A pair of another document keeps its ON entries in *that* document's log (a script cannot write another document's properties) and its entries in the user log |
 | **Detector, 1st miss** (edit in the document, no `sheetEdit` reported it within 12 s) | nothing | `agentSuspect` set; alert shown |
 | **Detector, 2nd miss** with no installable run in between | nothing is deleted | all `sheetEdit`/`sheetChange` entries of the document **powered OFF** (doc log and user log); the installable handlers then skip the edit (`agent.skipped`); alert shown |
 | further misses while OFF | nothing | nothing, no alert |
@@ -56,7 +56,7 @@ check after the detector powered the agents off, both end with a *different* pai
 
 An installable run that happens while the add-on is ON also **marks the trigger used** (`lastUsed`, both logs) at the start of every `sheetEdit`/`sheetChange` run, and clears the suspect flag
 (`recordInstallableSeen`, before the power check, so a powered-off but alive agent is still seen). A powered-off or unlogged trigger id gives `isPowered = false`: the edit is skipped (`sheetChange` quirk:
-it runs the action *before* looking at the power).
+a powered-off or unlogged `sheetChange` is skipped too and announces `agent.skipped`; it used to run the action before looking at the power).
 
 ## The detector (how a dead agent is noticed)
 Every user edit fires the simple `onEdit` and the installable `sheetEdit`. The installable one leaves a counter in the document cache; the simple one polls for it every 500 ms for up to 12 s and consumes it.
@@ -69,9 +69,9 @@ For every trigger id in any of the three records: state `user | document | proje
 ON|ON|V  nothing               ON|ON|X  remove user+doc       ON|OFF|X remove user+doc      ON|X|V  nothing          ON|X|X  remove user
 OFF|ON|V remove u+d, uninstall OFF|ON|X remove u+d            OFF|OFF|V remove u+d, uninstall OFF|OFF|X remove u+d   OFF|X|V remove user, uninstall   OFF|X|X remove user
 X|ON|V   reinstate user        X|ON|X   nothing (ghost)       X|OFF|V  remove doc, uninstall X|OFF|X nothing (ghost)  X|X|V   nothing (raw trigger)   X|X|X nothing
-ON|OFF|V  -- no rule: nothing happens (a gap in the table; pinned)
+ON|OFF|V  user powered OFF (tombstone), remove doc, uninstall   (the document's OFF wins; the row was missing before)
 ```
-`X|ON|X` is what an **evicted** document is left with: its log says ON, the trigger is gone, the clean-up does nothing, `checkIfActive` says "active", no status check repairs it.
+`ON|OFF|V` can arise when a stale write brings the user log's ON back after the document powered the agents off. `X|ON|X` is what an **evicted** document is left with: its log says ON, the trigger is gone, the clean-up does nothing, `checkIfActive` says "active", no status check repairs it.
 
 ## What this adds up to (observed in `tests/agents.test.js`)
 - One user with agents in six documents: the sixth evicts the first. The first document believes it is covered (ghost entries), nothing repairs it; its next edits trigger the detector (suspect, then dead + OFF),

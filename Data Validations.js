@@ -102,23 +102,37 @@ class ConfigDValStore{
     }
   }
 
+  /** BC not reachable and nothing cached: the empty list (with its note), and it is not remembered, so a later run asks again. */
+  whenBCAvailable(makeValidation, whenNot=this.empty){
+    try{
+      return makeValidation();
+    } catch(e) {
+      if(e instanceof ConnectionError) return whenNot;
+      throw e;
+    }
+  }
+
   tableFields(table){
     if(table in this.fields) return this.fields[table];
-    return this.fields[table] = new MyDataValidation(
+    const validation = this.whenBCAvailable(() => new MyDataValidation(
       "VALUE_IN_LIST",
       [getMetadata().listProperties(table)],
       `field selection for ${table}`
-    )
+    ), null);
+    if(!validation) return this.empty;
+    return this.fields[table] = validation;
   }
 
   tableNavProperties(table){
     if(table in this.navProperteis) return this.navProperteis[table];
     // dbgLog("Creating new DV for NavProperties of "+table);
-    return this.navProperteis[table] = new MyDataValidation(
+    const validation = this.whenBCAvailable(() => new MyDataValidation(
       "VALUE_IN_LIST",
       [getMetadata().listNavProperties(table)],
       `navProperties selection for ${table}`
-    )
+    ), null);
+    if(!validation) return this.empty;
+    return this.navProperteis[table] = validation;
   }
 
   dateValidator(){
@@ -134,7 +148,7 @@ class ConfigDValStore{
   fieldDV(table,field){
     // dbgLog(`table: ${table}, field: ${field}`);
     if(!field || !table) return null;
-    let dataType = getMetadata().getDataType(field,table);
+    let dataType = this.whenBCAvailable(() => getMetadata().getDataType(field,table), null);
     // dbgLog(`dataType: ${dataType}`);
     switch(dataType){
       case "Edm.Date": return this.dateValidator();
