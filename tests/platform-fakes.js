@@ -19,10 +19,18 @@ class FakePlatform {
     this.lockHeld = false;                                 // somebody else holds every lock
     this.lockFreesAfter = Infinity;                        // the lock becomes free after this many tryLock attempts
     this.tryLockAttempts = 0;
-    this.triggers = [];                                    // the project's triggers: { id, fn, type, source, params }
-    this.triggerSeq = 0;
+    this.world = { triggers: [], triggerSeq: 0 };          // what all documents of one user share: the project's triggers { id, fn, type, source, params }
     this.consoleErrors = [];                               // everything the code wrote with console.error
     this.broken = {};                                      // { 'cache.document': 'null' | 'throw' }
+  }
+  get triggers() { return this.world.triggers; }
+  set triggers(v) { this.world.triggers = v; }
+  /** Another document of the same user: same project triggers, same user properties / cache; its own document properties and cache. */
+  otherDocument() {
+    const o = new FakePlatform();
+    o.world = this.world; o.props.user = this.props.user; o.cache.user = this.cache.user; o.props.script = this.props.script;
+    o.now = this.now;
+    return o;
   }
   advance(seconds) { this.now += seconds * 1000; }
 
@@ -73,7 +81,7 @@ class FakePlatform {
         onEdit: () => { t.type = 'ON_EDIT'; return b; },
         onChange: () => { t.type = 'ON_CHANGE'; return b; },
         create: () => {
-          const rec = { id: 'trig-' + (++p.triggerSeq), fn: t.fn, type: t.type, source: t.source, params: t.params };
+          const rec = { id: 'trig-' + (++p.world.triggerSeq), fn: t.fn, type: t.type, source: t.source, params: t.params };
           p.triggers.push(rec); p.calls.push('trigger.create ' + t.fn + ' ' + t.type);
           return wrap(rec);
         }
@@ -84,7 +92,7 @@ class FakePlatform {
       AuthMode: { NONE: 'NONE' }, EventType: { CLOCK: 'CLOCK', ON_EDIT: 'ON_EDIT', ON_CHANGE: 'ON_CHANGE' },
       newTrigger: builder,
       getProjectTriggers: () => p.triggers.map(wrap),
-      getUserTriggers: () => p.triggers.filter(x => x.type !== 'CLOCK').map(wrap),
+      getUserTriggers: ss => p.triggers.filter(x => x.type !== 'CLOCK' && (!ss || x.source === ss.getId())).map(wrap),
       deleteTrigger: t => { p.calls.push('trigger.delete ' + t.getUniqueId()); p.triggers = p.triggers.filter(x => x.id !== t.getUniqueId()); }
     };
   }

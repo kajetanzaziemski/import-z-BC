@@ -574,6 +574,9 @@ require('./settings-sheet.test.js')({ test });
 // ---- result table writing: BulkSheet / ResultSheet (golden against the frozen ResultSheet) ----------------------------------------
 require('./bulk-sheet.test.js')({ test });
 
+// ---- the agents: creation, replacement, eviction, power off, clean-up table (characterisation) -----------------------------------
+require('./agents.test.js')({ test });
+
 // ---- developer tools: build version, reportFailedChecks, sidebar scrolling ----------------------------------------------------------
 require('./version.test.js')({ test });
 
