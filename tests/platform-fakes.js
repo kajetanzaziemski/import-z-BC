@@ -19,6 +19,8 @@ class FakePlatform {
     this.lockHeld = false;                                 // somebody else holds every lock
     this.lockFreesAfter = Infinity;                        // the lock becomes free after this many tryLock attempts
     this.tryLockAttempts = 0;
+    this.triggers = [];                                    // the project's triggers: { id, fn, type, source, params }
+    this.triggerSeq = 0;
     this.broken = {};                                      // { 'cache.document': 'null' | 'throw' }
   }
   advance(seconds) { this.now += seconds * 1000; }
@@ -53,6 +55,39 @@ class FakePlatform {
       releaseLock: () => { if (mine) p.calls.push('lock.released'); mine = false; }
     };
   }
+  /**
+   * ScriptApp with real bookkeeping: newTrigger(fn).timeBased().everyHours(n) / .forSpreadsheet(ss).onEdit() ... .create(), getProjectTriggers(),
+   * getUserTriggers(ss) (as in Apps Script: time-based triggers are NOT listed there), deleteTrigger(t).
+   */
+  scriptApp() {
+    const p = this;
+    const wrap = rec => ({ getUniqueId: () => rec.id, getHandlerFunction: () => rec.fn, getEventType: () => rec.type, getTriggerSourceId: () => rec.source, __rec: rec });
+    const builder = fn => {
+      const t = { fn, type: null, source: null, params: {} };
+      const b = {
+        timeBased: () => { t.type = 'CLOCK'; return b; },
+        everyHours: n => { t.params.everyHours = n; return b; },
+        everyDays: n => { t.params.everyDays = n; return b; },
+        forSpreadsheet: ss => { t.source = typeof ss === 'string' ? ss : ss.getId(); return b; },
+        onEdit: () => { t.type = 'ON_EDIT'; return b; },
+        onChange: () => { t.type = 'ON_CHANGE'; return b; },
+        create: () => {
+          const rec = { id: 'trig-' + (++p.triggerSeq), fn: t.fn, type: t.type, source: t.source, params: t.params };
+          p.triggers.push(rec); p.calls.push('trigger.create ' + t.fn + ' ' + t.type);
+          return wrap(rec);
+        }
+      };
+      return b;
+    };
+    return {
+      AuthMode: { NONE: 'NONE' }, EventType: { CLOCK: 'CLOCK', ON_EDIT: 'ON_EDIT', ON_CHANGE: 'ON_CHANGE' },
+      newTrigger: builder,
+      getProjectTriggers: () => p.triggers.map(wrap),
+      getUserTriggers: () => p.triggers.filter(x => x.type !== 'CLOCK').map(wrap),
+      deleteTrigger: t => { p.calls.push('trigger.delete ' + t.getUniqueId()); p.triggers = p.triggers.filter(x => x.id !== t.getUniqueId()); }
+    };
+  }
+
   /** What a service getter returns when it is broken on purpose: null ("no document in this scope") or an exception. */
   guard(kind, scope, make) {
     const mode = this.broken[kind + '.' + scope];
@@ -75,7 +110,7 @@ class FakePlatform {
     g.Utilities = { sleep: ms => { p.advance(ms / 1000); } };
     g.SpreadsheetApp = { getActiveSpreadsheet: () => ({ getId: () => 'ss-1', getSheetByName: () => null }), getUi: () => ({ alert() {} }), flush() {} };
     g.XmlService = { getNamespace: () => ({}) };            // Metadata.js calls it at load time (allowed by Apps Script, noted in docs)
-    g.ScriptApp = { AuthMode: { NONE: 'NONE' }, EventType: { ON_EDIT: 'ON_EDIT', ON_CHANGE: 'ON_CHANGE' } };
+    g.ScriptApp = this.scriptApp();
     return g;
   }
 
