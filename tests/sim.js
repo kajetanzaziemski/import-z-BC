@@ -192,7 +192,7 @@ class SimBook {
     };
   }
   dvBuilder() {
-    const spec = {};
+    const spec = { allowInvalid: true };      // the platform default for a new rule: a warning, not a rejection
     const b = {
       requireValueInList: (list, dropdown) => { spec.type = 'VALUE_IN_LIST'; spec.list = list.slice(); spec.dropdown = dropdown !== false; return b; },
       withCriteria: (type, args) => {            // the form MyDataValidation uses: (criteria, [list, showDropdown]) / (criteria, [])
@@ -234,6 +234,7 @@ class SimBook {
         return book.rangeObj(s, r, c, nr === undefined ? 1 : nr, nc === undefined ? 1 : nc);
       },
       insertRowsAfter: (after, n) => { call(); s.insertRows(after, n); },
+      getParent: () => book.spreadsheet(),
       insertRowAfter: after => { call(); s.insertRows(after, 1); },
       insertColumnsAfter: (after, n) => { call(); s.insertCols(after, n); },
       deleteColumns: (from, n) => { call(); s.deleteCols(from, n); },
@@ -263,8 +264,11 @@ class SimBook {
       if (!x) return '';
       return typeof x.v === 'number' && x.fmt.numFmt && isDateFormat(x.fmt.numFmt) ? book.toDate(x.v) : x.v;
     };
-    const put = (rr, cc, v) => {                       // setValues: a Date becomes a serial number
-      if (Object.prototype.toString.call(v) === '[object Date]') { s.setValue(rr, cc, book.toSerial(v), ''); }
+    const put = (rr, cc, v) => {                       // setValues: a Date becomes a serial number (+ a date format if the cell has none)
+      if (Object.prototype.toString.call(v) === '[object Date]') {          // the platform gives a cell without a number format a date-time one
+        s.setValue(rr, cc, book.toSerial(v), '');
+        const x = s.cell(rr, cc, true); if (!x.fmt.numFmt) x.fmt.numFmt = 'yyyy-mm-dd hh:mm:ss';
+      }
       else s.setValue(rr, cc, v, '');
     };
     const rangeAt = (rr, cc) => book.rangeObj(s, rr, cc, 1, 1);
@@ -272,6 +276,7 @@ class SimBook {
       getRow: () => r, getColumn: () => c, getNumRows: () => nr, getNumColumns: () => nc, getLastRow: () => r + nr - 1, getLastColumn: () => c + nc - 1,
       getA1Notation: () => colName(c) + r + (nr > 1 || nc > 1 ? ':' + colName(c + nc - 1) + (r + nr - 1) : ''),
       getValues: () => { call(); return grid((rr, cc) => valueOf(s.cell(rr, cc))); },
+      getValue: () => { call(); return valueOf(s.cell(r, c)); },
       getBackground: () => { call(); const x = s.cell(r, c); return (x && x.fmt.bg) || '#ffffff'; },
       getBackgrounds: () => { call(); return grid((rr, cc) => { const x = s.cell(rr, cc); return (x && x.fmt.bg) || '#ffffff'; }); },
       getFontColor: () => { call(); const x = s.cell(r, c); return (x && x.fmt.color) || '#000000'; },

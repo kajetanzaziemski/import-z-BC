@@ -22,6 +22,7 @@
 //   - data validation: lists and dates (plain specs, or a SpreadsheetApp DataValidation), notes in the array form
 //   - Date values are read and written in both paths (the API path converts to / from serial numbers)
 //   - autoResizeColumns
+//   - grid.getTimeZone(): the spreadsheet's time zone
 //   - Grid.exists(sheetName): whether the sheet is there, without reading it
 // The wyceny "reset from a template" path is kept but nothing in import-z-BC uses it and it has no tests here.
 // ---------------------------------------------------------------------------
@@ -97,6 +98,8 @@ class Grid {
   /** Fits the columns `from`..`from + n - 1` to their content (at the end of the commit; final column numbers). */
   autoResizeColumns(from, n) { this.colFits.push({ first: from, count: n }); }
   getMaxColumns() { return this.maxCols; }
+  /** The spreadsheet's time zone (read once). */
+  getTimeZone() { return this._tz(); }
 
   getRangeList(a1List) {
     const self = this;

@@ -1,6 +1,6 @@
 # Architecture proposal: import-z-BC on top of the Grid layer
 
-Status: proposal; steps 1-4 of the migration plan are done, the Store / Settings facade (`docs/state.md`), `RefreshSheet` / `EstimateSheet` / `RefreshAll` / `ScheduleRefresh` (`docs/use-cases.md`), and the router between the technical triggers and the use cases (`docs/router.md`: `Router.js`, `AnalyseConfig.js`). `ConfigGrid` (`Config Grid.js`) now writes the config sheet header and the status cells; `SheetCoeditor` forwards to it, and `ConfigGrid.lines()` now also reads, inserts and writes the query lines (dropdowns, notes). `Settings Sheet.js` and the result data do not use the grid yet. Branch `refactor-and-grid`.
+Status: proposal; steps 1-4 of the migration plan are done, the Store / Settings facade (`docs/state.md`), `RefreshSheet` / `EstimateSheet` / `RefreshAll` / `ScheduleRefresh` (`docs/use-cases.md`), and the router between the technical triggers and the use cases (`docs/router.md`: `Router.js`, `AnalyseConfig.js`). `ConfigGrid` (`Config Grid.js`) now writes the config sheet header and the status cells; `SheetCoeditor` forwards to it, and `ConfigGrid.lines()` now also reads, inserts and writes the query lines (dropdowns, notes). `SettingsGrid` (`Settings Grid.js`) does the same for the settings sheet. The result data do not use the grid yet. Branch `refactor-and-grid`.
 
 ## 1. What was copied
 

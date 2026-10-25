@@ -1,12 +1,12 @@
+// The settings sheet of the add-on: which config sheets exist (and which refresh automatically), when the last refresh was and how often
+// to refresh. It does not touch the spreadsheet itself: the cells are read and written through SettingsGrid (Settings Grid.js).
 class SettingsSheet{
   constructor(){
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    
     if(!MainSettings.getSettingsSheetName()) MainSettings.setSettingsSheetName();
     let name = MainSettings.getSettingsSheetName();
 
-    this.sheet = ss.getSheetByName(name);
-    if(!this.sheet) this.sheet = this.createNewSheet(ss,name);
+    if(!SettingsGrid.exists(name)) SettingsGrid.create(name);
+    this.grid = SettingsGrid.open(name);
     this.setupEditTriggers();
     this.settings = this.getAllSettingsData();
     this.lastConfigSheetPos = 2;
@@ -15,13 +15,6 @@ class SettingsSheet{
     this.sheetList = this.getSheetList();
     this.refreshFrequency = this.readRefreshFrequency();
     this.lastRefresh = this.readLastRefresh();
-    
-    // dbgLog("Sheet list:");
-    // dbgLog(this.sheetList);
-    // dbgLog("Last refresh:");
-    // dbgLog(this.lastRefresh);
-    // dbgLog("Refresh frequency:");
-    // dbgLog(this.refreshFrequency);
   }
 
   // setImportSheetName(name){
@@ -34,24 +27,10 @@ class SettingsSheet{
   // }
 
   setupEditTriggers(){
-    let triggers = ScriptApp.getUserTriggers(SpreadsheetApp.getActiveSpreadsheet());
-    if (triggers.find(trigger => trigger.getHandlerFunction()=="sheetEdit")==null) ScriptApp.newTrigger('sheetEdit').forSpreadsheet(this.sheet.getParent()).onEdit().create();
-    if(triggers.find(trigger => trigger.getHandlerFunction()=="sheetChange")==null) ScriptApp.newTrigger('sheetChange').forSpreadsheet(this.sheet.getParent()).onChange().create();
-  }
-
-  createNewSheet(spreadSheet,name){
-    let sheet = spreadSheet.insertSheet(name);
-    sheet.getRange(2,2,5,4).setValues([
-      ["Opis linii","Arkusz konfiguracji","Arkusz docelowy         .","Odświeżanie automatyczne"],
-      ["","","",""],
-      ["headerGeneralSettings","Ustawienia odświeżania automatycznego","",""],
-      ["lastRefresh","Ostatnio odświeżone o:","",""],
-      ["refreshFrequency","Odświeżaj co:","","godzin"]
-    ]);
-    sheet.getRange(6,5,1,1).setDataValidation(SpreadsheetApp.newDataValidation().withCriteria(SpreadsheetApp.DataValidationCriteria["VALUE_IN_LIST"],[["godzin", "dni"], true]).build());
-    sheet.getRange(5,4,1,1).setNumberFormat("yyyy-mm-dd hh:mm");
-    sheet.autoResizeColumns(2,5);
-    return sheet;
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let triggers = ScriptApp.getUserTriggers(ss);
+    if (triggers.find(trigger => trigger.getHandlerFunction()=="sheetEdit")==null) ScriptApp.newTrigger('sheetEdit').forSpreadsheet(ss).onEdit().create();
+    if(triggers.find(trigger => trigger.getHandlerFunction()=="sheetChange")==null) ScriptApp.newTrigger('sheetChange').forSpreadsheet(ss).onChange().create();
   }
 
   /** Is the edited range (part of) the refresh frequency: its number (column D) or its unit (column E)? */
@@ -67,7 +46,7 @@ class SettingsSheet{
   }
 
   getAllSettingsData(){
-    return this.settings ?? this.sheet.getRange(1,2,this.sheet.getLastRow(),4).getValues();
+    return this.settings ?? this.grid.rows();
   }
 
   getSheetList(){
@@ -141,7 +120,7 @@ class SettingsSheet{
   readRefreshFrequency(){
     if(!this.refreshFrequencyPos) this.readSheetList();
     if(!this.refreshFrequencyPos) return null;
-    let values = this.sheet.getRange(this.refreshFrequencyPos,4,1,2).getValues()[0];
+    let values = this.grid.frequency(this.refreshFrequencyPos);
     return {
       freq: values[0],
       unit: values[1]=="godzin" ? "hrs" : values[1]=="dni" ? "days" : null
@@ -151,31 +130,23 @@ class SettingsSheet{
   readLastRefresh(){
     if(!this.lastRefreshPos) this.readSheetList();
     if(!this.lastRefreshPos) return null;
-    return this.sheet.getRange(this.lastRefreshPos,4,1,1).getValue();
+    return this.grid.lastRefresh(this.lastRefreshPos);
   }
 
   setLastRefresh(time){
     if(!this.lastRefreshPos) this.readSheetList();
-    if(!this.lastRefreshPos){
-      let lastPos = this.sheet.getLastRow();
-      this.sheet.insertRowAfter(lastPos++);
-      this.lastRefreshPos = lastPos;
-      this.sheet.getRange(this.lastRefreshPos,2,1,2).setValues([["lastRefresh","Ostatnie odświeżone o:"]]);
-    }
+    if(!this.lastRefreshPos) this.lastRefreshPos = this.grid.addLastRefreshRow();
     time = time ?? new Date();
-    this.sheet.getRange(this.lastRefreshPos,4,1,2).setValues([[time,Utilities.formatDate(time,SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone(),"z")]]);
-    SpreadsheetApp.flush();
+    this.grid.writeLastRefresh(this.lastRefreshPos,time);
     this.lastRefresh = this.readLastRefresh();
   }
 
   addNewSheetInfo(configSheetName,resultSheetName,refresh=false){
     if(!configSheetName) configSheetName = "Konfiguracja "+(this.getSheetList().length+1);
     if(!resultSheetName) resultSheetName = "Dane wg. "+configSheetName;
-    let lastPos = this.lastConfigSheetPos ?? this.sheet.getLastRow();
-    this.sheet.insertRowAfter(lastPos++);
+    let lastPos = this.lastConfigSheetPos;
+    lastPos = this.grid.addConfigRow(lastPos,configSheetName,resultSheetName,refresh);
     this.lastConfigSheetPos = lastPos;
-    this.sheet.getRange(lastPos,2,1,4).setValues([["configSheet",configSheetName,resultSheetName,refresh]]);
-    this.sheet.getRange(lastPos,5,1,1).insertCheckboxes();
     this.sheetList.push(this.createObjectFromList(["configSheet","resultSheet","refresh"],[configSheetName,resultSheetName,refresh]));
     return this.sheetList[this.sheetList.length-1];
   }

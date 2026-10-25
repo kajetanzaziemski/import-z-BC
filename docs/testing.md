@@ -8,6 +8,17 @@ Each scenario runs through both commit paths (`[api]`, `[service]`), and "parity
 The sim throws on any request or method it does not know, so `Grid.js` cannot start using a new call unnoticed.
 Architecture rules are tests too (no project words in `Grid.js`, nothing used at load time, only `SpreadsheetApp`/`Sheets`/`Utilities`).
 
+## 2c. Settings sheet (`tests/settings-sheet.test.js`)
+- `tests/golden/legacy-settings-sheet.js` is the **frozen `SettingsSheet`** from before its cell access moved to `SettingsGrid` (`Settings Grid.js`).
+- Old and new class run in fresh scopes on the same simulated book (new one through both Grid commit paths) for: a missing sheet (created with header, unit dropdown, date format), an existing sheet with three
+  config lines, days / unknown unit, missing frequency and lastRefresh lines, gaps, `addNewSheetInfo` (default and given names, before and after existing lines), `setLastRefresh` (given time, fixed clock, row missing, repeated, after an
+  insert), and the edit triggers being created only when missing. Sheets, every answer and the triggers created must be identical.
+- Pinned quirk: the remembered row numbers (`lastRefreshPos`, `refreshFrequencyPos`) are not moved when `addNewSheetInfo` inserts a line above them, so a `setLastRefresh` after it writes into the wrong row (bugs-todo #11).
+- API path: one read when the object is built, one `batchUpdate` per write, no read afterwards. A rule test keeps `Settings Sheet.js` free of range calls and `Settings Grid.js` on Grid + `SpreadsheetApp.flush` only.
+- Known difference, only on the API path (production uses the service path): a time written into a cell with no number format by the Sheets API shows as a number, the platform's service guesses a date format. It only matters for a
+  `lastRefresh` line added after the header was made by hand (`noApiLook` in the test).
+- Not verified on a real spreadsheet: that `insertRowsAfter` + `setValues` + checkbox gives a new config line the same look as `insertRowAfter` + `insertCheckboxes` (the simulation says so).
+
 ## 2b. Config sheet co-editing (`tests/coeditor.test.js`)
 - `tests/golden/legacy-sheet-coeditor.js` is the **frozen `SheetCoeditor` from before its sheet access moved to `ConfigGrid.lines()`** (Spreadsheet service calls: `getRange`, `insertRowAfter`, `setDataValidations`, `setNotes`).
 - Old and new class run in fresh vm scopes (like separate Apps Script executions) with the **real query model** (`Content Tracker.js`, `Data Validations.js`, `Fix Register.js`) and a faked metadata

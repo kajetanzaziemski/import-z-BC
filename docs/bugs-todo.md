@@ -36,6 +36,9 @@ Found while building and testing the live check helpers (`docs/live-check.md`), 
 10. **Unrelated edits still build `SettingsSheet`.** `updateAfterEdit()` calls `getMainSettings()` for every edit in every
     sheet, which reads the whole settings sheet and creates it (plus two unlogged triggers) when missing - see the earlier
     discussion about firewalling add-on runs in unrelated files.
+11. **`SettingsSheet` row positions go stale.** `addNewSheetInfo()` inserts a config line (after row 2 while there are no config lines, i.e. above the `lastRefresh` /
+    `refreshFrequency` lines) but does not move `lastRefreshPos` / `refreshFrequencyPos`; a `setLastRefresh()` later in the same execution writes into the wrong row.
+    Pinned in `tests/settings-sheet.test.js`. In practice the wizard and `RefreshAll` run in separate executions.
 
 ## Status on `refactor-and-grid`
 

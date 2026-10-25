@@ -24,7 +24,7 @@ Done
 
 Still to do
 - (done after the tag: `SheetCoeditor` split, see `docs/testing.md` section 2b)
-- `SettingsGrid` (`Settings Sheet.js` still makes direct range calls)
+- (done after the tag: `SettingsGrid`, see `docs/testing.md` section 2c)
 - Writer for tall result data behind `ResultSheet` (Grid's window is 3000 rows)
 - `AgentService` regroup (`Trigger Manager.js`, `Status Manager.js`, `Track onEdit Triggers.js`)
 - Remaining use cases still inside `Menu.js` / `Status Manager.js` (wizard, auth flow, logout, status check); BC layer reorganisation
