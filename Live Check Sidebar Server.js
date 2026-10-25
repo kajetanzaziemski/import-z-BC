@@ -36,6 +36,7 @@ function liveCheckSidebarData(clientToken){
   const token = rows.map(r => r.k + r.s + r.ms).join("|");
   return {
     enabled: liveCheckIsEnabled(),
+    version: typeof buildVersionLabel === "function" ? buildVersionLabel() : null,
     token: token,
     rows: token === clientToken ? null : rows
   };

@@ -120,3 +120,11 @@ smaller ones noticed on the way). They are not fixed on this branch.
 ## Entry-point names on `refactor-and-grid`
 Every platform entry goes through `Controller.run` now (`docs/controller.md`): `setGlobalSettings`, `getAgentStatus`, `listProjectTriggers` and `authCallback` are reported as `requestSetGlobalSettings`, `requestAgentStatus`,
 `requestListProjectTriggers`, `requestAuthCallback` (the functions keep their names), `onOpenAction` is merged into `onOpen`, and there are no nested runs, so the `known issue: nested Controller.run` fallbacks no longer apply.
+
+## Developer tools extras
+- **Build version.** Both "Narzędzia programisty" sidebars (Live check, Wszystkie triggery) show `Wersja: <commit>[+] (<date>, <branch>)`, taken from `Version.js`. The file is written by
+  `tools/stamp-version.sh` and is **self-reported**: nothing checks it, and a commit cannot contain its own hash, so the value is the commit it was built on. A trailing `+` means "that commit plus uncommitted changes"
+  (what you get when the script runs before a commit); run it on a clean checkout before `clasp push` to get the exact commit. Commits made before this one have no version in them.
+- **`reportFailedChecks()`** (Live Check.js) runs from the script editor without arguments: it logs and returns the FAIL / WARN runs among the last 40 stored results (`liveCheckReport(40, true)`).
+- **Sidebar scrolling.** The Live check sidebar no longer rebuilds its list every second while a run is going (only the clock text is updated) and a rebuild keeps the sideways scroll of the open details and the page
+  position. Checked once in headless Chromium against the old and the new page (scroll 150 px, one poll with new data: old page 0, new page 150); the automated test only asserts the code shape.

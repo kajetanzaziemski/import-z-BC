@@ -6,6 +6,7 @@
     <style>
       body { font-family: Arial, sans-serif; font-size: 13px; margin: 0; }
       #bar { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; border-bottom: 1px solid #ddd; position: sticky; top: 0; background: #fff; }
+      #version { color: #80868b; font-size: 11px; padding: 4px 10px 0; }
       #state { font-weight: bold; }
       #state.on { color: #1e8e3e; }
       #state.off { color: #80868b; }
@@ -41,6 +42,7 @@
       <span>Live check: <span id="state" class="off">…</span></span>
       <button id="toggle" class="action" disabled>…</button>
     </div>
+    <div id="version"></div>
     <div id="error"></div>
     <div id="note">Ładowanie…</div>
     <div id="list"></div>
@@ -83,6 +85,10 @@
 
       function render() {
         var list = document.getElementById("list");
+        // the page is rebuilt from scratch: remember where the user was reading (sideways scroll of every open detail, and the page itself)
+        var scrolls = {};
+        Array.prototype.forEach.call(list.querySelectorAll(".detail[data-key]"), function (pre) { if (pre.scrollLeft) scrolls[pre.getAttribute("data-key")] = pre.scrollLeft; });
+        var pageTop = window.pageYOffset, pageLeft = window.pageXOffset;
         list.textContent = "";
         document.getElementById("note").textContent = rows.length ? "" : (enabled ? "Brak uruchomień. Użyj dodatku, wyniki pojawią się tutaj." : "Live check jest wyłączony - włącz go, żeby zbierać wyniki.");
         rows.forEach(function (r) {
@@ -97,11 +103,13 @@
           var meta = document.createElement("span"); meta.className = "meta"; meta.textContent = clock(r.t) + " · " + duration(r);
           meta.setAttribute("data-key", r.k);
           head.appendChild(dot); head.appendChild(name); if (r.i) head.appendChild(via); head.appendChild(meta);
-          var detail = document.createElement("pre"); detail.className = "detail"; showDetail(detail, details[r.k] || "…");
+          var detail = document.createElement("pre"); detail.className = "detail"; detail.setAttribute("data-key", r.k); showDetail(detail, details[r.k] || "…");
           head.onclick = function () { toggle(r); };
           run.appendChild(head); run.appendChild(detail);
           list.appendChild(run);
+          if (scrolls[r.k]) detail.scrollLeft = scrolls[r.k];
         });
+        window.scrollTo(pageLeft, pageTop);
       }
 
       function toggle(r) {
@@ -133,6 +141,7 @@
           .withSuccessHandler(function (data) {
             document.getElementById("error").textContent = "";
             applyState(data.enabled);
+            document.getElementById("version").textContent = data.version ? "Wersja: " + data.version : "";
             if (data.rows) {
               var previous = {};
               rows.forEach(function (r) { previous[r.k] = r.s + r.ms; });
@@ -154,7 +163,14 @@
       };
       document.addEventListener("visibilitychange", function () { if (!document.hidden) poll(); });
       // running scripts show a growing time between polls
-      setInterval(function () { if (rows.some(function (r) { return r.s === "RUN"; })) render(); }, 1000);
+      // (only the clock text is updated: rebuilding the list every second threw the scroll position away)
+      setInterval(function () {
+        rows.forEach(function (r) {
+          if (r.s !== "RUN") return;
+          var meta = document.querySelector('.meta[data-key="' + r.k + '"]');
+          if (meta) meta.textContent = clock(r.t) + " · " + duration(r);
+        });
+      }, 1000);
       poll();
     </script>
   </body>

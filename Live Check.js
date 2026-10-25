@@ -452,6 +452,11 @@ function liveCheckReport(limit=20,onlyBad=false){
   return text;
 }
 
+/** For running from the script editor (no arguments there): the failed and warned runs among the last 40, newest first. */
+function reportFailedChecks(){
+  return liveCheckReport(40,true);
+}
+
 /** One line per entry point: how many times it passed / warned / failed among the stored results. */
 function liveCheckSummary(){
   const counts = {};
