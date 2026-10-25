@@ -401,6 +401,15 @@ module.exports = function register(t) {
     assert.strictEqual(o.status('edit in the settings sheet outside the refresh frequency: nothing to do'), 'PASS');
   });
 
+  test('live check jobs: setting a new refresh frequency leaves a stored permit for the new trigger - the exact checks that failed in the live run now pass (bugs-todo #1)', () => {
+    const r = agentRun({ entry: 'edit', active: 'Ustawienia', range: { sheet: 'Ustawienia', row: 4, col: 5 } });
+    assert.strictEqual(r.entry.i, 'settings.refreshFrequency');
+    assert.strictEqual(r.status('exactly one autoRefreshHandler trigger'), 'PASS');
+    assert.strictEqual(r.status('permit issued for the new trigger'), 'PASS', JSON.stringify(r.entry.c.filter(x => x[0] !== 'PASS')));
+    assert.strictEqual(r.status('permit interval in hours'), 'PASS');
+    assert.strictEqual(r.entry.s, 'PASS', 'and the whole run: ' + JSON.stringify(r.entry.c.filter(x => x[0] !== 'PASS')));
+  });
+
   test('live check jobs: an edit elsewhere is sheet.ignored, an EDIT/FORMAT change is change.ignored, a powered-off trigger is agent.skipped', () => {
     const a = agentRun({ entry: 'edit', active: 'Arkusz1', range: { sheet: 'Arkusz1', row: 1, col: 1 } });
     assert.strictEqual(a.entry.i, 'sheet.ignored');

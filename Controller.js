@@ -3,6 +3,7 @@ const Controller = (function () {
   let closingActions = [];     // reset per run
 
   const flags = [];
+  let depth = 0;               // runs in progress: > 0 while an action or its closing actions are running (a run started from there is nested)
 
   function registerInit(fn) {
     initActions.push(fn);
@@ -53,7 +54,11 @@ const Controller = (function () {
   }
 
   function run(actionName, actionFn, e) {
-    closingActions = []; // fresh for this execution
+    // A top-level run keeps the closing actions registered BEFORE it started: an entry point may touch the settings in its own log line before calling run(),
+    // which builds the settings object and registers its save - throwing that away lost every setting changed in the execution (docs/bugs-todo.md #1).
+    // A nested run (started from a closing action) starts with an empty list, as it always did.
+    const nested = depth > 0;
+    if(nested) closingActions = [];
     const check = checkBegin(actionName);
 
     dbgLog(`Running ${actionName}. Test returns ${/^menu/.test(actionName)}`);
@@ -64,6 +69,7 @@ const Controller = (function () {
     if(!MainSettings.getAddonStatus() && !/^request/.test(actionName)) {
       dbgLog("Addon OFF. Quitting.");
       checkEnd(check, undefined, null, "addon-off");
+      if(!nested) closingActions = [];      // nothing runs, what was registered before is dropped
       return null;
     }
     dbgLog(`Running ${actionName}...`);
@@ -76,6 +82,7 @@ const Controller = (function () {
     };
 
     let result, error;
+    depth++;
     try {
       initActions.forEach(fn => fn(ctx));
       result = actionFn(ctx);
@@ -88,6 +95,8 @@ const Controller = (function () {
         try { fn(ctx, error, result); }
         catch (closeErr) { console.error(`[${actionName}] closing action failed:\n ${closeErr}`); }
       });
+      depth--;
+      if(depth === 0) closingActions = [];      // done: the next top-level run starts clean
     }
 
     checkEnd(check, error, result);

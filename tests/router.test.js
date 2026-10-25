@@ -159,6 +159,17 @@ module.exports = function register(t) {
     assert.ok(/function sheetEditAction\(e\)/.test(text) && /function sheetChangeAction\(e\)/.test(text));
   });
 
+  test('edit: a refresh frequency edit leaves the permit of the new time trigger in the store (bugs-todo #1: it used to be lost)', () => {
+    const sc = scenario({ active: 'Ustawienia', freqCell: true });
+    sc.ex.eval(`getMainSettings = () => ({ isConfigSheet: () => false, isRefreshFrequencyCell: () => true,
+      setRefreshTrigger: () => ScheduleRefresh.setUp({ freq: 6, unit: 'hrs' }) })`);
+    sc.edit();
+    const stored = JSON.parse(sc.p.props.document.importSettingsArray);
+    assert.deepStrictEqual(sc.p.triggers.filter(x => x.fn === 'autoRefreshHandler').map(x => x.id), ['trig-1']);
+    assert.deepStrictEqual([stored.refreshPermit.issuedFor, stored.refreshPermit.intervalHours], ['trig-1', 6]);
+    assert.strictEqual(stored.addonStatus, true);
+  });
+
   // ---- the router itself: what each event means (the jobs), announced before the action runs ---------------------------------------------------
   const route = (sc, kind) => { sc.ex.ctx.e = sc.event; return plain(sc.ex.eval(kind === 'edit' ? `Router.routeEdit(e)` : `Router.routeChange(e)`)); };
   const withIntentLog = sc => { sc.ex.ctx.liveCheckIntent = (n, d) => sc.log.push(['intent', n, d]); return sc; };

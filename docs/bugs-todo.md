@@ -36,3 +36,11 @@ Found while building and testing the live check helpers (`docs/live-check.md`), 
 10. **Unrelated edits still build `SettingsSheet`.** `updateAfterEdit()` calls `getMainSettings()` for every edit in every
     sheet, which reads the whole settings sheet and creates it (plus two unlogged triggers) when missing - see the earlier
     discussion about firewalling add-on runs in unrelated files.
+
+## Status on `refactor-and-grid`
+
+- **#1 Settings writes lost in `sheetEdit` (and `onEdit`): FIXED in `Controller.run`.** A top-level run now keeps the closing actions that were registered before it started (the entry
+  point's log line builds the settings object and registers its save); a nested run still starts with an empty list, as before. The live check's
+  `FAIL permit issued for the new trigger` / `permit interval in hours` after setting a refresh frequency are gone (`tests/controller.test.js`,
+  `tests/router.test.js`, `tests/live-check.test.js`). Nested runs (#2) are untouched.
+- #2, #3, #5-#10: unchanged (the refactor keeps them on purpose; tests pin them where they are observable).
