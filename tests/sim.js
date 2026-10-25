@@ -137,6 +137,7 @@ class SimBook {
     this.condWrites = 0;                         // conditional format writes (setConditionalFormatRules calls / add + delete requests)
     opts = opts || {};
     this.tz = opts.tz || 'Asia/Tokyo';
+    this.locale = opts.locale || 'en_US';
     this.api = opts.api !== false;
     this.sheets = {}; this.nextId = 1;
     this.requests = [];             // every batchUpdate (arrays of requests)
@@ -193,7 +194,7 @@ class SimBook {
   spreadsheet() {
     const book = this;
     return {
-      getId: () => 'ss', getSpreadsheetTimeZone: () => book.tz,
+      getId: () => 'ss', getSpreadsheetTimeZone: () => book.tz, getSpreadsheetLocale: () => book.locale,
       getSheets: () => Object.values(book.sheets).map(x => book.sheetObj(x)),
       getActiveSheet: () => book.sheetObj(book.sheets[book.activeName] || Object.values(book.sheets)[0]),
       getSheetByName: n => (book.sheets[n] ? book.sheetObj(book.sheets[n]) : null),

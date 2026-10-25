@@ -3,6 +3,27 @@
 // Small helpers shared by every range of the project (no spreadsheet access, no project knowledge).
 // ---------------------------------------------------------------------------
 
+/** Languages whose number format has a decimal COMMA: the spreadsheet then writes the arguments of a formula separated by ";" (Polish: =AND(A1>1;B1<2)). */
+const COMMA_DECIMAL_LANGUAGES_ = ['af', 'az', 'be', 'bg', 'bs', 'ca', 'cs', 'da', 'de', 'el', 'es', 'et', 'eu', 'fi', 'fr', 'gl', 'hr', 'hu', 'hy', 'id', 'is', 'it', 'ka',
+  'kk', 'lt', 'lv', 'mk', 'nb', 'nl', 'no', 'pl', 'pt', 'ro', 'ru', 'sk', 'sl', 'sq', 'sr', 'sv', 'tr', 'uk', 'vi'];
+
+/**
+ * The separator between the arguments of a formula as the spreadsheet of this locale ("pl_PL", "en_US" ...) writes it: ";" where the decimal mark is a comma, else ",".
+ * Asks Intl how the locale writes 1.5 when Intl is there (`intl` = null: skip it), else goes by the language.
+ */
+function formulaArgSeparator_(locale, intl) {
+  const tag = String(locale || '').replace('_', '-');
+  try {
+    const I = intl === undefined ? (typeof Intl !== 'undefined' ? Intl : null) : intl;
+    if (I && tag) {
+      const shown = new I.NumberFormat(tag).format(1.5);
+      if (shown.indexOf(',') >= 0) return ';';
+      if (shown.indexOf('.') >= 0) return ',';
+    }
+  } catch (err) { /* an unknown locale: by language below */ }
+  return COMMA_DECIMAL_LANGUAGES_.indexOf(tag.split('-')[0].toLowerCase()) >= 0 ? ';' : ',';
+}
+
 /** 1-based column number -> letters (A, B, ..., AA). */
 function colLetters_(n) {
   let s = '';

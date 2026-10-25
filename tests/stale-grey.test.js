@@ -16,8 +16,8 @@ const FILES = ['Grid.js', 'Grid Util.js', 'Config Grid.js', 'Custom errors.js', 
 
 module.exports = function register(t) {
   const { test } = t;
-  function scope(mode) {
-    const book = new SimBook({ api: mode === 'api' });
+  function scope(mode, locale) {
+    const book = new SimBook({ api: mode === 'api', locale: locale });
     const ctx = vm.createContext({ console: { log() {}, error() {} } });
     book.install(ctx);
     FILES.forEach(f => new vm.Script(fs.readFileSync(path.join(ROOT, f), 'utf8'), { filename: f }).runInContext(ctx));
@@ -140,4 +140,59 @@ module.exports = function register(t) {
       ConfigGrid.lines('K');`);
     assert.deepStrictEqual(JSON.parse(s.run('JSON.stringify(__order)')), ['flush', 'open']);
   }));
+
+  // ---- the argument separator follows the locale of the spreadsheet (Polish: ";") ----------------------------------------------------------------------
+  const semicolons = f => f.replace(/,/g, ';');
+  test('grey rules: the separator can be asked for - the same formulas with ";" instead of ","', () => {
+    const s = scope('service');
+    const comma = JSON.parse(s.run(`JSON.stringify(ConfigGrid.greyRules(QUERY_OPTION_WIDTHS, LINE_WIDTH_TABLE, ','))`)).map(r => r.formula);
+    const semi = JSON.parse(s.run(`JSON.stringify(ConfigGrid.greyRules(QUERY_OPTION_WIDTHS, LINE_WIDTH_TABLE, ';'))`)).map(r => r.formula);
+    assert.deepStrictEqual(semi, comma.map(semicolons));
+    assert.strictEqual(semi[1], '=AND(OR($B6="queryOption";$B6="extendOption");OR($C6="select";$C6="limit");COLUMN()>4)');
+    assert.ok(!semi.some(f => /,/.test(f)));
+  });
+
+  test('formula separator by locale: comma-decimal locales (pl, de, fr, ru, pt ...) write ";", the others ","; with and without Intl', () => {
+    const ctx = scope('service').ctx;
+    const sep = (locale, noIntl) => vm.runInContext(`formulaArgSeparator_(${JSON.stringify(locale)}${noIntl ? ', null' : ''})`, ctx);
+    [['pl_PL', ';'], ['de_DE', ';'], ['fr_FR', ';'], ['ru_RU', ';'], ['pt_BR', ';'], ['es_ES', ';'], ['cs_CZ', ';'], ['en_US', ','], ['en_GB', ','], ['ja_JP', ','], ['zh_CN', ','], ['', ','], [undefined, ',']].forEach(([locale, want]) => {
+      assert.strictEqual(sep(locale, false), want, 'with Intl: ' + locale);
+      assert.strictEqual(sep(locale, true), want, 'list only: ' + locale);
+    });
+  });
+
+  test('the co-edit writes the rules with the separator of the spreadsheet\'s locale (service path), replaces rules written with the other one, and leaves nothing of the other kind', () => {
+    const s = scope('service', 'pl_PL');
+    s.run(`ConfigGrid.create('K')`);
+    const sh = s.book.sheets['K'];
+    const comma = JSON.parse(s.run(`JSON.stringify(ConfigGrid.greyRules(QUERY_OPTION_WIDTHS, LINE_WIDTH_TABLE, ','))`));
+    comma.forEach(r => sh.condRules.push({ formula: r.formula, color: r.fontColor, ranges: [{ r1: 6, c1: 2, r2: 1000, c2: 6 }] }));         // what the earlier build wrote
+    s.run(`new SheetCoeditor('K', false).sheetEdit({})`);
+    const rules = sh.snapshot().condRules;
+    assert.strictEqual(rules.length, 5);
+    assert.ok(rules.every(r => /;/.test(r.formula) && !/,/.test(r.formula)), rules.map(r => r.formula).join('\n'));
+    const writes = s.book.condWrites;
+    s.run(`new SheetCoeditor('K', false).sheetEdit({})`);
+    assert.strictEqual(s.book.condWrites, writes, 'and then nothing to write');
+  });
+
+  test('an English spreadsheet gets commas; the Sheets API path always commas (the API takes formulas in the English form)', () => {
+    const en = scope('service', 'en_US');
+    en.run(`ConfigGrid.create('K')`);
+    en.run(`new SheetCoeditor('K', false).sheetEdit({})`);
+    assert.ok(en.book.sheets['K'].snapshot().condRules.every(r => /,/.test(r.formula) && !/;/.test(r.formula)));
+    const api = scope('api', 'pl_PL');
+    api.run(`ConfigGrid.create('K')`);
+    api.run(`new SheetCoeditor('K', false).sheetEdit({})`);
+    assert.ok(api.book.sheets['K'].snapshot().condRules.every(r => /,/.test(r.formula) && !/;/.test(r.formula)));
+  });
+
+  test('the semicolon form means the same: the evaluator, given the formulas of a Polish sheet, greys the same cells', () => {
+    const s = scope('service', 'pl_PL');
+    const semi = JSON.parse(s.run(`JSON.stringify(ConfigGrid.greyRules(QUERY_OPTION_WIDTHS, LINE_WIDTH_TABLE, ';'))`)).map(r => ({ formula: semicolons(r.formula).replace(/;/g, ',') }));
+    const comma = formulas();
+    const wrong = [];
+    lines.forEach(cells => { for (let col = 2; col <= 6; col++) if (greyBy(semi, cells, col) !== greyBy(comma, cells, col)) wrong.push(JSON.stringify(cells) + col); });
+    assert.deepStrictEqual(wrong, []);
+  });
 };

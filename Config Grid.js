@@ -85,9 +85,10 @@ const ConfigGrid = {
    * what is to the right of the width of the line, and what is to the right of a gap in a line that is not finished (the option word, the field ... not chosen yet).
    * `widths` = { option word: cells counted from column B }, `tableWidth` = the same for table / extend lines (QUERY_OPTION_WIDTHS and LINE_WIDTH_TABLE of the model).
    * Formulas are written for the first cell of the lines (B6) and only look at their own row, so the greying is there as soon as a cell is edited, with no co-edit run.
+   * `separator` = the argument separator of the spreadsheet's locale (";" in Polish): the rules are written the way the sheet itself would show them.
    * Returns [{ formula, fontColor }].
    */
-  greyRules(widths, tableWidth) {
+  greyRules(widths, tableWidth, separator = ',') {
     const L = CONFIG_LAYOUT;
     const col = n => String.fromCharCode(64 + n);
     const B = '$' + col(L.startCol) + L.startRow, C = '$' + col(L.startCol + 1) + L.startRow, F = '$' + col(L.startCol + L.queryCols - 1) + L.startRow;
@@ -102,7 +103,7 @@ const ConfigGrid = {
     });
     rules.push(`=AND(${isOption},${C}<>"",${Object.keys(widths).map(word => `${C}<>"${word}"`).join(',')},COLUMN()>${L.startCol + 1})`);
     rules.push(`=AND(${isOption},COLUMN()>${L.startCol + 1},COUNTBLANK(${C}:INDEX(${C}:${F},COLUMN()-${L.startCol + 1}))>0)`);
-    return rules.map(formula => ({ formula: formula, fontColor: L.staleText }));
+    return rules.map(formula => ({ formula: separator === ',' ? formula : formula.replace(/,/g, separator), fontColor: L.staleText }));      // (the only commas are the separators)
   },
 
   /** Formulas of earlier versions of greyRules: still ours, replaced when found (add the old text here whenever greyRules changes). */
@@ -151,8 +152,9 @@ const ConfigGrid = {
       },
       /** Sets the greying of stale cells (greyRules) for B6 down to the end of the sheet; a no-op when the sheet already has exactly these rules. Takes effect at save(). */
       setLineFormats(widths, tableWidth) {
-        const rules = ConfigGrid.greyRules(widths, tableWidth);
-        grid.setFormulaFontColors({ r1: L.startRow, c1: L.startCol, c2: L.startCol + L.queryCols - 1 }, rules, rules.map(r => r.formula).concat(ConfigGrid.formerGreyFormulas));
+        const rules = ConfigGrid.greyRules(widths, tableWidth, grid.getFormulaSeparator());
+        const owned = [',', ';'].flatMap(sep => ConfigGrid.greyRules(widths, tableWidth, sep).map(r => r.formula)).concat(ConfigGrid.formerGreyFormulas);      // either separator is ours
+        grid.setFormulaFontColors({ r1: L.startRow, c1: L.startCol, c2: L.startCol + L.queryCols - 1 }, rules, owned);
       },
       save() {
         grid.commit();

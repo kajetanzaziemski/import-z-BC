@@ -72,7 +72,8 @@ Found while building and testing the live check helpers (`docs/live-check.md`), 
     select / limit 3 (so `select` is ONE field now - before, every cell to its right was a field), filterLogic / orderBy 4, filter 5, an unknown option word 2; anything to the right of that, and anything after the first empty cell of a line,
     is not part of the query (`QUERY_OPTION_WIDTHS`, `Content Tracker.js`; tests/query-lines.test.js). orderBy / filterLogic with no field and a filter with an empty field are ignored. (b) The cells that do not count are shown grey by
     conditional formatting (5 rules on B6:F, `ConfigGrid.greyRules`, set by the co-edit, tests/stale-grey.test.js): immediate, nothing to reset when the cell is filled in. Nothing is ever deleted. The formulas cannot run in the tests; they are checked
-    against the rules in words with a small evaluator (235 lines x 5 columns) and **have to be looked at once on a real sheet**.
+    against the rules in words with a small evaluator (235 lines x 5 columns) and **have to be looked at once on a real sheet**. The formulas are written the way the spreadsheet's locale writes them (`;` between arguments in Polish: first real use showed `,` was refused);
+    rules written with the other separator by an earlier build are ours and are replaced.
 
 ## Status on `refactor-and-grid`
 

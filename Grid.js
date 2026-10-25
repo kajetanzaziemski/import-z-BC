@@ -23,6 +23,7 @@
 //   - Date values are read and written in both paths (the API path converts to / from serial numbers)
 //   - autoResizeColumns
 //   - grid.setFormulaFontColors(range, rules, ownedFormulas): conditional formats (custom formula -> font colour), replacing the caller's own rules and no others
+//   - grid.getFormulaSeparator(): "," or ";" (the locale of the spreadsheet) for the formulas given to setFormulaFontColors
 //   - grid.getTimeZone(): the spreadsheet's time zone
 //   - Grid.exists(sheetName): whether the sheet is there, without reading it
 // The wyceny "reset from a template" path is kept but nothing in import-z-BC uses it and it has no tests here.
@@ -111,6 +112,16 @@ class Grid {
   /** Fits the columns `from`..`from + n - 1` to their content (at the end of the commit; final column numbers). */
   autoResizeColumns(from, n) { this.colFits.push({ first: from, count: n }); }
   getMaxColumns() { return this.maxCols; }
+  /**
+   * The separator of formula arguments to write formulas with: "," on the Sheets API path (the API takes English formulas), else the one of the spreadsheet's
+   * locale (";" for Polish ...). Formulas given to setFormulaFontColors have to be written with it.
+   */
+  getFormulaSeparator() {
+    if (this.source.kind === 'api' || (this.source.kind === 'new' && sheetsApiAvailable_())) return ',';
+    if (!this.locale) this.locale = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetLocale();
+    return formulaArgSeparator_(this.locale);
+  }
+
   /** The spreadsheet's time zone (read once). */
   getTimeZone() { return this._tz(); }
 

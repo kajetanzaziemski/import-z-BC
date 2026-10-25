@@ -23,6 +23,7 @@
 - `insertRowsAfter(..., { plain: true })` on the service path clears the validation of the **whole** row (before: only up to the window's width).
 - `Grid.open` takes an optional `window` (rows to read): a small grid for a few known cells, e.g. a status row.
 - `grid.setFormulaFontColors(range, rules, ownedFormulas)`: conditional formats (custom formula -> font colour). Replaces the caller's own rules (found by formula, wherever they are), leaves every other rule of the sheet alone, and writes nothing when the sheet already has exactly these rules. Both paths (the API loads the sheet's `conditionalFormats` with the window).
+- `grid.getFormulaSeparator()`: "," or ";" - the argument separator of the spreadsheet's locale (Polish: ";"), always "," on the API path - for the formulas given to `setFormulaFontColors`.
 - `Grid.exists(sheetName)`: whether the sheet is there, without reading it (`SheetCoeditor` constructor).
 - `Grid.open` on the API path also reads the time zone and the cells' number format type.
 
