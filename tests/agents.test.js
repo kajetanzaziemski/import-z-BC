@@ -11,6 +11,52 @@ const { FakePlatform } = require('./platform-fakes');
 const FILES = ['Custom errors.js', 'Helper Data Store.js', 'Store.js', 'Settings.js', 'Main Settings.js', 'Controller.js', 'Trigger Manager.js',
   'Global Add-on Settings.js', 'Quick Start.js', 'functions.js', 'Track onEdit Triggers.js', 'Status Manager.js', 'Settings Sheet.js'];
 
+// Captured from the code before the regroup (PRINT_AGENT_GOLDEN=1 node tests/run.js prints them again).
+const STORY = {
+ "ok": [
+  "SIMPLE: onEdit entry point called (add-on status: ON).",
+  "SIMPLE S!B2: Simple onEdit fired. Waiting up to N ms (polling every N ms) for the installable trigger to report the same edit.",
+  "SIMPLE S!B2: Poll #1 (N ms): installable record already present (counter 1).",
+  "SIMPLE S!B2: Poll #1 (N ms): installable record present (counter 1). Trying to consume it.",
+  "SHARED S!B2: Lock for \"consume installable record\": document lock acquired after N ms.",
+  "SIMPLE S!B2: Consume: counter 1 -> 0 (record deleted).",
+  "SIMPLE S!B2: OK: installable trigger reported this edit (found after N ms). Agent is alive, nothing to do."
+ ],
+ "first": [
+  "SIMPLE: onEdit entry point called (add-on status: ON).",
+  "SIMPLE S!B2: Simple onEdit fired. Waiting up to N ms (polling every N ms) for the installable trigger to report the same edit.",
+  "SIMPLE S!B2: Poll #1 (N ms): installable record not there yet.",
+  "SIMPLE S!B2: Gave up after N polls (N ms).",
+  "SIMPLE S!B2: NO REPORT from the installable trigger within N ms. Raising the alarm.",
+  "SHARED S!B2: Lock for \"read/set suspect flag\": document lock acquired after N ms.",
+  "SHARED S!B2: Suspect flag SET.",
+  "SIMPLE S!B2: ALARM level 1: agent marked SUSPECT (flag set). Not powering off yet: the installable trigger may only be late. A later installable run clears the flag, a second miss without one powers the agents off.",
+  "SIMPLE S!B2: Showing the 'agent not configured' alert to the user (shown when this execution closes)."
+ ],
+ "second": [
+  "SIMPLE: onEdit entry point called (add-on status: ON).",
+  "SIMPLE S!B2: Simple onEdit fired. Waiting up to N ms (polling every N ms) for the installable trigger to report the same edit.",
+  "SIMPLE S!B2: Poll #1 (N ms): installable record not there yet.",
+  "SIMPLE S!B2: Gave up after N polls (N ms).",
+  "SIMPLE S!B2: NO REPORT from the installable trigger within N ms. Raising the alarm.",
+  "SHARED S!B2: Lock for \"read/set suspect flag\": document lock acquired after N ms.",
+  "SIMPLE S!B2: ALARM level 2: agent was already marked suspect N s ago (edit S!B2) and no installable run has been seen since. Agent considered DEAD.",
+  "SIMPLE S!B2: Powering OFF all agents in this file.",
+  "SIMPLE S!B2: Showing the 'agent not configured' alert to the user (shown when this execution closes)."
+ ],
+ "third": [
+  "SIMPLE: onEdit entry point called (add-on status: ON).",
+  "SIMPLE S!B2: Simple onEdit fired. Waiting up to N ms (polling every N ms) for the installable trigger to report the same edit.",
+  "SIMPLE S!B2: Poll #1 (N ms): installable record not there yet.",
+  "SIMPLE S!B2: Gave up after N polls (N ms).",
+  "SIMPLE S!B2: NO REPORT from the installable trigger within N ms. Raising the alarm.",
+  "SHARED S!B2: Lock for \"read/set suspect flag\": document lock acquired after N ms.",
+  "SIMPLE S!B2: ALARM level 2: agent was already marked suspect N s ago (edit S!B2) and no installable run has been seen since. Agent considered DEAD.",
+  "SIMPLE S!B2: Agents are already powered off (user has been warned before). Not powering off again, not showing the alert again."
+ ]
+};
+const TABLE = [["No","Event","Trigger Id","Source","Function","Created","Last Used","Power","Doc","Usr","Script"],[1,"ON_EDIT","trig-1","<a href=\"url-A\"> name-A</a>","sheetEdit","DATE","DATE","ON","✓","✓","✓"],[2,"ON_CHANGE","trig-2","<a href=\"url-A\"> name-A</a>","sheetChange","DATE","DATE","ON","✓","✓","✓"],[3,"ON_EDIT","trig-3","<a href=\"url-A\"> name-A</a>","sheetEdit","DATE","DATE","ON","✗","✓","✓"],[4,"ON_CHANGE","trig-4","<a href=\"url-A\"> name-A</a>","sheetChange","DATE","DATE","ON","✗","✓","✓"]];
+
 module.exports = function register(t) {
   const { test } = t;
   const extra = t.extraFiles || [];                                      // the regroup adds its files here
@@ -23,11 +69,12 @@ module.exports = function register(t) {
     const doc = id => {
       if (docs[id]) return docs[id];
       const p = first ? first.otherDocument() : (first = new FakePlatform());
-      const d = { id, p, alerts: 0 };
+      const d = { id, p, alerts: 0, log: [] };
       const ss = { getId: () => id, getSheetByName: () => null, getUrl: () => 'url-' + id, getName: () => 'name-' + id };
       d.run = (code, more) => {
         const ex = p.execution(files, Object.assign({
           __p: p, __d: d,
+          Logger: { log: line => d.log.push(String(line).replace(/\[AGENT-CHECK [^\]]*\] /, '')) },
           SpreadsheetApp: { getActiveSpreadsheet: () => ss, getUi: () => ({ alert() { d.alerts++; } }), flush() {}, openById: () => ss }
         }, more || {}));
         ex.eval(`globalThis.getMainSettings = () => ({ isConfigSheet: () => false }); globalThis.dbgLog = () => {}; globalThis.menuSelector = () => {}; globalThis.Router = { edit() {}, change() {} };
@@ -235,5 +282,34 @@ module.exports = function register(t) {
     assert.strictEqual(used[1].lastUsed, used[1].dateCreated, 'change trigger not');
     assert.strictEqual(a.run(`StatusManager.checkTriggerPower('trig-1')`), true);
     assert.strictEqual(a.run(`StatusManager.checkTriggerPower('trig-999')`), false);
+  });
+
+  // ---- the detector's story and the trigger table, word for word ----------------------------------------------------------------------------------
+  const detectorLines = d => d.log.filter(l => /^(SIMPLE|INSTALLABLE|SHARED)/.test(l)).map(l => l.replace(/\d+ ms/g, 'N ms').replace(/\d+ s ago/g, 'N s ago').replace(/after \d+ polls/, 'after N polls').replace(/Gave up after \d+ polls/, 'Gave up after N polls'));
+
+  test('agents: the detector\'s log story for a working agent, a first miss, a second miss and a third (the words the live check and the user read)', () => {
+    const w = world(), a = w.doc('A');
+    click(a);
+    a.run(`recordInstallableSeen(${EDIT})`);
+    a.log.length = 0; a.run(`onEdit(${EDIT})`);
+    const ok = detectorLines(a);
+    a.log.length = 0; a.run(`onEdit(${EDIT})`);
+    const first = detectorLines(a);
+    a.log.length = 0; a.run(`onEdit(${EDIT})`);
+    const second = detectorLines(a);
+    a.log.length = 0; a.run(`onEdit(${EDIT})`);
+    const third = detectorLines(a);
+    if (process.env.PRINT_AGENT_GOLDEN) console.log('STORY=' + JSON.stringify({ ok, first, second, third }, null, 1));
+    assert.deepStrictEqual({ ok, first, second, third }, STORY);
+  });
+
+  test('agents: the trigger table (rows of the "Wszystkie triggery" sidebar) - one row per trigger id of the three records, in the order document log, user log, project', () => {
+    const w = world(), a = w.doc('A');
+    click(a);
+    w.doc('B'); click(w.doc('B'));
+    const rows = a.run(`StatusManager.getAllProjectTriggers()`);
+    const norm = JSON.parse(JSON.stringify(rows)).map(r => r.map(x => (typeof x === 'string' && /^20\d\d-/.test(x) ? 'DATE' : x)));
+    if (process.env.PRINT_AGENT_GOLDEN) console.log('TABLE=' + JSON.stringify(norm));
+    assert.deepStrictEqual(norm, TABLE);
   });
 };
