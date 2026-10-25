@@ -276,13 +276,14 @@ module.exports = function register(t) {
       getMainSettings = () => ({ getConfigSheetName: n => (n === 'Konfiguracja 1' ? n : null), getResultSheetName: () => 'Wynik', getConfigSheetNames: () => ['Konfiguracja 1'], getSheetList: () => [{ configSheet: 'Konfiguracja 1', resultSheet: 'Wynik' }] });`);
     ex.eval(`new SheetCoeditor('Konfiguracja 1', false)`);                       // the sheet with its header
     const cfg = book.sheets['Konfiguracja 1'];
+    if (o.table) { cfg.setValue(6, 2, 'table', ''); cfg.setValue(6, 3, 'Customers', ''); }
     if (o.handD2) { cfg.cell(2, 4, true).fmt.bg = '#ffffff'; cfg.cell(2, 4, true).fmt.color = '#000000'; }
     if (o.breakIt) ex.eval(o.breakIt);
     ex.eval(o.run);
     const entries = Object.keys(p.props.document).filter(k => /^liveCheck:\d/.test(k)).sort().map(k => JSON.parse(p.props.document[k]));
     const mine = entries.filter(e => e.a === o.action);
     assert.strictEqual(mine.length, 1, 'one recorded run of ' + o.action + ': ' + entries.map(e => e.a).join(','));
-    const line = mine[0].c.find(x => /activity indicators back to idle/.test(x[1]));
+    const line = mine[0].c.find(x => (o.line || /activity indicators back to idle/).test(x[1]));
     assert.ok(line, 'the check ran: ' + JSON.stringify(mine[0].c.map(x => x[1])));
     return { status: line[0], detail: line[2] || '' };
   }
@@ -308,6 +309,14 @@ module.exports = function register(t) {
       breakIt: `SheetCoeditor.prototype.setTotRowsInfo = function () { this.switchDataWritingControl(true); }` });
     assert.strictEqual(r.status, 'FAIL');
     assert.ok(/data writing \(D2: background #ff0000, font #000000; before the run: background #cccccc, font #999999\)/.test(r.detail), r.detail);
+  });
+
+  test('live check, end to end: a result column whose number format differs between the header and the last row -> FAIL naming the column and the actual formats', () => {
+    const r = e2e({ run: 'refreshCurrentSheet()', action: 'menuRefreshCurrentSheet', line: /number format uniform in every column/, table: true,
+      breakIt: `{ const w = ResultSheet.write; ResultSheet.write = function (n) { w.apply(this, arguments); SpreadsheetApp.getActiveSpreadsheet().getSheetByName(n).getRange(2, 1).setNumberFormat('0.00'); }; }` });
+    assert.strictEqual(r.status, 'FAIL');
+    assert.strictEqual(r.detail, 'differs between first and last row: No (row 1: "@", row 2: "0.00", row 2: "0.00")');
+    assert.strictEqual(e2e({ run: 'refreshCurrentSheet()', action: 'menuRefreshCurrentSheet', line: /number format uniform in every column/, table: true }).status, 'PASS');
   });
 
   test('live check, end to end: code that forgets to reset the writing cell after a refresh -> FAIL, also when D2 was hand-edited before', () => {

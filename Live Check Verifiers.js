@@ -322,8 +322,9 @@ function lcVerifyResultSheet_(c,configName,resultName){
   // formats: uniform down every column, and right for the data type when the metadata cache knows it
   const first = sheet.getRange(1,1,1,cols).getNumberFormats()[0];
   const last = sheet.getRange(rows,1,1,cols).getNumberFormats()[0];
-  const ragged = first.map((f,i) => f !== last[i] ? header[i] : null).filter(h => h !== null);
-  c.expect(`${tag} number format uniform in every column`,ragged.length == 0,`differs between first and last row: ${ragged.slice(0,5).join(", ")}`);
+  const second = rows > 1 ? sheet.getRange(2,1,1,cols).getNumberFormats()[0] : first;
+  const ragged = first.map((f,i) => f !== last[i] ? `${header[i]} (row 1: "${f}", row 2: "${second[i]}", row ${rows}: "${last[i]}")` : null).filter(h => h !== null);
+  c.expect(`${tag} number format uniform in every column`,ragged.length == 0,`differs between first and last row: ${ragged.slice(0,5).join("; ")}`);
 
   const wrong = [];
   let known = 0;

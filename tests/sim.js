@@ -276,6 +276,14 @@ class SimBook {
       getRow: () => r, getColumn: () => c, getNumRows: () => nr, getNumColumns: () => nc, getLastRow: () => r + nr - 1, getLastColumn: () => c + nc - 1,
       getA1Notation: () => colName(c) + r + (nr > 1 || nc > 1 ? ':' + colName(c + nc - 1) + (r + nr - 1) : ''),
       getValues: () => { call(); return grid((rr, cc) => valueOf(s.cell(rr, cc))); },
+      getNumberFormats: () => { call(); return grid((rr, cc) => (s.cell(rr, cc) || { fmt: {} }).fmt.numFmt || 'General'); },
+      getNotes: () => { call(); return grid((rr, cc) => (s.cell(rr, cc) || { note: '' }).note || ''); },
+      getDataValidations: () => { call(); return grid((rr, cc) => {            // validation objects rebuilt from the canonical form
+        const x = s.cell(rr, cc); if (!x || !x.dv || x.dv === 'checkbox') return null;
+        if (x.dv === 'date') return { getCriteriaType: () => 'DATE_IS_VALID_DATE', getCriteriaValues: () => [], getAllowInvalid: () => false };
+        const m = x.dv.match(/^list:(.*):(loose|strict):(dropdown|plain)$/);
+        return { getCriteriaType: () => 'VALUE_IN_LIST', getCriteriaValues: () => [m[1] === '' ? [] : m[1].split('|'), m[3] === 'dropdown'], getAllowInvalid: () => m[2] === 'loose' };
+      }); },
       getValue: () => { call(); return valueOf(s.cell(r, c)); },
       getBackground: () => { call(); const x = s.cell(r, c); return (x && x.fmt.bg) || '#ffffff'; },
       getBackgrounds: () => { call(); return grid((rr, cc) => { const x = s.cell(rr, cc); return (x && x.fmt.bg) || '#ffffff'; }); },
