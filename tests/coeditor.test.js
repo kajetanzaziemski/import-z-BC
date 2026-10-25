@@ -330,51 +330,83 @@ module.exports = function register(t) {
   });
 
   // ---- the doubled queryOption / extend pairs seen on a real sheet (c06ab0e+) ------------------------------------------------------------------
-  // Hypothesis: a co-edit that waited for the lock reads the lines through a spreadsheet service that still shows the state from before the co-edit that
-  // held the lock committed (the pair that one inserted is not there), so it inserts a pair of its own. The simulation cannot show whether the platform does
-  // that; this models it (reads are stale until the execution has waited 1.5 s) to pin what the code does about it. The probes in "Concurrency Probe.js" and
-  // the trace in "Coedit Trace.js" tell on the real sheet (docs/coedit-tracking.md).
+  // What the flight recorder showed on the real sheet: a co-edit whose execution STARTED before another one committed kept reading the lines as they were at its
+  // start - the same 13 rows, the same hash, 8-11 s on, through re-reads and waits - until its own flush (after its own commit) brought the view up to date
+  // (the probes had shown the same: reads lag until the reading execution calls SpreadsheetApp.flush()). An execution that started after the commit read it
+  // right away. So it inserted the extend line and the empty queryOption line again. The model below is that: reads of an execution are served from the
+  // state at its start until it flushes. ConfigGrid.lines() now flushes before it reads.
   const countLabels = sh => { const n = {}; for (let r = 6; r <= sh.lastRow(); r++) { const l = (sh.cell(r, 2) || {}).v; const blank = ![3, 4, 5, 6].some(c => (sh.cell(r, c) || {}).v); const k = l + (blank ? '(empty)' : ''); n[k] = (n[k] || 0) + 1; } return n; };
-  ['api', 'service'].forEach(mode => {
-    const staleRun = (extraBefore) => {
-      const s = analyseScope(mode, { name: 'none', nth: 0 });
+  const cloneSheet = sim => Object.assign(Object.create(Object.getPrototypeOf(sim)), sim, { cells: JSON.parse(JSON.stringify(sim.cells)), merges: sim.merges.map(m => Object.assign({}, m)), condRules: [] });
+  /** Reads of the Spreadsheet service come from `frozen` (state of the sheets at the start of the reading execution) until SpreadsheetApp.flush() is called; writes go to the sheet. */
+  function staleView(book) {
+    let frozen = null;
+    const original = book.spreadsheet.bind(book);
+    book.spreadsheet = () => {
+      const ss = original(), getSheet = ss.getSheetByName;
+      ss.getSheetByName = name => {
+        const real = getSheet(name);
+        if (!frozen || !frozen[name] || !real) return real;
+        const old = book.sheetObj(frozen[name]);
+        return Object.assign({}, real, { getLastRow: old.getLastRow, getLastColumn: old.getLastColumn, getMaxRows: old.getMaxRows, getMaxColumns: old.getMaxColumns,
+          getRange: (...a) => { const r = real.getRange(...a), o = old.getRange(...a); return Object.assign({}, r, { getValues: o.getValues, getFormulas: o.getFormulas, getValue: o.getValue, getMergedRanges: o.getMergedRanges }); } });
+      };
+      return ss;
+    };
+    // A flush brings the view of the flushing execution up to date - but only to the state of that moment: the flush of the constructor (the reading light), long
+    // before the lock was got and the other co-edit committed, brings nothing. So here a flush counts only after this execution has got the lock.
+    let since = 0, platform = null;
+    book.SpreadsheetApp.flush = () => { if (frozen && platform.calls.slice(since).includes('lock.acquired')) frozen = null; };
+    return {
+      snapshot: () => { const x = {}; Object.keys(book.sheets).forEach(n => { x[n] = cloneSheet(book.sheets[n]); }); return x; },
+      staleFrom: (snap, p) => { frozen = snap; platform = p; since = p.calls.length; },
+      isStale: () => frozen !== null
+    };
+  }
+  const WITHOUT_FLUSH = `ConfigGrid.lines = eval('({' + ConfigGrid.lines.toString().replace('SpreadsheetApp.flush();', '') + '})').lines;`;      // ConfigGrid.lines as it was
+
+  {
+    const staleRun = (beforeSecond) => {
+      const s = analyseScope('service', { name: 'none', nth: 0 });
+      const view = staleView(s.book);
       s.run(`ConfigGrid.create('K')`);
       fillLines(s.book, [['table', 'Customers'], ['queryOption', 'select'], ['select', 'Name']]);
-      s.run(`globalThis.__slept = 0; Utilities.sleep = ms => { __slept += ms; };
-        const stale = ConfigGrid.lines('K');                       // what the second execution would still see
-        AnalyseConfig.run('K', {});                                // the first co-edit: inserts the extend line and an empty queryOption line, commits, flushes
-        ${extraBefore || ''}
-        const real = ConfigGrid.lines.bind(ConfigGrid);
-        ConfigGrid.lines = n => (__slept < 1500 ? stale : real(n));   // the platform shows the old state until a moment has passed
-        AnalyseConfig.run('K', {});                                // the second co-edit, started while the first one was still going
-        globalThis.__sleptAfter = __slept;`);
+      const startOfSecond = view.snapshot();                       // the second co-edit's execution has started: this is what it sees
+      s.run(`AnalyseConfig.run('K', {})`);                         // the first co-edit: inserts the extend line and an empty queryOption line, commits, flushes
+      view.staleFrom(startOfSecond, s.p);
+      s.run(`${beforeSecond || ''} AnalyseConfig.run('K', {})`);   // the second co-edit
       return s;
     };
 
-    test(`stale reads reproduce the symptom: without the safeguard the second co-edit inserts the extend line and the empty queryOption line AGAIN [${mode}]`, () => {
-      const s = staleRun(`SheetCoeditor.prototype.confirmFresh_ = function () {};`);
+    test('stale view reproduces the symptom of the real trace: reading without a flush, the second co-edit inserts the extend line and the empty queryOption line AGAIN', () => {
+      const s = staleRun(WITHOUT_FLUSH);
       const n = countLabels(s.book.sheets['K']);
       assert.strictEqual(n['extend(empty)'], 2, JSON.stringify(n));
       assert.strictEqual(n['queryOption(empty)'], 2, JSON.stringify(n));
     });
 
-    test(`with the safeguard the second co-edit notices that the lines are fewer than the first one left, waits, reads again and inserts nothing twice [${mode}]`, () => {
+    test('with the flush before every read of the lines the second co-edit sees what the first one committed and inserts nothing twice', () => {
       const s = staleRun();
       const n = countLabels(s.book.sheets['K']);
       assert.strictEqual(n['extend(empty)'], 1, JSON.stringify(n));
       assert.strictEqual(n['queryOption(empty)'], 1, JSON.stringify(n));
     });
-  });
+
+    test('the flight recorder shows the stale view the way the real one did: stale-suspected, a re-read that brings nothing, then the same inserts again', () => {
+      const s = staleRun(WITHOUT_FLUSH);
+      const runs = Object.keys(s.p.props.document).filter(k => k.indexOf('coeditTrace:') === 0).sort().map(k => JSON.parse(s.p.props.document[k]));
+      const second = runs[1].events.map(x => x.e);
+      assert.ok(second.includes('stale-suspected') && second.includes('reread') && !second.includes('stale-confirmed') && second.includes('insert'), second.join(','));
+      const ev = runs[1].events, read = ev.slice(0, ev.findIndex(x => x.e === 'insert')).filter(x => x.e === 'read');       // up to the first insert
+      assert.ok(read.length >= 2 && read.every(x => x.hash === read[0].hash && x.rows === read[0].rows), 'the same picture again and again');
+    });
+  }
 
   ['api', 'service'].forEach(mode => {
-    test(`the flight recorder: every co-edit leaves its events in its own property; coeditTrace() prints them in time order; a stale reading shows as stale-suspected / reread / stale-confirmed [${mode}]`, () => {
+    test(`the flight recorder: every co-edit leaves its events in its own property; coeditTrace() prints them in time order [${mode}]`, () => {
       const s = analyseScope(mode, { name: 'none', nth: 0 });
       s.run(`ConfigGrid.create('K')`);
       fillLines(s.book, [['table', 'Customers'], ['queryOption', 'select'], ['select', 'Name']]);
-      s.run(`globalThis.__slept = 0; Utilities.sleep = ms => { __slept += ms; };
-        const stale = ConfigGrid.lines('K'); AnalyseConfig.run('K', {});
-        const real = ConfigGrid.lines.bind(ConfigGrid); ConfigGrid.lines = n => (__slept < 1500 ? stale : real(n));
-        AnalyseConfig.run('K', {});`);
+      s.run(`AnalyseConfig.run('K', {}); AnalyseConfig.run('K', {});`);
       const keys = Object.keys(s.p.props.document).filter(k => k.indexOf('coeditTrace:') === 0).sort();
       assert.strictEqual(keys.length, 2, 'one property per co-edit: ' + keys.join(', '));
       const [a, b] = keys.map(k => JSON.parse(s.p.props.document[k]));
@@ -382,13 +414,12 @@ module.exports = function register(t) {
       assert.deepStrictEqual(names(a).slice(0, 5), ['start', 'read', 'ticket', 'lock', 'read'], 'start, the constructor\'s read, the ticket, the lock, the in-lock read');
       assert.ok(names(a).includes('insert') && names(a).includes('commit'), names(a).join(','));
       assert.strictEqual(a.events.find(x => x.e === 'insert').lines.length, 2, 'the extend and the empty queryOption line');
-      ['stale-suspected', 'reread', 'stale-confirmed'].forEach(e => assert.ok(names(b).includes(e), e + ' in ' + names(b).join(',')));
+      assert.ok(!names(b).includes('insert') && !names(b).includes('stale-suspected'), 'the second finds the lines and the right row count: ' + names(b).join(','));
       assert.strictEqual(names(a).at(-1), 'end');
       assert.strictEqual(a.events.at(-1).outcome, 'completed');
       const text = s.run(`coeditTrace()`);
       const lines = text.split('\n');
       assert.ok(lines.length >= 15 && lines.every(l => /^\d\d:\d\d:\d\d\.\d\d\d \[[0-9a-z]{4}\] /.test(l)), text);
-      assert.ok(lines.findIndex(l => /\binsert\b/.test(l)) < lines.findIndex(l => /stale-suspected/.test(l)), 'in time order');
     });
 
     test(`the flight recorder keeps the last 20 runs only and coeditTraceClear() empties it; a dropped run and an error leave their story too [${mode}]`, () => {

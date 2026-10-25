@@ -2,7 +2,7 @@
 // for (new lines, dropdowns, notes) and drives the status cells. It does not touch the spreadsheet itself: the lines and the
 // status cells are reached through ConfigGrid (Config Grid.js).
 const MAX_COEDIT_PASSES = 3;
-const STALE_RETRY_MS = [1500, 2500];       // waits before reading again when the lines look older than what the previous co-edit left
+const STALE_RETRY_MS = [1500];             // wait before reading again when the lines look older than what the previous co-edit left (the real trace: waiting alone did not help; the flush before every read does)
 const STALE_WINDOW_MS = 30000;             // ... but only when that co-edit committed less than this long ago
 const SHEET_CHANGED = Symbol("the lines changed while the co-edit was working");
 

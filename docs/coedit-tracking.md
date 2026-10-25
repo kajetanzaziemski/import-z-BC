@@ -47,3 +47,19 @@ decides anything (`SheetCoeditor.confirmFresh_`). If the lines come back, the do
   `SpreadsheetApp.flush()`. So an execution that reads without flushing sees the sheet a moment ago - enough for a co-edit that starts right after another one committed to miss the lines that one inserted.
 - Counter-measures now in: `ConfigGrid.lines()` flushes before every read, and the earlier safeguard (`confirmFresh_`) still waits and reads again when the lines are fewer than the previous co-edit left.
   If the doubled pairs do not come back, `coeditTrace()` shows whether the safeguard was needed (`stale-confirmed`); if it never is, it can go.
+
+## What the recorder showed (2026-10-25, build `c06ab0e+`, before the flush) - the cause
+```
+20:08:36 [bpwi] read rows 13 hash 13937cf7           <- bpwi's execution started at 20:08:35
+20:08:40 [wjgo] insert queryOption + extend after 12; commit rows 15 hash e436e058
+20:08:42 [bpwi] lock; read rows 13 hash 13937cf7      <- the lock is bpwi's now, wjgo has committed, bpwi still sees 13 rows
+20:08:43 [bpwi] stale-suspected (13 < 15)  ... read again after 1.5 s: rows 13, same hash ... after 2.5 s more: rows 13, same hash
+20:08:50 [bpwi] insert queryOption + extend after 12  <- the same two lines again; commit
+20:08:54 [bpwi] changed rows 17 (expected 15)         <- after its own commit (and flush) the sheet shows 17 rows: both pairs are there
+```
+(and the same earlier at 20:07: `hc44` read 11 rows for 11 s while `vmre` had committed 13; it was dropped by the ticket, `swee`, started after the commit, read 13 at once.)
+- It is neither a lock failure (the intervals do not overlap) nor a delay: **an execution keeps seeing the sheet as of its last `SpreadsheetApp.flush()` (or its start)**, however long it waits and however often it
+  fetches the sheet again. The probe said the same (the `same` / `refetched` columns moved only when the reader flushed). The constructor of the co-edit flushes (reading light) - before the other co-edit committed.
+- The fix is the flush **after** the lock is got, right before the lines are read: `ConfigGrid.lines()` does `SpreadsheetApp.flush()` first. Waiting (`confirmFresh_`) alone is useless, as the trace shows; it now waits once (1.5 s) and reads
+  again - through `lines()`, i.e. with a flush - so it can still catch a stale view that a flush does not cure.
+- `tests/coeditor.test.js` has this model (reads come from the state at the start of the execution until a flush after the lock): the co-edit without the flush doubles the pair, with it it does not.
