@@ -195,6 +195,10 @@ class SimBook {
     const spec = {};
     const b = {
       requireValueInList: (list, dropdown) => { spec.type = 'VALUE_IN_LIST'; spec.list = list.slice(); spec.dropdown = dropdown !== false; return b; },
+      withCriteria: (type, args) => {            // the form MyDataValidation uses: (criteria, [list, showDropdown]) / (criteria, [])
+        if (type === 'VALUE_IN_LIST') { spec.type = type; spec.list = args[0].slice(); spec.dropdown = args[1] !== false; } else if (type === 'DATE_IS_VALID_DATE') spec.type = type; else throw new Error('SimBook: criteria ' + type);
+        return b;
+      },
       requireDate: () => { spec.type = 'DATE_IS_VALID_DATE'; return b; },
       setAllowInvalid: x => { spec.allowInvalid = !!x; return b; },
       build: () => ({
@@ -230,6 +234,7 @@ class SimBook {
         return book.rangeObj(s, r, c, nr === undefined ? 1 : nr, nc === undefined ? 1 : nc);
       },
       insertRowsAfter: (after, n) => { call(); s.insertRows(after, n); },
+      insertRowAfter: after => { call(); s.insertRows(after, 1); },
       insertColumnsAfter: (after, n) => { call(); s.insertCols(after, n); },
       deleteColumns: (from, n) => { call(); s.deleteCols(from, n); },
       setRowHeight: (r, px) => { call(); s.rowPx[r] = px; },
@@ -281,6 +286,7 @@ class SimBook {
       setNote: t => { call(); each((rr, cc) => { const x = s.cell(rr, cc, true); x.note = t === null ? '' : String(t); s.prune(rr, cc); }); return self; },
       insertCheckboxes: () => { call(); each((rr, cc) => { const x = s.cell(rr, cc, true); x.dv = 'checkbox'; if (x.v === '') x.v = false; }); return self; },
       removeCheckboxes: () => { call(); each((rr, cc) => { const x = s.cell(rr, cc); if (x && x.dv === 'checkbox') { x.dv = null; if (x.v === false) x.v = ''; s.prune(rr, cc); } }); return self; },
+      setDataValidations: a => { call(); each((rr, cc, i, j) => { const dv = a[i][j]; const x = s.cell(rr, cc, true); x.dv = dv ? book.dvCanon(dv.__spec) : null; s.prune(rr, cc); }); return self; },
       setDataValidation: dv => { call(); each((rr, cc) => { const x = s.cell(rr, cc, true); x.dv = dv ? book.dvCanon(dv.__spec) : null; s.prune(rr, cc); }); return self; },
       clearDataValidations: () => { call(); each((rr, cc) => { const x = s.cell(rr, cc); if (x) { x.dv = null; s.prune(rr, cc); } }); return self; },
       breakApart: () => { call(); s.unmerge(r, c, r + nr - 1, c + nc - 1); return self; },
