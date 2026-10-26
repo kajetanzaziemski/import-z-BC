@@ -214,7 +214,7 @@ module.exports = function register(t) {
   test('rule: onOpen is the one exception - the menu is built first, outside the Controller, in every auth mode; the rest is an ordinary run', () => {
     const f = functionBody('onOpen');
     assert.ok(/menuSelector\(\);[\s\S]*Controller\.run\("onOpen"/.test(f.body), f.body);
-    assert.ok(/e\.authMode != ScriptApp\.AuthMode\.NONE\)\s*Controller\.run\("onOpen"/.test(f.body), 'the run only where the script is authorised');
+    assert.ok(/e\.authMode != ScriptApp\.AuthMode\.NONE\)\s*(return\s+)?Controller\.run\("onOpen"/.test(f.body), 'the run only where the script is authorised');
   });
 
   test('rule: Controller.run is called only from entry points (no helper wraps itself) and Controller.checked is gone', () => {

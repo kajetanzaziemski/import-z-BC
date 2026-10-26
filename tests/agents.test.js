@@ -139,6 +139,16 @@ module.exports = function register(t) {
     assert.deepStrictEqual(a.state().project, []);
   });
 
+  test('agents: onOpen returns what the status check returned - true with active agents, nothing without them, nothing while the add-on is OFF (bugs-todo #8)', () => {
+    const w = world(), a = w.doc('A');
+    assert.strictEqual(a.run(`onOpen({ authMode: 'FULL' })`), null, 'OFF: the gate skips the run (null)');
+    a.p.props.document.importSettingsArray = JSON.stringify({ addonStatus: true, importSheetName: 'Ustawienia' });
+    assert.strictEqual(a.run(`onOpen({ authMode: 'FULL' })`), undefined, 'ON, no agents (lightStatusCheck returns nothing)');
+    click(a);
+    assert.strictEqual(a.run(`onOpen({ authMode: 'FULL' })`), true, 'ON, agents active');
+    assert.strictEqual(a.run(`onOpen({ authMode: ScriptApp.AuthMode.NONE })`), undefined, 'not authorised: no run');
+  });
+
   test('agents: "Odśwież konfigurację" (forceAgentRefresh) REPLACES a working pair: powered off, logs cleaned, triggers uninstalled, a new pair installed', () => {
     const w = world(), a = w.doc('A');
     click(a);

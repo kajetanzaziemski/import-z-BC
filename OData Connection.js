@@ -71,10 +71,10 @@ class ODataConnection{
         }
       }
     } catch (e) {
-      shCoed.switchConnectionControl(false);
+      if(shCoed) shCoed.switchConnectionControl(false);
       throw e;  
     }
-    shCoed.switchConnectionControl(false);
+    if(shCoed) shCoed.switchConnectionControl(false);
     if(this.dataArray == null || this.dataArray.length == 0 || this.totalRows == 0) this.dataArray = [["Brak danych spełniających zadane kryteria."]]
     return this;
   }
