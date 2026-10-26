@@ -1,22 +1,11 @@
 // Functions responsible for UI Menu management.
 
 /**
- * Configures menu options based on whether the connection to BS is active.
+ * Builds the add-on menu. It is always the full menu: the connection is not checked any more (the "Autoryzuj" item is in it).
  * 
- * @param isAuthorized {Boolean} Optional. If not provided a check to bcService is performed (.hasAccess() method).
+ * @param isAuthorized {Boolean} Not used (kept for the callers that pass the result of the authorisation).
  */
 function menuSelector(isAuthorized){
-  // if(!isAuthorized) 
-  // {
-  //   try{
-  //     var bcService = getBCService_();
-  //     isAuthorized = bcService.hasAccess();
-  //   }
-  //   catch{
-  //     dbgLog("Calling BC Service failed.");
-  //   }
-  // }
-  // isAuthorized ? fullMenu() : basicMenu();
   fullMenu();
 }
 
@@ -140,10 +129,9 @@ function getTable(tableName,queryText) {
 
 function getTableWithRequest(requestURL){
   if(!requestURL) return null;
-  var bcService = getBCService_();
   var response = UrlFetchApp.fetch(requestURL, {
     headers: {
-      Authorization: 'Bearer ' + bcService.getAccessToken()
+      Authorization: 'Bearer ' + BCAuth.accessToken()
     }
     ,muteHttpExceptions: true
   });

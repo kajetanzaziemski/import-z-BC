@@ -57,14 +57,7 @@ class StatusManager{
 }
 
 function getAgentStatus(){
-  // let trigInfo = StatusManager.getAgentInfo();
   return Controller.run("requestAgentStatus",() => [StatusManager.basicStatusCheck(),MainSettings.getAddonStatus()]);
-  let res = StatusManager.basicStatusCheck() ? "Agent active <br />" : "Agent NOT active <br />";
-  res += "Edit Triggers:<br />";
-  res += trigInfo.editTriggers?.length<=0 ? "- <br />" : trigInfo.editTriggers.map(trigInfo => trigInfo.triggerId + " " + (trigInfo.powerOn ? "ON" : "OFF") + "<br />");
-  res += "Change Triggers:<br />";
-  res += trigInfo.changeTriggers?.length<=0 ? "- <br />" : trigInfo.changeTriggers.map(trigInfo => trigInfo.triggerId + " " + (trigInfo.powerOn ? "ON" : "OFF") + "<br />");
-  return res;  
 }
 
 /** Entry point (sidebar button): repairs the agents. The work is StatusManager.forceRefresh(), which the status check after turning the add-on on uses too. */

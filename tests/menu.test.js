@@ -39,9 +39,8 @@ module.exports = function register(t) {
         addNewSheetInfo: () => { __log.push(['wizard.add']); return __cfg.wizard; }
       });
       globalThis.AnalyseConfig = { run: (sheet, e) => { __log.push(['analyse', sheet, e === undefined ? null : 'event']); } };
-      globalThis.getBCService_ = () => ({ hasAccess: () => __cfg.access, reset: () => __log.push(['service.reset']), getAuthorizationUrl: () => 'https://auth' });
-      globalThis.showSidebar = () => __log.push(['auth.sidebar']);
-      globalThis.logout = () => { __log.push(['logout']); if (__cfg.throwOn === 'logout') throw new Error('logout failed'); };
+      BCAuth.authorise = () => { if (__cfg.access) return true; __log.push(['auth.sidebar']); return false; };
+      BCAuth.logout = () => { __log.push(['logout']); if (__cfg.throwOn === 'logout') throw new Error('logout failed'); };
       globalThis.fullMenu = () => __log.push(['fullMenu']);`);
     return { p, ex, log, calls: () => plain(log) };
   }

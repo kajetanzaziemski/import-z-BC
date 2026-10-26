@@ -8,7 +8,6 @@ class BCMetadata{
   }
 
   downloadEdmxDocument(){
-    var bcService = getBCService_();
     var response = BCConnection.fetchURL(this.getRequest());
     var edmx = response.getContentText();
     this.metadata = new EdmxDocument(XmlService.parse(edmx));
