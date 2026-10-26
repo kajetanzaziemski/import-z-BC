@@ -210,7 +210,7 @@ module.exports = function register(t) {
     assert.strictEqual(s.book.condWrites, writes, 'and then nothing to write');
   });
 
-  test('an English spreadsheet gets commas; the Sheets API path always commas (the API takes formulas in the English form)', () => {
+  test('an English spreadsheet gets commas; the Sheets API path follows the locale too (the API rejected a "," rule in a Polish sheet as an invalid CUSTOM_FORMULA)', () => {
     const en = scope('service', 'en_US');
     en.run(`ConfigGrid.create('K')`);
     en.run(`new SheetCoeditor('K', false).sheetEdit({})`);
@@ -218,7 +218,7 @@ module.exports = function register(t) {
     const api = scope('api', 'pl_PL');
     api.run(`ConfigGrid.create('K')`);
     api.run(`new SheetCoeditor('K', false).sheetEdit({})`);
-    assert.ok(api.book.sheets['K'].snapshot().condRules.every(r => /,/.test(r.formula) && !/;/.test(r.formula)));
+    assert.ok(api.book.sheets['K'].snapshot().condRules.every(r => /;/.test(r.formula) && !/,/.test(r.formula)));
   });
 
   test('the semicolon form means the same: the evaluator, given the formulas of a Polish sheet, greys the same cells', () => {

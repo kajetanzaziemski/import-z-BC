@@ -113,11 +113,11 @@ class Grid {
   autoResizeColumns(from, n) { this.colFits.push({ first: from, count: n }); }
   getMaxColumns() { return this.maxCols; }
   /**
-   * The separator of formula arguments to write formulas with: "," on the Sheets API path (the API takes English formulas), else the one of the spreadsheet's
-   * locale (";" for Polish ...). Formulas given to setFormulaFontColors have to be written with it.
+   * The separator of formula arguments to write formulas with: the one of the spreadsheet's locale (";" for Polish ...), on the Sheets API path too (its
+   * conditional format rules are parsed in the spreadsheet's locale: a "," formula in a Polish sheet is rejected as an invalid CUSTOM_FORMULA).
+   * Formulas given to setFormulaFontColors have to be written with it.
    */
   getFormulaSeparator() {
-    if (this.source.kind === 'api' || (this.source.kind === 'new' && sheetsApiAvailable_())) return ',';
     if (!this.locale) this.locale = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetLocale();
     return formulaArgSeparator_(this.locale);
   }
