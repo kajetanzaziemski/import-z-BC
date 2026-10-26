@@ -58,11 +58,6 @@ function transposed(table){
   return res;
 }
 
-function md5Hash(string){
-  return Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, string).map(function(chr){return (chr+256).toString(16).slice(-2)})
-  .join('');
-}
-
 /**
  * Runs `action` so that only the LAST run to start completes: runs started meanwhile are not queued up one after the other, the older ones drop out,
  * even in the middle of their work.

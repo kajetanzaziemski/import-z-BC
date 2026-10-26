@@ -50,7 +50,7 @@ monitoring tools and are not checked themselves. The submenu entry only appears 
 
 ## Jobs (what the run actually did)
 `sheetEdit` / `sheetChange` fire for everything, so the router (`docs/router.md`) names the job the event turned out to be and the run is reported under it:
-`config.coedit [Konfiguracja 1] (via sheetEditAction)`, `settings.refreshFrequency`, `settings.edit`, `sheet.ignored`, `change.ignored`, `agent.skipped`. `liveCheckIntents()` prints the catalogue.
+`config.coedit [Konfiguracja 1] (via sheetEditAction)`, `settings.refreshFrequency`, `settings.edit`, `sheet.ignored`, `change.ignored`, `agent.skipped`, and for the time trigger `refresh.scheduled` (it holds the permit and refreshes) / `refresh.retired` (it does not, and deletes itself; announced by `ScheduleRefresh.run` / `runLegacy`). `liveCheckIntents()` prints the catalogue.
 Each run gets two sets of checks: the trigger's (bookkeeping, power) and the job's (did it do its job). The sidebar's headline is the job.
 
 ## What is checked
@@ -67,7 +67,7 @@ Each run gets two sets of checks: the trigger's (bookkeeping, power) and the job
 | `menuEstimateForCurrentSheet` | F2 is a number formatted `#,##0`, estimate info shown, indicators idle |
 | `menuRefreshCurrentSheet`, `menuRefreshAll` | result sheet exists; data rows = estimate in F2 (±5 % warns, approximate when `extend` is used); every column has a header and a uniform number format; formats match the cached data types; indicators idle |
 | `menuAuthFlow`, `menuLogoutFlow`, `requestAuthCallback` | nothing changed / OAuth token key removed / stored |
-| `menuConnectionSetup`, `menuTestItem`, `requestStatusCheck`, `requestListAllTriggers`, `requestLiveCheckSidebar` | read-only |
+| `menuConnectionSetup`, `requestStatusCheck`, `requestListAllTriggers`, `requestLiveCheckSidebar` | read-only |
 | `requestAddonStatus`, `requestChangeAddonStatus`, `requestSettingsSheetName`, `requestSetSettingsSheetName`, `requestPermitsInfo` | returned / stored value matches; ON → settings sheet name stored, agents active; a sheet with the chosen name must have the settings signature |
 | `forceAgentRefresh` | one edit + one change trigger installed for this document, returned id matches, both logged ON for document and user, pair in the agent array (≤ 5), no logged trigger missing from the project, suspect flag cleared |
 | `requestDeleteAllAgents` | agent array empty, only the agents' triggers removed, log entries gone |

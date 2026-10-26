@@ -45,8 +45,8 @@ A use case: opens grids through adapters (L2), calls services (L3), commits **on
 | `AgentService` | `AgentManager`, `TriggerWrapper`, `TriggerLog`s, `StatusManager`, `Track onEdit Triggers` | trigger registry, power/permit decisions, installable-vs-simple detection (no sheet access; uses state + ScriptApp) |
 
 ## L3 Data sources (network)
-`BCClient` [`BCConnection`, `getBCService_`, `ODataConnection`] — OAuth2 + paged GET, retries, errors → `ConnectionError`.
-`BCMetadata` [`Metadata.js`, `Edmx*`] — entity/field/nav-property catalogue, cached.
+`BCClient` [`BCAuth` (BC Auth.js), `BCConnection` (BC Connection.js), `ODataConnection` (OData Connection.js)] — OAuth2 + paged GET, retries, errors → `ConnectionError`.
+`BCMetadata` [`BC Metadata.js`, `Edmx.js`] — entity/field/nav-property catalogue, cached.
 
 ## L2 Sheet adapters (the ONLY code that knows layouts)
 | Adapter | Knows | API |

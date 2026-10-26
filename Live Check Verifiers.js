@@ -491,35 +491,9 @@ function buildLiveCheckVerifiers_(){
       needs: ["sheets","settings","settingsSheet","triggers","indicators"],
       verify(c){
         const e = c.input.e;
-        const uid = e && e.triggerUid;
-        if(!uid) return c.skip("time trigger event","no triggerUid in the event (manual run?)");
-        const beforePermit = c.before.settings?.refreshPermit ?? null;
-        // The legacy handler adopts the trigger when there is no permit at all.
-        const mine = c.input.legacy ? (!beforePermit || beforePermit.issuedFor === uid) : (!!beforePermit && beforePermit.issuedFor === uid);
-        const triggerStillThere = ScriptApp.getProjectTriggers().some(t => t.getUniqueId() === uid);
-        const settings = c.now("settingsSheet");
-
-        if(!mine){
-          c.expect("trigger without a permit removed itself",!triggerStillThere,"trigger is still installed");
-          c.unchanged("sheets","nothing refreshed");
-          c.expectEqual("last refresh untouched",settings.lastRefresh && new Date(settings.lastRefresh).getTime(),c.before.settingsSheet.lastRefresh && new Date(c.before.settingsSheet.lastRefresh).getTime());
-          c.expectEqual("permit untouched",c.settings().refreshPermit ?? null,beforePermit);
-          return;
-        }
-        c.expect("permitted trigger stays installed",triggerStillThere,"trigger removed itself");
-        if(c.error) return;
-        const permit = c.settings().refreshPermit;
-        c.expect("permit issued for this trigger",!!permit && permit.issuedFor === uid,JSON.stringify(permit));
-        c.expect("permit records the run",!!permit && permit.lastRun >= c.startedAt - 2000,`lastRun ${permit?.lastRun}`);
-        const last = settings.lastRefresh;
-        c.expect("settings sheet shows the refresh time",last instanceof Date && last.getTime() >= c.startedAt - 2000 && last.getTime() <= Date.now() + 2000,`cell reads ${last}`);
-        c.expect("refresh time has a time zone label",!!settings.lastRefreshTz,"cell next to the time is empty");
-        settings.configs.filter(x => x.refresh === true).forEach(x => {
-          const cfg = lcReadConfigSheet_(x.config);
-          if(!cfg) return c.fail(`[${x.config}] config sheet exists`,"listed for refresh but missing");
-          if(!cfg.table) return c.skip(`[${x.config}] result sheet`,"no table in the config sheet, nothing to refresh");
-          lcVerifyResultSheet_(c,x.config,x.result);
-        });
+        if(!(e && e.triggerUid)) return c.skip("time trigger event","no triggerUid in the event (manual run?)");
+        if(c.intent) return;                           // judged by the job (refresh.scheduled / refresh.retired)
+        if(lcRefreshTriggerHoldsPermit_(c)) lcVerifyScheduledRefresh_(c); else lcVerifyRetiredRefresh_(c);     // no job announced: the old, complete judgement
       }
     },
 
@@ -549,11 +523,6 @@ function buildLiveCheckVerifiers_(){
     menuConnectionSetup: {
       needs: ["sheets","docProps"],
       verify(c){ lcVerifyNothingChanged_(c,menuNoise); c.skip("sidebar shown","the UI cannot be read back by a script"); }
-    },
-
-    menuTestItem: {
-      needs: ["sheets","docProps"],
-      verify(c){ lcVerifyNothingChanged_(c,menuNoise); }
     },
 
     requestStatusCheck: {
@@ -1011,8 +980,61 @@ function lcJobVerifiers_(){
       verify(c){
         c.expect("the trigger is powered off or not logged",!lcAgentPowerBefore_(c),"the trigger was powered on, but the edit was skipped");
       }
+    },
+
+    "refresh.scheduled": {
+      verify(c){
+        if(!c.expect("the trigger holds the refresh permit (else it should have retired)",lcRefreshTriggerHoldsPermit_(c),"the permit was not issued for this trigger, but it refreshed")) return;
+        lcVerifyScheduledRefresh_(c);
+      }
+    },
+
+    "refresh.retired": {
+      verify(c){
+        if(!c.expect("the trigger does not hold the refresh permit (else it should have refreshed)",!lcRefreshTriggerHoldsPermit_(c),"the permit was issued for this trigger, but it retired")) return;
+        lcVerifyRetiredRefresh_(c);
+      }
     }
   };
+}
+
+/** Did the permit before the run name the time trigger that fired? (The legacy handler also adopts a document that has no permit at all.) */
+function lcRefreshTriggerHoldsPermit_(c){
+  const uid = c.input.e && c.input.e.triggerUid;
+  const beforePermit = c.before.settings?.refreshPermit ?? null;
+  return c.input.legacy ? (!beforePermit || beforePermit.issuedFor === uid) : (!!beforePermit && beforePermit.issuedFor === uid);
+}
+
+/** A time trigger with the permit: it stays, the permit records the run, the settings sheet shows the time and the ticked sheets were refreshed. */
+function lcVerifyScheduledRefresh_(c){
+  const uid = c.input.e.triggerUid;
+  const triggerStillThere = ScriptApp.getProjectTriggers().some(t => t.getUniqueId() === uid);
+  const settings = c.now("settingsSheet");
+  c.expect("permitted trigger stays installed",triggerStillThere,"trigger removed itself");
+  if(c.error) return;
+  const permit = c.settings().refreshPermit;
+  c.expect("permit issued for this trigger",!!permit && permit.issuedFor === uid,JSON.stringify(permit));
+  c.expect("permit records the run",!!permit && permit.lastRun >= c.startedAt - 2000,`lastRun ${permit?.lastRun}`);
+  const last = settings.lastRefresh;
+  c.expect("settings sheet shows the refresh time",last instanceof Date && last.getTime() >= c.startedAt - 2000 && last.getTime() <= Date.now() + 2000,`cell reads ${last}`);
+  c.expect("refresh time has a time zone label",!!settings.lastRefreshTz,"cell next to the time is empty");
+  settings.configs.filter(x => x.refresh === true).forEach(x => {
+    const cfg = lcReadConfigSheet_(x.config);
+    if(!cfg) return c.fail(`[${x.config}] config sheet exists`,"listed for refresh but missing");
+    if(!cfg.table) return c.skip(`[${x.config}] result sheet`,"no table in the config sheet, nothing to refresh");
+    lcVerifyResultSheet_(c,x.config,x.result);
+  });
+}
+
+/** A time trigger without the permit: it deleted itself and left everything else as it was. */
+function lcVerifyRetiredRefresh_(c){
+  const uid = c.input.e.triggerUid;
+  const triggerStillThere = ScriptApp.getProjectTriggers().some(t => t.getUniqueId() === uid);
+  const settings = c.now("settingsSheet");
+  c.expect("trigger without a permit removed itself",!triggerStillThere,"trigger is still installed");
+  c.unchanged("sheets","nothing refreshed");
+  c.expectEqual("last refresh untouched",settings.lastRefresh && new Date(settings.lastRefresh).getTime(),c.before.settingsSheet.lastRefresh && new Date(c.before.settingsSheet.lastRefresh).getTime());
+  c.expectEqual("permit untouched",c.settings().refreshPermit ?? null,c.before.settings?.refreshPermit ?? null);
 }
 
 function lcAgentKind_(c){ return c.actionName === "sheetChangeAction" ? "change" : "edit"; }

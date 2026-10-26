@@ -28,8 +28,10 @@ Still to do
 - (done after the tag: `BulkSheet` behind `ResultSheet`, see `docs/testing.md` section 2d)
 - (done after the tag: `AgentService` regroup, facade `Agents`, `docs/agent-lifecycle.md`)
 - (done after the tag: menu items in `Menu Actions.js` - analyse, refresh, estimate, wizard, authorise, logout; `docs/use-cases.md`)
-- Remaining: status check use case in `Status Manager.js`, the OAuth callback / `showSidebar`, BC layer reorganisation (`Autoryzacja BC.js`, `getTable*` in `Menu.js`)
-- The time trigger as two live-check jobs (`refresh.scheduled`, `refresh.retired`)
+- (done on branch `refactor-login-and-rest`: login flow behind `BCAuth`, `docs/login-flow.md`; the status check was already thin forwarders to `Agents`)
+- (done on branch `refactor-login-and-rest`: BC layer reorganised and cleaned of test-only code, `docs/bc-layer.md`)
+- (done: the old-name forwarders and dead leftovers removed)
+- (done: the time trigger as two live-check jobs `refresh.scheduled` / `refresh.retired`; the dead "Test item" menu entry and its verifier removed; live check helpers re-pinned)
 
 
 ## Reminders

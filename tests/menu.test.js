@@ -10,7 +10,7 @@ const { FakePlatform } = require('./platform-fakes');
 const ROOT = path.join(__dirname, '..');
 const BASE = ['Custom errors.js', 'Helper Data Store.js', 'Store.js', 'Settings.js', 'Main Settings.js', 'Controller.js', 'Trigger Manager.js',
   'Global Add-on Settings.js', 'Quick Start.js', 'functions.js', 'Track onEdit Triggers.js', 'Status Manager.js', 'Agent Reconciler.js', 'Agents.js', 'Verify Agent.js',
-  'Autoryzacja BC.js', 'Menu.js', 'Menu Actions.js'].filter(f => fs.existsSync(path.join(ROOT, f)));
+  'BC Auth.js', 'BC Connection.js', 'Menu.js', 'Menu Actions.js'].filter(f => fs.existsSync(path.join(ROOT, f)));
 
 module.exports = function register(t) {
   const { test } = t;
@@ -39,9 +39,8 @@ module.exports = function register(t) {
         addNewSheetInfo: () => { __log.push(['wizard.add']); return __cfg.wizard; }
       });
       globalThis.AnalyseConfig = { run: (sheet, e) => { __log.push(['analyse', sheet, e === undefined ? null : 'event']); } };
-      globalThis.getBCService_ = () => ({ hasAccess: () => __cfg.access, reset: () => __log.push(['service.reset']), getAuthorizationUrl: () => 'https://auth' });
-      globalThis.showSidebar = () => __log.push(['auth.sidebar']);
-      globalThis.logout = () => { __log.push(['logout']); if (__cfg.throwOn === 'logout') throw new Error('logout failed'); };
+      BCAuth.authorise = () => { if (__cfg.access) return true; __log.push(['auth.sidebar']); return false; };
+      BCAuth.logout = () => { __log.push(['logout']); if (__cfg.throwOn === 'logout') throw new Error('logout failed'); };
       globalThis.fullMenu = () => __log.push(['fullMenu']);`);
     return { p, ex, log, calls: () => plain(log) };
   }

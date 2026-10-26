@@ -392,15 +392,15 @@ module.exports = function register(t) {
   test('rule: outside the agent files nobody reaches into the registers or the pool - they ask Agents (Quick Start.js keeps the old global getters for the service itself)', () => {
     const inside = new Set(['Trigger Manager.js', 'Status Manager.js', 'Agents.js', 'Track onEdit Triggers.js', 'Verify Agent.js', 'Quick Start.js']);
     const offenders = fs.readdirSync(ROOT).filter(f => /\.js$/.test(f) && !inside.has(f) && !/^(Live Check|Test Functions)/.test(f))
-      .filter(f => /getAgentManager|getDocumentTriggerLog|getUserTriggerLog|TriggerWrapper|TriggerGateway|StatusManager\.(basicStatusCheck|fullStatusCheck|forceRefresh|repairStatus|checkTriggerPower|powerOffAllAgentsInFile|logCleanUp|getAgentInfo)/.test(code(f)));
+      .filter(f => /getAgentManager|getDocumentTriggerLog|getUserTriggerLog|TriggerGateway|StatusManager\.(basicStatusCheck|fullStatusCheck|forceRefresh|repairStatus|checkTriggerPower|powerOffAllAgentsInFile|logCleanUp|getAgentInfo)/.test(code(f)));
     assert.deepStrictEqual(offenders, []);
     ['Quick Start.js', 'Main Settings.js'].forEach(f => assert.ok(!/TriggerWrapper|TriggerGateway|StatusManager\.(basic|full|check|force|repair)/.test(code(f).replace(/function (getDocumentTriggerLog|getUserTriggerLog|getAgentManager)[\s\S]*?\n\}/g, '')), f));
   });
 
-  test('rule: the old names still answer (forwarders): StatusManager.* and TriggerWrapper, and the old edit-check names', () => {
+  test('rule: the old names still answer (forwarders): StatusManager.* and the old edit-check names', () => {
     const w = world(), a = w.doc('A');
     click(a);
-    assert.strictEqual(a.run(`StatusManager.basicStatusCheck() && StatusManager.checkTriggerPower('trig-1') && typeof TriggerWrapper.createOnEditTrigger === 'function' && TriggerWrapper === TriggerGateway`), true);
+    assert.strictEqual(a.run(`StatusManager.basicStatusCheck() && StatusManager.checkTriggerPower('trig-1')`), true);
     assert.strictEqual(a.run(`typeof checkInstallableAgentRan + typeof recordInstallableSeen`), 'functionfunction');
   });
 };

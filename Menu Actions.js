@@ -40,14 +40,12 @@ const MenuActions = {
 
   /** "Autoryzuj": the authorisation sidebar, or just a notice when the connection is active. */
   authorise(){
-    const bcService = getBCService_();
-    if (!bcService.hasAccess()) showSidebar();
-    else SpreadsheetApp.getUi().alert('Połączenie aktywne!');      // nothing happens; the alert tells the user the function ran properly
+    if (BCAuth.authorise()) SpreadsheetApp.getUi().alert('Połączenie aktywne!');      // nothing else happens; the alert tells the user the function ran properly
   },
 
   /** "Wyloguj": ends the connection, the menu is rebuilt when the run closes. */
   logout(){
-    logout();
+    BCAuth.logout();
     Controller.registerClosingOnce(menuSelector,"menuSelector");
   }
 };

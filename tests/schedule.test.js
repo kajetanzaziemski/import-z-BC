@@ -208,6 +208,38 @@ module.exports = function register(t) {
     assert.strictEqual(permit(sc).lastRun, undefined);
   });
 
+  // ---- the two jobs of the time trigger, announced to the live check (Controller.intent) before the work --------------------------------
+  const withIntents = sc => { sc.ex.ctx.liveCheckIntent = (n, d) => sc.log.push(['intent', n, d]); return sc; };
+  test('jobs: a trigger with its own permit announces "refresh.scheduled" BEFORE it refreshes', () => {
+    const sc = withIntents(scenario({ settings: { refreshPermit: { issuedFor: 'trig-A', lastRefresh: 1, intervalHours: 6 } } }));
+    sc.ex.eval(`autoRefreshHandler(${event('trig-A')})`);
+    assert.deepStrictEqual(sc.calls()[0], ['intent', 'refresh.scheduled', { sheet: null, changeType: null }]);
+    assert.deepStrictEqual(sc.calls()[1], ['refresh', 'K1']);
+  });
+
+  test('jobs: a trigger the permit does not name (or no permit) announces "refresh.retired" BEFORE it deletes itself, and refreshes nothing', () => {
+    const other = withIntents(scenario({ settings: { refreshPermit: { issuedFor: 'trig-B', lastRefresh: 1, intervalHours: 6 } } }));
+    other.p.triggers.push(NAMED('trig-A'), NAMED('trig-B'));
+    other.ex.eval(`autoRefreshHandler(${event('trig-A')})`);
+    assert.deepStrictEqual(other.calls(), [['intent', 'refresh.retired', { sheet: null, changeType: null }]]);
+    const none = withIntents(scenario());
+    none.p.triggers.push(NAMED('trig-A'));
+    none.ex.eval(`autoRefreshHandler(${event('trig-A')})`);
+    assert.deepStrictEqual(none.calls().map(c => c[1]), ['refresh.retired']);
+    assert.deepStrictEqual(triggers(none.p), [], 'it is gone');
+  });
+
+  test('jobs: the legacy handler announces the same jobs - "refresh.scheduled" when it adopts a document without a permit or holds the permit, "refresh.retired" otherwise', () => {
+    const adopt = withIntents(scenario());
+    adopt.p.triggers.push(NAMED('old-legacy', 'autoRefresh'));
+    adopt.ex.eval(`autoRefresh(${event('old-legacy')})`);
+    assert.deepStrictEqual(adopt.calls().filter(c => c[0] === 'intent').map(c => c[1]), ['refresh.scheduled']);
+    const late = withIntents(scenario({ settings: { refreshPermit: { issuedFor: 'trig-B', lastRefresh: 1, intervalHours: 6 } } }));
+    late.p.triggers.push(NAMED('old-legacy', 'autoRefresh'), NAMED('trig-B'));
+    late.ex.eval(`autoRefresh(${event('old-legacy')})`);
+    assert.deepStrictEqual(late.calls().filter(c => c[0] === 'intent').map(c => c[1]), ['refresh.retired']);
+  });
+
   test('trigger: a failing refresh gives the error back and neither notes the time nor touches the permit', () => {
     const sc = scenario({ refreshError: 'BC down', settings: { refreshPermit: { issuedFor: 'trig-A', lastRefresh: 1, intervalHours: 6 } } });
     assert.throws(() => sc.ex.eval(`autoRefreshHandler(${event('trig-A')})`), /BC down/);
@@ -259,12 +291,12 @@ module.exports = function register(t) {
   });
 
   // ---- the refresh loops --------------------------------------------------------------------------------------------------------------------
-  test('refresh loops: refreshAll() = every pair of the settings sheet in order, refreshAllTrue() = only the ticked ones, nothing ticked = nothing', () => {
+  test('refresh loops: refreshAll() = every pair of the settings sheet in order, RefreshAll.ticked() = only the ticked ones, nothing ticked = nothing', () => {
     const a = scenario(); a.ex.eval(`refreshAll()`);
     assert.deepStrictEqual(a.calls(), [['refresh', 'K1'], ['refresh', 'K2'], ['refresh', 'K3']]);
-    const b = scenario(); b.ex.eval(`refreshAllTrue()`);
+    const b = scenario(); b.ex.eval(`RefreshAll.ticked()`);
     assert.deepStrictEqual(b.calls(), [['refresh', 'K1'], ['refresh', 'K3']]);
-    const c = scenario({ sheetList: [{ configSheet: 'K2', resultSheet: 'R2', refresh: false }] }); c.ex.eval(`refreshAllTrue()`);
+    const c = scenario({ sheetList: [{ configSheet: 'K2', resultSheet: 'R2', refresh: false }] }); c.ex.eval(`RefreshAll.ticked()`);
     assert.deepStrictEqual(c.calls(), []);
   });
 
@@ -276,7 +308,7 @@ module.exports = function register(t) {
 
   test('refresh loops: the first failing sheet stops the loop (later sheets are not refreshed)', () => {
     const sc = scenario({ refreshError: 'boom' });
-    assert.throws(() => sc.ex.eval(`refreshAllTrue()`), /boom/);
+    assert.throws(() => sc.ex.eval(`RefreshAll.ticked()`), /boom/);
     assert.deepStrictEqual(sc.calls(), [['refresh', 'K1']]);
   });
 
@@ -296,7 +328,7 @@ module.exports = function register(t) {
     assert.ok(/function autoRefreshFunction\(e\)\{\s*RefreshAll\.scheduled\(\);\s*\}/.test(ss));
     assert.ok(/function autoRefreshContent\(e\) \{\s*ScheduleRefresh\.run\(e\);\s*\}/.test(ss));
     assert.ok(/function autoRefreshContentOld\(e\) \{\s*ScheduleRefresh\.runLegacy\(e\);\s*\}/.test(ss));
-    assert.ok(/function refreshAllTrue\(\)\{\s*RefreshAll\.ticked\(\);\s*\}/.test(menu));
+    assert.ok(!/refreshAllTrue/.test(menu));
     assert.ok(/Controller\.run\("menuRefreshAll",\(\) => RefreshAll\.all\(\)\)/.test(menu));
     assert.ok(!/ScriptApp\.newTrigger\('autoRefreshHandler'\)/.test(ss));
   });

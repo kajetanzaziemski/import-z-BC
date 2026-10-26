@@ -1,35 +1,12 @@
 // Functions responsible for UI Menu management.
 
 /**
- * Configures menu options based on whether the connection to BS is active.
+ * Builds the add-on menu. It is always the full menu: the connection is not checked any more (the "Autoryzuj" item is in it).
  * 
- * @param isAuthorized {Boolean} Optional. If not provided a check to bcService is performed (.hasAccess() method).
+ * @param isAuthorized {Boolean} Not used (kept for the callers that pass the result of the authorisation).
  */
 function menuSelector(isAuthorized){
-  // if(!isAuthorized) 
-  // {
-  //   try{
-  //     var bcService = getBCService_();
-  //     isAuthorized = bcService.hasAccess();
-  //   }
-  //   catch{
-  //     dbgLog("Calling BC Service failed.");
-  //   }
-  // }
-  // isAuthorized ? fullMenu() : basicMenu();
   fullMenu();
-}
-
-/**
- * Menu available without connection to BC. The only option is to start authorization flow
- * to estabilish a new connection.
- */
-function basicMenu() {
-  const ui = SpreadsheetApp.getUi();
-  ui
-      .createAddonMenu()
-      .addItem('Autoryzuj', 'startAuthFlow')
-      .addToUi();
 }
 
 /**
@@ -49,7 +26,6 @@ function fullMenu() {
       .addItem('Pobierz dane dla wszystkich arkuszy', 'refreshAll')
       .addItem('Ustawienia połączenia BC','connectionSetup')
       .addItem('Wyloguj', 'logoutFlow')
-      .addItem('Test item','testItem')
       .addToUi();
 }
 
@@ -66,10 +42,6 @@ function statusCheck(){
 
 function listAllTriggers(){
   return Controller.run("requestListAllTriggers",()=>StatusManager.triggerTableSidebar());
-}
-
-function testItem(){
-  return Controller.run("menuTestItem",()=>testFunc_errorReporting());
 }
 
 function checkConfigSheet(){
@@ -113,41 +85,6 @@ function insertImportWizard(){
 
 function refreshAll(){
   Controller.run("menuRefreshAll",() => RefreshAll.all());
-}
-
-/** Kept under its old name; the work is in RefreshAll.js. */
-function refreshAllTrue(){
-  RefreshAll.ticked();
-}
-
-/** Kept under its old name (Test Functions.js, anything that still calls it); the work is in RefreshSheet.js. */
-function refreshAllDataForConfigSheet(configSheetName,resultSheetName){
-  return RefreshSheet.run(configSheetName,resultSheetName);
-}
-
-/** Kept under its old name; the work is in EstimateSheet.js. */
-function estimateResponseSize(configSheetName){
-  return EstimateSheet.run(configSheetName);
-}
-
-function getTable(tableName,queryText) {
-  var request = ODATA_URL_+`/Company('Megaron%20S.A.')/${tableName}`;
-  request += "?"+(queryText ?? "$top=100");
-  request += "&$count=true";
-  dbgLog(request);
-  return getTableWithRequest(request);
-}
-
-function getTableWithRequest(requestURL){
-  if(!requestURL) return null;
-  var bcService = getBCService_();
-  var response = UrlFetchApp.fetch(requestURL, {
-    headers: {
-      Authorization: 'Bearer ' + bcService.getAccessToken()
-    }
-    ,muteHttpExceptions: true
-  });
-  return new ODataResponseTable(response.getContentText());
 }
 
 /**

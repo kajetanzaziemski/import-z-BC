@@ -42,3 +42,7 @@ see `ScheduleRefresh`), the sidebars. The wizard that inserts a config sheet is 
 - Two verifiers per run: the **entry point's** (trigger bookkeeping: last use recorded, suspect flag, power, the settings sheet exists) and the **job's** (did it do what it is for: dropdowns and lines present, the time trigger and its permit match
   the settings sheet, nothing was touched for an ignored edit ...). Each job verifier works out its own premise from the event and the settings sheet instead of trusting the router, so a wrongly routed edit is a FAIL
   (e.g. an edit of a config sheet routed as `sheet.ignored`). If the run stopped before routing, the entry point's verifier judges the content itself, as before.
+
+## Jobs outside the router
+The time trigger is not routed, but it announces its two jobs the same way (`Controller.intent`, from `ScheduleRefresh.run` / `runLegacy`): `refresh.scheduled` (the permit names this trigger: the ticked sheets are refreshed, the permit records the run)
+and `refresh.retired` (it does not: the trigger deletes itself). Both have a catalogue entry and a verifier; `requestAutoRefesh` keeps only the technical check (an event with a trigger id) and judges the content itself only when no job was announced.

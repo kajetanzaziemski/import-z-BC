@@ -396,14 +396,15 @@ module.exports = function register(t) {
       globalThis.CCTImportConfig = class { constructor(v) { this.v = v; } };
       SheetCoeditor.prototype.sheetEdit = function () {};
       getMainSettings = () => ({ isConfigSheet: n => n === 'Konfiguracja 1', isRefreshFrequencyCell: r => isInRange(4, 4, r) || isInRange(4, 5, r),
-        setRefreshTrigger: () => ScheduleRefresh.setUp({ freq: 6, unit: 'hrs' }) });`);
+        setRefreshTrigger: () => ScheduleRefresh.setUp({ freq: 6, unit: 'hrs' }), getSheetListWithRefreshTrue: () => [], setLastRefresh: () => {} });`);
     ex.eval(`new SheetCoeditor('Konfiguracja 1', false)`);
     if (o.breakIt) ex.eval(o.breakIt);
     const range = o.range ?? { sheet: o.active ?? 'Konfiguracja 1', row: 6, col: 2 };
     ex.ctx.__e = { triggerUid: 't1', changeType: o.changeType ?? 'INSERT_ROW',
       range: { getSheet: () => ({ getName: () => range.sheet }), getA1Notation: () => 'B6', getRow: () => range.row, getLastRow: () => range.row, getColumn: () => range.col, getLastColumn: () => range.col },
       source: { getActiveSheet: () => ({ getName: () => o.active ?? 'Konfiguracja 1' }) } };
-    ex.eval(o.entry === 'change' ? `sheetChange(__e)` : `sheetEdit(__e)`);
+    if (o.entry === 'timer') ex.ctx.__e = { triggerUid: o.uid };
+    ex.eval(o.entry === 'timer' ? `autoRefreshHandler(__e)` : o.entry === 'change' ? `sheetChange(__e)` : `sheetEdit(__e)`);
     const entries = Object.keys(p.props.document).filter(k => /^liveCheck:\d/.test(k)).sort().map(k => JSON.parse(p.props.document[k]));
     assert.strictEqual(entries.length, 1, 'one recorded run: ' + entries.map(e => e.a + '/' + e.i).join(','));
     const entry = entries[0];
@@ -488,6 +489,20 @@ module.exports = function register(t) {
     assert.strictEqual(dropped.status('result'), 'SKIP');
     assert.ok(dropped.names.every(n => !/has a "table" row|dropdowns match|activity indicators/.test(n)), 'nothing about the content or the lights: ' + dropped.names.join(' | '));
     assert.notStrictEqual(dropped.entry.s, 'FAIL', JSON.stringify(dropped.entry.c.filter(x => x[0] !== 'PASS')));
+  });
+
+  test('live check jobs: the time trigger is "refresh.scheduled" with the permit and "refresh.retired" without it - each judged on its own premise', () => {
+    const mine = agentRun({ entry: 'timer', uid: 'trig-A', permit: { issuedFor: 'trig-A', lastRefresh: 1, intervalHours: 6 }, triggers: [{ id: 'trig-A', fn: 'autoRefreshHandler' }] });
+    assert.deepStrictEqual([mine.entry.i, mine.entry.a], ['refresh.scheduled', 'requestAutoRefesh']);
+    assert.strictEqual(mine.status('the trigger holds the refresh permit (else it should have retired)'), 'PASS');
+    assert.strictEqual(mine.status('permitted trigger stays installed'), 'PASS');
+    assert.strictEqual(mine.status('permit records the run'), 'PASS');
+    const gone = agentRun({ entry: 'timer', uid: 'trig-A', permit: { issuedFor: 'trig-B', lastRefresh: 1, intervalHours: 6 }, triggers: [{ id: 'trig-A', fn: 'autoRefreshHandler' }, { id: 'trig-B', fn: 'autoRefreshHandler' }] });
+    assert.deepStrictEqual([gone.entry.i, gone.entry.a], ['refresh.retired', 'requestAutoRefesh']);
+    assert.strictEqual(gone.status('the trigger does not hold the refresh permit (else it should have refreshed)'), 'PASS');
+    assert.strictEqual(gone.status('trigger without a permit removed itself'), 'PASS');
+    assert.strictEqual(gone.status('permit untouched'), 'PASS');
+    assert.ok(/refresh\.retired \(via requestAutoRefesh\)/.test(gone.head), gone.head);
   });
 
   test('live check jobs: a WRONGLY routed edit is a FAIL (each job re-derives its premise from the event, not from the router)', () => {

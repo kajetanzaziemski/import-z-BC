@@ -455,7 +455,7 @@ module.exports = function register(t) {
 
   test('moved callers: the BC metadata cache goes through the optional document cache, and works without it', () => {
     const p = new FakePlatform();
-    const ex = p.execution([...FILES, 'Metadata.js']);
+    const ex = p.execution([...FILES, 'BC Metadata.js', 'Edmx.js', 'BC Connection.js', 'BC Auth.js']);
     ex.eval(`getGlobalSettings().setAllPropertiesForScope('document','T','E','C');
       globalThis.__downloads = 0;
       BCMetadata.prototype.getEdmxDocument = function () { __downloads++; return { listEntityTypes: () => ['Customers', 'Items'] }; };`);
@@ -470,13 +470,13 @@ module.exports = function register(t) {
 
   test('moved callers: the OAuth2 service keeps its tokens in the USER properties and user cache, under the BC tenant name', () => {
     const p = new FakePlatform();
-    const ex = p.execution([...FILES, 'Autoryzacja BC.js']);
+    const ex = p.execution([...FILES, 'BC Auth.js']);
     ex.eval(`globalThis.CLIENT_ID_ = 'id'; globalThis.CLIENT_SECRET_ = 'secret'; globalThis.SCOPE_ = 'scope';
       globalThis.__oauth = {};
       const chain = new Proxy({}, { get: (t, name) => (name === 'then' ? undefined : (...args) => { __oauth[name] = args; return chain; }) });
       globalThis.OAuth2 = { createService: name => { __oauth.createService = name; return chain; } };
       getGlobalSettings().setAllPropertiesForScope('document','tenant-1','Env','Firma');
-      getBCService_();`);
+      BCAuth.service();`);
     assert.strictEqual(ex.eval(`__oauth.createService`), 'tenant-1');
     ex.eval(`__oauth.setPropertyStore[0].setProperty('oauth2.tenant-1', 'token')`);
     assert.strictEqual(p.props.user['oauth2.tenant-1'], 'token', 'tokens are in the user properties, not the document ones');
