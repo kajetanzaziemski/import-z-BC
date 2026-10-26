@@ -26,7 +26,6 @@ function fullMenu() {
       .addItem('Pobierz dane dla wszystkich arkuszy', 'refreshAll')
       .addItem('Ustawienia połączenia BC','connectionSetup')
       .addItem('Wyloguj', 'logoutFlow')
-      .addItem('Test item','testItem')
       .addToUi();
 }
 
@@ -43,10 +42,6 @@ function statusCheck(){
 
 function listAllTriggers(){
   return Controller.run("requestListAllTriggers",()=>StatusManager.triggerTableSidebar());
-}
-
-function testItem(){
-  return Controller.run("menuTestItem",()=>testFunc_errorReporting());
 }
 
 function checkConfigSheet(){

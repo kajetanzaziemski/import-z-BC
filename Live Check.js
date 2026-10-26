@@ -494,7 +494,9 @@ const LIVE_CHECK_INTENTS = [
   {intent: "settings.edit",              text: "another edit in the settings sheet: nothing to do"},
   {intent: "sheet.ignored",              text: "an edit or change in a sheet the add-on does not manage: nothing to do"},
   {intent: "change.ignored",             text: "a change of type EDIT or FORMAT (the cells are handled by the edit trigger): nothing to do"},
-  {intent: "agent.skipped",              text: "the edit trigger is powered off or not logged: the edit is skipped"}
+  {intent: "agent.skipped",              text: "the edit trigger is powered off or not logged: the edit is skipped"},
+  {intent: "refresh.scheduled",          text: "the time trigger holds the refresh permit: the ticked sheets are refreshed, the time is noted, the permit records the run"},
+  {intent: "refresh.retired",            text: "the time trigger does not hold the refresh permit: it deletes itself and nothing is refreshed"}
 ];
 
 /** Logs and returns the catalogue of jobs. */
@@ -525,7 +527,6 @@ const LIVE_CHECK_ENTRY_POINTS = [
   {action: "menuRefreshAll",                  entry: "menu: Pobierz dane dla wszystkich arkuszy"},
   {action: "menuConnectionSetup",             entry: "menu: Ustawienia połączenia BC"},
   {action: "menuLogoutFlow",                  entry: "menu: Wyloguj"},
-  {action: "menuTestItem",                    entry: "menu: Test item"},
   {action: "requestSettingsSheetName",        entry: "sidebar: getImportSettingsSheetName()"},
   {action: "requestSetSettingsSheetName",     entry: "sidebar: setImportSettingsSheetName(name)"},
   {action: "requestAddonStatus",              entry: "sidebar: getAddonStatus()"},

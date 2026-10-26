@@ -54,10 +54,12 @@ const ScheduleRefresh = {
     if(myPermit) dbgLog(`Permit issued for ${myPermit.issuedFor} (${myPermit.issuedFor !== e.triggerUid ? 'NOT my permit. Removing...' : 'my permit'})`);
     // Registry doesn't point at me anymore → delete my own trigger and stop
     if (!myPermit || myPermit.issuedFor !== e.triggerUid) {
+      Controller.intent("refresh.retired",{sheet: null, changeType: null});
       ScheduleRefresh.removeTrigger(e.triggerUid);
       return;
     }
 
+    Controller.intent("refresh.scheduled",{sheet: null, changeType: null});
     RefreshAll.scheduled();
     
     MainSettings.touchRefreshPermit(e.triggerUid);
@@ -76,10 +78,12 @@ const ScheduleRefresh = {
     else dbgLog(`Permit was already available. Permit issued for ${myPermit.issuedFor} (${myPermit.issuedFor !== e.triggerUid ? 'NOT my permit. Removing...' : 'my permit'})`);
     // Registry doesn't point at me anymore → delete my own trigger and stop
     if (myPermit.issuedFor !== e.triggerUid) {
+      Controller.intent("refresh.retired",{sheet: null, changeType: null});
       ScheduleRefresh.removeTrigger(e.triggerUid);
       return;
     }
 
+    Controller.intent("refresh.scheduled",{sheet: null, changeType: null});
     RefreshAll.scheduled();
     
     MainSettings.touchRefreshPermit(e.triggerUid);
