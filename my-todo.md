@@ -49,7 +49,15 @@ The panel should refresh with poll every 1-3 s.
 1 - if there is indication that there is another trigger set by another user the sidebar should be based on that info with a prompt saying:
 > Odświeżanie ustawione przez innego użytkownika - poniższe informacje mogą zawierać błędy. 
 
-# Guarding agains stale data in query area
+## Managing script quirks and internal paths
+
+Some parts of the script require caching, document properties etc. Some form of managament should be available for the user. For example:
+
+### Caching settings sheet (config sheet list)
+
+A check should be available on what is cached and a force refresh button to repopulate the cache.
+
+# [DONE] Guarding agains stale data in query area
 
 When coediting config sheet a 'shorter' query line does not replace a full width of the query window (cols B-F). Rather than clearing everything we should allow for keeping stale content but:
 a. it should be marked with gray font (that goes back to normal when the field is changed)
