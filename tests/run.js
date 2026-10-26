@@ -589,6 +589,7 @@ require('./query-lines.test.js')({ test });
 require('./stale-grey.test.js')({ test });
 require('./validation-quote.test.js')({ test });
 require('./cell-inspector.test.js')({ test });
+require('./validation-lab.test.js')({ test });
 
 // ---- state layer: stores, settings, locks, agent detection state (fresh Apps Script executions on fake platform services) ----------
 require('./state.test.js')({ test });

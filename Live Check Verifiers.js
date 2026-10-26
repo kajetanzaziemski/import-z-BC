@@ -525,6 +525,14 @@ function buildLiveCheckVerifiers_(){
       verify(c){ lcVerifyNothingChanged_(c,menuNoise); c.skip("sidebar shown","the UI cannot be read back by a script"); }
     },
 
+    requestBuildValidationLab: {
+      needs: ["sheets","docProps"],
+      verify(c){
+        c.unchanged("docProps","no document property changed");
+        c.expect("the scratch sheet \"Test weryfikacji\" exists",!!c.spreadsheet().getSheetByName("Test weryfikacji"),"the sheet was not built");
+      }
+    },
+
     requestShowCellValidation: {
       needs: ["sheets","docProps"],
       verify(c){ lcVerifyNothingChanged_(c); c.skip("dialog shown","the UI cannot be read back by a script"); }

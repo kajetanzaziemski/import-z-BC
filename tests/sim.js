@@ -200,6 +200,7 @@ class SimBook {
       getSheets: () => Object.values(book.sheets).map(x => book.sheetObj(x)),
       getActiveSheet: () => book.sheetObj(book.sheets[book.activeName] || Object.values(book.sheets)[0]),
       getSheetByName: n => (book.sheets[n] ? book.sheetObj(book.sheets[n]) : null),
+      deleteSheet: sh => { delete book.sheets[sh.getName()]; },
       insertSheet: n => {
         if (book.sheets[n]) throw new Error('A sheet with the name "' + n + '" already exists. Please enter another name.');
         return book.sheetObj(book.add(n));

@@ -99,9 +99,15 @@ module.exports = function register(t) {
     assert.ok(html.includes('&lt;b&gt;&amp;amp;') && !html.includes('<b>'), html);
   });
 
+  test('menu: "Test weryfikacji" builds the scratch sheet and tells the user once, when the run closes', () => {
+    const a = scenario();
+    a.ex.eval(`ValidationLab = { build: () => { __log.push(['lab.build']); return 'Gotowe.'; } }; buildValidationLab()`);
+    assert.deepStrictEqual(a.calls(), [['lab.build'], ['alert', 'Gotowe.']]);
+  });
+
   test('menu: the action names the live check and the gate rely on are kept', () => {
     const text = fs.readFileSync(path.join(ROOT, 'Menu.js'), 'utf8');
-    ['requestCheckConfigSheet', 'menuConnectionSetup', 'menuAuthFlow', 'menuInsertImportWizard', 'menuLogoutFlow', 'requestStatusCheck', 'requestListAllTriggers', 'requestShowCellValidation']
+    ['requestCheckConfigSheet', 'menuConnectionSetup', 'menuAuthFlow', 'menuInsertImportWizard', 'menuLogoutFlow', 'requestStatusCheck', 'requestListAllTriggers', 'requestShowCellValidation', 'requestBuildValidationLab']
       .forEach(a => assert.ok(text.includes('Controller.run("' + a + '"'), a));
   });
 

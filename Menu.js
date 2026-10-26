@@ -31,7 +31,7 @@ function fullMenu() {
 
 /** "Narzędzia programisty" submenu. The live check entry exists only while the helper files are in the project. */
 function devToolsMenu_(ui){
-  const menu = ui.createMenu('Narzędzia programisty').addItem('Wszystkie triggery','listAllTriggers').addItem('Weryfikacja danych komórki','showCellValidation');
+  const menu = ui.createMenu('Narzędzia programisty').addItem('Wszystkie triggery','listAllTriggers').addItem('Weryfikacja danych komórki','showCellValidation').addItem('Test weryfikacji (arkusz roboczy)','buildValidationLab');
   if(typeof liveCheckSidebar === "function") menu.addItem('Live check','liveCheckSidebar');
   return menu;
 }
@@ -42,6 +42,10 @@ function statusCheck(){
 
 function showCellValidation(){
   return Controller.run("requestShowCellValidation",()=>MenuActions.inspectCell());
+}
+
+function buildValidationLab(){
+  return Controller.run("requestBuildValidationLab",()=>MenuActions.buildValidationLab());
 }
 
 function listAllTriggers(){

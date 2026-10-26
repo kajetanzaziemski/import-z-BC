@@ -45,6 +45,12 @@ const MenuActions = {
     SpreadsheetApp.getUi().showModalDialog(html,"Weryfikacja danych komórki");
   },
 
+  /** Developer tool: the scratch sheet for comparing the ways of writing the operator dropdown (Validation Lab.js); says what it did when the run closes. */
+  buildValidationLab(){
+    const note = ValidationLab.build();
+    Controller.registerClosingOnce(()=>SpreadsheetApp.getUi().alert(note),"userAlertValidationLab");
+  },
+
   /** "Autoryzuj": the authorisation sidebar, or just a notice when the connection is active. */
   authorise(){
     if (BCAuth.authorise()) SpreadsheetApp.getUi().alert('Połączenie aktywne!');      // nothing else happens; the alert tells the user the function ran properly
