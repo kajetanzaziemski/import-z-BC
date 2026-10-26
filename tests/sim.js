@@ -217,7 +217,7 @@ class SimBook {
   }
   ruleObj(spec) {
     return { __spec: spec,
-      getBooleanCondition: () => ({ getCriteriaType: () => 'CUSTOM_FORMULA', getCriteriaValues: () => [spec.formula], getFontColor: () => spec.color }),
+      getBooleanCondition: () => ({ getCriteriaType: () => 'CUSTOM_FORMULA', getCriteriaValues: () => [spec.formula], getFontColor: () => spec.color, getBackground: () => null, getBold: () => null, getItalic: () => null }),
       getRanges: () => spec.ranges.map(g => ({ getRow: () => g.r1, getColumn: () => g.c1, getLastRow: () => g.r2, getLastColumn: () => g.c2, getNumRows: () => g.r2 - g.r1 + 1, getNumColumns: () => g.c2 - g.c1 + 1 })) };
   }
   dvBuilder() {

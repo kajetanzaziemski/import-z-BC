@@ -590,7 +590,17 @@ class Grid {
       const r2 = set.range.r2 || this.maxRows;
       const gridRange = { sheetId: sid, startRowIndex: set.range.r1 - 1, endRowIndex: r2, startColumnIndex: set.range.c1 - 1, endColumnIndex: set.range.c2 };
       const apiRule = x => ({ ranges: [gridRange], booleanRule: { condition: { type: 'CUSTOM_FORMULA', values: [{ userEnteredValue: x.formula }] }, format: { textFormat: { foregroundColor: colorToApi_(x.fontColor) } } } });
-      const isOurs = rule => !!rule.booleanRule && rule.booleanRule.condition.type === 'CUSTOM_FORMULA' && set.owned.indexOf(rule.booleanRule.condition.values[0].userEnteredValue) >= 0;
+      const colors = set.rules.map(x => hexOf_(x.fontColor));
+      // ours: a formula we wrote - or, since the sheet may hand a formula back in its locale's function names ("LICZ.PUSTE") and then no text matches, a grey-text-only
+      // custom formula inside the columns of the set (it would else be added again at every co-edit)
+      const isOurs = rule => {
+        const bc = rule.booleanRule;
+        if (!bc || bc.condition.type !== 'CUSTOM_FORMULA') return false;
+        if (set.owned.indexOf(bc.condition.values[0].userEnteredValue) >= 0) return true;
+        const fmt = bc.format || {}, fc = fmt.textFormat && fmt.textFormat.foregroundColor;
+        return !!fc && colors.indexOf(hexOf_(fc)) >= 0 && !fmt.backgroundColor && !fmt.backgroundColorStyle && !fmt.textFormat.bold && !fmt.textFormat.italic
+          && (rule.ranges || []).length > 0 && rule.ranges.every(g => (g.startColumnIndex || 0) + 1 >= set.range.c1 && g.endColumnIndex <= set.range.c2 && (g.startRowIndex || 0) + 1 >= set.range.r1);
+      };
       const sig = (formula, color, ranges) => formula + '|' + hexOf_(color) + '|' + ranges.slice().sort().join(';');
       const rangeKey = g => [g.startRowIndex, g.startColumnIndex, g.endRowIndex, g.endColumnIndex].join(',');
       const existing = (S.cond || []).filter(isOurs).map(rule => sig(rule.booleanRule.condition.values[0].userEnteredValue, rule.booleanRule.format.textFormat.foregroundColor, rule.ranges.map(rangeKey))).sort();
@@ -614,7 +624,15 @@ class Grid {
       const r2 = set.range.r2 || this.maxRows;
       const rangeKey = rg => [rg.getRow(), rg.getColumn(), rg.getLastRow(), rg.getLastColumn()].join(',');
       const sig = (formula, color, ranges) => formula + '|' + hexOf_(color) + '|' + ranges.slice().sort().join(';');
-      const isOurs = rule => { const bc = rule.getBooleanCondition(); return !!bc && String(bc.getCriteriaType()) === String(SpreadsheetApp.BooleanCriteria.CUSTOM_FORMULA) && set.owned.indexOf(bc.getCriteriaValues()[0]) >= 0; };
+      const colors = set.rules.map(x => hexOf_(x.fontColor));
+      const isOurs = rule => {                                                       // (see _condRequestsApi: by text, else by shape - the locale's function names)
+        const bc = rule.getBooleanCondition();
+        if (!bc || String(bc.getCriteriaType()) !== String(SpreadsheetApp.BooleanCriteria.CUSTOM_FORMULA)) return false;
+        if (set.owned.indexOf(bc.getCriteriaValues()[0]) >= 0) return true;
+        const fc = bc.getFontColor();
+        return !!fc && colors.indexOf(hexOf_(fc)) >= 0 && !bc.getBackground() && !bc.getBold() && !bc.getItalic()
+          && rule.getRanges().length > 0 && rule.getRanges().every(rg => rg.getColumn() >= set.range.c1 && rg.getLastColumn() <= set.range.c2 && rg.getRow() >= set.range.r1);
+      };
       const existing = rules.filter(isOurs).map(rule => { const bc = rule.getBooleanCondition(); return sig(bc.getCriteriaValues()[0], bc.getFontColor(), rule.getRanges().map(rangeKey)); }).sort();
       const target = sheet.getRange(set.range.r1, set.range.c1, r2 - set.range.r1 + 1, set.range.c2 - set.range.c1 + 1);
       const wanted = set.rules.map(x => sig(x.formula, x.fontColor, [rangeKey(target)])).sort();

@@ -125,6 +125,19 @@ module.exports = function register(t) {
       assert.strictEqual(rules.filter(r => r.formula === f[0].formula).length, 1);
       assert.strictEqual(rules.length, 6);
     });
+
+    test(`rules the sheet hands back with the locale's function names (no text matches) are still ours: replaced, not piled up at every co-edit [${mode}]`, () => {
+      const s = scope(mode, 'pl_PL');
+      s.run(`ConfigGrid.create('K')`);
+      const sh = s.book.sheets['K'];
+      for (let i = 0; i < 30; i++) sh.condRules.push({ formula: '=ORAZ(LUB($B6="table";$B6="extend");KOLUMNA()>' + (i + 3) + ')', color: '#999999', ranges: [{ r1: 6, c1: 2, r2: 1000, c2: 6 }] });
+      sh.condRules.push({ formula: '=$D1>5', color: '#ff0000', ranges: [{ r1: 1, c1: 4, r2: 50, c2: 4 }] });
+      s.run(`new SheetCoeditor('K', false).sheetEdit({})`);
+      s.run(`new SheetCoeditor('K', false).sheetEdit({})`);
+      const rules = sh.snapshot().condRules;
+      assert.strictEqual(rules.length, 6, rules.map(r => r.formula).join('\n'));
+      assert.ok(rules.some(r => r.formula === '=$D1>5'), 'the foreign rule (other colour) stays');
+    });
   });
 
   test('rule: the grey rules are built in Config Grid.js only; the co-edit just asks for them (Sheet Coeditor.js knows no formula)', () => {
