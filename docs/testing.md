@@ -22,7 +22,7 @@ Architecture rules are tests too (no project words in `Grid.js`, nothing used at
 
 - **Sheets API path (added later):** when the advanced Sheets service is available (and `USE_SHEETS_API` in `Grid.js` is not false) `BulkSheet` does the structure in ONE `spreadsheets.batchUpdate` (clear the whole sheet, `appendDimension`, number formats) and writes the
   values with `spreadsheets.values.batchUpdate` / `USER_ENTERED` per chunk (strings are read as typed in, like `setValues`); the service only creates a missing sheet. The golden tests of `ResultSheet.write` run on both paths against the frozen legacy writer;
-  the API tests count the calls. **Not verified on a real spreadsheet, and the advanced service is OFF in `appsscript.json`**: before switching it on, run one refresh of a tall table and compare it with the service result (values, number formats, text columns that look like numbers or dates).
+  the API tests count the calls. **Not verified on a real spreadsheet; the advanced service is ENABLED in `appsscript.json` (since `d6aa4bc`), so this is the path that runs (set `USE_SHEETS_API = false` in `Grid.js` to fall back to the service for Grid and BulkSheet)**: run one refresh of a tall table and compare it with the service result (values, number formats, text columns that look like numbers or dates).
 
 ## 2c. Settings sheet (`tests/settings-sheet.test.js`)
 - `tests/golden/legacy-settings-sheet.js` is the **frozen `SettingsSheet`** from before its cell access moved to `SettingsGrid` (`Settings Grid.js`).

@@ -9,9 +9,8 @@
 //   - the Spreadsheet service (always works): getDataRange().clear(), insertRowsAfter / insertColumnsAfter, setNumberFormat, setValues per chunk;
 //   - the Sheets advanced service (when it is enabled in the project and Grid.js's USE_SHEETS_API is not false): ONE spreadsheets.batchUpdate for clear, growth
 //     and number formats, then spreadsheets.values.batchUpdate per chunk with USER_ENTERED - strings are read as if typed in, like setValues does.
-//     The service is used only to create a missing sheet. The advanced service is OFF in this add-on's manifest today (appsscript.json), so the service
-//     path is the one in production; the API path is tested against the simulated spreadsheet only (tests/bulk-sheet.test.js) and has to be tried on a
-//     real one before the service is switched on. Differences: the API path clears the whole sheet, the service path only its data range.
+//     The service is used only to create a missing sheet. The advanced service is ENABLED in the manifest now (appsscript.json), so this is the path that runs;
+//     it is tested against the simulated spreadsheet only (tests/bulk-sheet.test.js) and has to be tried on a real one (docs/testing.md 2d). Differences: the API path clears the whole sheet, the service path only its data range.
 // ---------------------------------------------------------------------------
 
 const BULK_CHUNK_CELLS = 50000;
