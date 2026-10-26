@@ -73,13 +73,7 @@ function testItem(){
 }
 
 function checkConfigSheet(){
-  return Controller.run("requestCheckConfigSheet",() => {
-    let activeSheet = SpreadsheetApp.getActive().getActiveSheet().getName();
-    let mStgs = getMainSettings();
-    let configSheet = mStgs.getConfigSheetName(activeSheet);
-    if(configSheet) updateAfterEdit(configSheet);
-    else Controller.registerClosingOnce(()=>SpreadsheetApp.getUi().alert("Wybrany arkusz nie jest arkszuem konfiguracji. \n Zobacz: menu Rozszerzenia -> Import z BC -> Pomoc."),"userAlertNoConfigSheet");
-  });
+  return Controller.run("requestCheckConfigSheet",()=>MenuActions.analyseActive());
 }
 
 function connectionSetup(){
@@ -92,28 +86,11 @@ function connectionSetup(){
 }
 
 function refreshCurrentSheet(){
-  Controller.run("menuRefreshCurrentSheet",refreshCurrentSheet_script);
-}
-
-function refreshCurrentSheet_script(){
-  let activeSheet = SpreadsheetApp.getActive().getActiveSheet().getName();
-  // dbgLog("activeSheet: "+activeSheet);
-  let mStgs = getMainSettings();
-  let configSheet = mStgs.getConfigSheetName(activeSheet);
-  // dbgLog("configSheet: "+configSheet);
-  if(configSheet) RefreshSheet.run(configSheet);
-  else Controller.registerClosingOnce(()=>SpreadsheetApp.getUi().alert("Wybrany arkusz nie jest arkszuem konfiguracji. \n Zobacz: menu Rozszerzenia -> Import z BC -> Pomoc."),"userAlertNoConfigSheet");
+  Controller.run("menuRefreshCurrentSheet",()=>MenuActions.refreshActive());
 }
 
 function estimateForCurrentSheet(){
-  Controller.run("menuEstimateForCurrentSheet",estimateForCurrentSheet_script);
-}
-
-function estimateForCurrentSheet_script(){
-  let activeSheet = SpreadsheetApp.getActive().getActiveSheet().getName();
-  let mStgs = getMainSettings();
-  const configSheet = mStgs.getConfigSheetName(activeSheet);
-  if(configSheet) EstimateSheet.run(configSheet);
+  Controller.run("menuEstimateForCurrentSheet",()=>MenuActions.estimateActive());
 }
 
 /**
@@ -122,18 +99,7 @@ function estimateForCurrentSheet_script(){
  * showSidebar() is responsible for actual authorization flow.
  */
 function startAuthFlow() {
-  Controller.run("menuAuthFlow",()=> {
-    var bcService = getBCService_();
-    if (!bcService.hasAccess()) showSidebar(); 
-    else {
-      // If the connection is active nothing happens. 
-      // The alert is shown to inform the user that the function run properly.
-      SpreadsheetApp.getUi()
-        .alert('Połączenie aktywne!');
-      
-      // fullMenu();
-    }
-  });
+  Controller.run("menuAuthFlow",()=>MenuActions.authorise());
 }
 
 /**
@@ -142,10 +108,7 @@ function startAuthFlow() {
  * tbc.
  */
 function insertImportWizard(){
-  Controller.run("menuInsertImportWizard",() => {
-    let impWizData = getMainSettings().addNewSheetInfo();
-    updateAfterEdit(impWizData.configSheet);
-  });
+  Controller.run("menuInsertImportWizard",()=>MenuActions.insertWizard());
 }
 
 function refreshAll(){
@@ -191,11 +154,5 @@ function getTableWithRequest(requestURL){
  * Function triggered by menu selection.
  */
 function logoutFlow(){
-  // End the connection.
-  Controller.run("menuLogoutFlow",() => {
-    logout();
-
-    // Reconfigure options available in the menu.
-    Controller.registerClosingOnce(menuSelector,"menuSelector");
-  });
+  Controller.run("menuLogoutFlow",()=>MenuActions.logout());
 }

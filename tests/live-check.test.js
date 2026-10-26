@@ -262,7 +262,7 @@ module.exports = function register(t) {
     const app = { getActiveSpreadsheet: () => ss, flush() {}, WrapStrategy: book.SpreadsheetApp.WrapStrategy, newDataValidation: book.SpreadsheetApp.newDataValidation,
       DataValidationCriteria: book.SpreadsheetApp.DataValidationCriteria,
       getActive: () => ({ getActiveSheet: () => ({ getName: () => 'Konfiguracja 1' }) }), getUi: () => ({ alert() {} }) };
-    const files = [...FILES, 'Data Type.js', 'Menu.js', 'Import Query.js', 'BulkSheet.js', 'ResultSheet.js', 'RefreshSheet.js', 'EstimateSheet.js', 'Sheet Coeditor.js', 'Grid.js', 'Grid Util.js', 'Config Grid.js'];
+    const files = [...FILES, 'Data Type.js', 'Menu.js', 'Menu Actions.js', 'Import Query.js', 'BulkSheet.js', 'ResultSheet.js', 'RefreshSheet.js', 'EstimateSheet.js', 'Sheet Coeditor.js', 'Grid.js', 'Grid Util.js', 'Config Grid.js'];
     const ex = p.execution(files, { SpreadsheetApp: app, Utilities: book.Utilities, Session: { getActiveUser: () => ({ getEmail: () => 'u' }) } });
     ex.eval(`Agents.ensureActive = () => {};
       globalThis.CCTImportConfig = class { constructor(v) { this.v = v; } };
@@ -351,7 +351,7 @@ module.exports = function register(t) {
 
   // ---- jobs (intents): a run is reported under what it DID, via the technical trigger ---------------------------------------------------------
   const JOB_FILES = ['Import Query.js', 'BulkSheet.js', 'ResultSheet.js', 'RefreshSheet.js', 'EstimateSheet.js', 'RefreshAll.js', 'ScheduleRefresh.js', 'AnalyseConfig.js', 'Router.js',
-    'Data Type.js', 'Menu.js', 'Sheet Coeditor.js', 'Grid.js', 'Grid Util.js', 'Config Grid.js'];
+    'Data Type.js', 'Menu.js', 'Menu Actions.js', 'Sheet Coeditor.js', 'Grid.js', 'Grid Util.js', 'Config Grid.js'];
 
   test('live check jobs: every job the code announces (Controller.intent, the router\'s action table) is in the catalogue and has a verifier, and none is orphaned', () => {
     const text = f => read(f).replace(/\/\*[\s\S]*?\*\//g, '').split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
@@ -556,7 +556,7 @@ module.exports = function register(t) {
     const ss = book.spreadsheet();
     const app = { getActiveSpreadsheet: () => ss, flush() {}, WrapStrategy: book.SpreadsheetApp.WrapStrategy, newDataValidation: book.SpreadsheetApp.newDataValidation,
       DataValidationCriteria: book.SpreadsheetApp.DataValidationCriteria, getUi: () => ({ alert() {} }) };
-    const ex = p.execution([...FILES, 'Menu.js', 'Settings Sheet.js', 'Data Type.js'], { SpreadsheetApp: app, Utilities: book.Utilities, Session: { getActiveUser: () => ({ getEmail: () => 'u' }) } });
+    const ex = p.execution([...FILES, 'Menu.js', 'Menu Actions.js', 'Settings Sheet.js', 'Data Type.js'], { SpreadsheetApp: app, Utilities: book.Utilities, Session: { getActiveUser: () => ({ getEmail: () => 'u' }) } });
     ex.eval(code);
     const entries = Object.keys(p.props.document).filter(k => /^liveCheck:\d/.test(k)).sort().map(k => JSON.parse(p.props.document[k]));
     return { p, entries, notPassing: entries.map(e => e.c.filter(x => x[0] === 'WARN' || x[0] === 'FAIL').map(x => e.a + ': ' + x[1] + ' - ' + x[2])).flat() };

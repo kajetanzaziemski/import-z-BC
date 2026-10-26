@@ -62,3 +62,8 @@ Entry points stay where they are and keep their names, action names and live-che
 Real files in a fresh Apps Script scope on fake Properties/Cache/Lock services and a fake `ScriptApp` with real trigger bookkeeping (`tests/platform-fakes.js`: `newTrigger(...).timeBased().everyHours(n).create()`, `getProjectTriggers()`, `getUserTriggers()` without time triggers,
 `deleteTrigger`). Faked: the settings sheet object and the single-sheet refresh. 12 deliberate breakages of the new files are all caught. Rules: neither file touches a spreadsheet; only `ScheduleRefresh.js` creates time-based triggers or removes the refresh triggers; the new files load alone.
 **Not covered offline:** Apps Script's real trigger quotas/latency and real `ScriptApp` behaviour; the live check (`requestAutoRefesh`, `sheetEditAction` for the refresh-frequency edit) covers those on a real spreadsheet.
+
+## Menu items (`Menu Actions.js`)
+`Menu.js` keeps the entry points (one `Controller.run` with the action name each); `MenuActions` has the work: `analyseActive`, `refreshActive`, `estimateActive`, `insertWizard`, `authorise`, `logout`
+and the shared lookup of the config sheet of the active sheet (`activeConfigSheet`, `warnNotConfigSheet`). The `*_script` helpers (`refreshCurrentSheet_script`, `estimateForCurrentSheet_script`) are gone.
+Pinned by `tests/menu.test.js` (written before the move) and `tests/refresh.test.js`.
