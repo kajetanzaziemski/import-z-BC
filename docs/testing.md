@@ -20,6 +20,10 @@ Architecture rules are tests too (no project words in `Grid.js`, nothing used at
   of a spreadsheet (a write that would pass it fails with the platform's own error; nothing here guards it).
 - Mutation checks: wrong chunk offset, skipped chunks, formats only on the first row, no clear and no growth are all caught. The tall golden compares by JSON string (a `deepStrictEqual` diff of 120 000 cells takes minutes).
 
+- **Sheets API path (added later):** when the advanced Sheets service is available (and `USE_SHEETS_API` in `Grid.js` is not false) `BulkSheet` does the structure in ONE `spreadsheets.batchUpdate` (clear the whole sheet, `appendDimension`, number formats) and writes the
+  values with `spreadsheets.values.batchUpdate` / `USER_ENTERED` per chunk (strings are read as typed in, like `setValues`); the service only creates a missing sheet. The golden tests of `ResultSheet.write` run on both paths against the frozen legacy writer;
+  the API tests count the calls. **Not verified on a real spreadsheet, and the advanced service is OFF in `appsscript.json`**: before switching it on, run one refresh of a tall table and compare it with the service result (values, number formats, text columns that look like numbers or dates).
+
 ## 2c. Settings sheet (`tests/settings-sheet.test.js`)
 - `tests/golden/legacy-settings-sheet.js` is the **frozen `SettingsSheet`** from before its cell access moved to `SettingsGrid` (`Settings Grid.js`).
 - Old and new class run in fresh scopes on the same simulated book (new one through both Grid commit paths) for: a missing sheet (created with header, unit dropdown, date format), an existing sheet with three

@@ -2,9 +2,16 @@
 // BULK SHEET: writes a whole table to a sheet, however tall it is. Generic: no project words, no layout.
 //
 // Grid (Grid.js) keeps an in-memory window of the top rows (at most 3000) and is meant for small, structured sheets; a result table can have
-// many times that. This writer works on the Spreadsheet service only, in this order: ensure the sheet and its size, clear its data range, one number format
-// per column, then the values in chunks of whole rows (a chunk is at most `chunkCells` cells, so that no single call carries the whole table).
-// The Sheets advanced service is not used: it is off in this add-on (appsscript.json) and a second path would have nothing to be checked against.
+// many times that. This writer works in this order: ensure the sheet and its size, clear it, one number format per column, then the values in chunks of
+// whole rows (a chunk is at most `chunkCells` cells, so that no single call carries the whole table).
+//
+// Two paths, the same result:
+//   - the Spreadsheet service (always works): getDataRange().clear(), insertRowsAfter / insertColumnsAfter, setNumberFormat, setValues per chunk;
+//   - the Sheets advanced service (when it is enabled in the project and Grid.js's USE_SHEETS_API is not false): ONE spreadsheets.batchUpdate for clear, growth
+//     and number formats, then spreadsheets.values.batchUpdate per chunk with USER_ENTERED - strings are read as if typed in, like setValues does.
+//     The service is used only to create a missing sheet. The advanced service is OFF in this add-on's manifest today (appsscript.json), so the service
+//     path is the one in production; the API path is tested against the simulated spreadsheet only (tests/bulk-sheet.test.js) and has to be tried on a
+//     real one before the service is switched on. Differences: the API path clears the whole sheet, the service path only its data range.
 // ---------------------------------------------------------------------------
 
 const BULK_CHUNK_CELLS = 50000;
@@ -31,6 +38,12 @@ const BulkSheet = {
       }
     }
 
+    if (bulkSheetsApiAvailable_()) return BulkSheet.writeTableViaApi_(sheetName, table, formats, options);
+    return BulkSheet.writeTableViaService_(sheetName, table, formats, options);
+  },
+
+  writeTableViaService_(sheetName, table, formats, options) {
+    const rows = table.length, cols = table[0].length;
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     let sheet = ss.getSheetByName(sheetName);
     if (!sheet) sheet = ss.insertSheet(sheetName);
@@ -52,5 +65,62 @@ const BulkSheet = {
     }
     SpreadsheetApp.flush();
     return { rows: rows, cols: cols, chunks: chunks };
+  },
+
+  writeTableViaApi_(sheetName, table, formats, options) {
+    const rows = table.length, cols = table[0].length;
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    if (!ss.getSheetByName(sheetName)) ss.insertSheet(sheetName);
+    SpreadsheetApp.flush();                                     // the API has to see the new sheet and the last writes of the service
+    const quoted = "'" + sheetName.replace(/'/g, "''") + "'";
+    const info = Sheets.Spreadsheets.get(ss.getId(), { ranges: [quoted + '!A1'], fields: 'sheets(properties(sheetId,title,gridProperties(rowCount,columnCount)))' });
+    const props = info.sheets.find(sh => sh.properties.title === sheetName).properties;
+    const sheetId = props.sheetId, maxRows = props.gridProperties.rowCount, maxCols = props.gridProperties.columnCount;
+    const needCols = Math.max(cols, formats.length);
+
+    const requests = [{ updateCells: { range: { sheetId: sheetId }, fields: 'userEnteredValue,userEnteredFormat,dataValidation,note' } }];
+    if (maxRows < rows) requests.push({ appendDimension: { sheetId: sheetId, dimension: 'ROWS', length: rows - maxRows } });
+    if (maxCols < needCols) requests.push({ appendDimension: { sheetId: sheetId, dimension: 'COLUMNS', length: needCols - maxCols } });
+    formats.forEach((format, index) => {
+      if (format === undefined || format === null) return;
+      requests.push({ repeatCell: {
+        range: { sheetId: sheetId, startRowIndex: 0, endRowIndex: rows, startColumnIndex: index, endColumnIndex: index + 1 },
+        cell: { userEnteredFormat: { numberFormat: { type: bulkNumberFormatType_(format), pattern: format } } },
+        fields: 'userEnteredFormat.numberFormat'
+      } });
+    });
+    Sheets.Spreadsheets.batchUpdate({ requests: requests }, ss.getId());
+
+    const tz = ss.getSpreadsheetTimeZone();
+    const cell = v => v === undefined || v === null ? '' : (v instanceof Date ? Utilities.formatDate(v, tz, 'yyyy-MM-dd HH:mm:ss') : v);
+    const perChunk = Math.max(1, Math.floor((options.chunkCells || BULK_CHUNK_CELLS) / cols));
+    let chunks = 0;
+    for (let first = 0; first < rows; first += perChunk) {
+      const part = table.slice(first, first + perChunk).map(row => row.map(cell));
+      Sheets.Spreadsheets.Values.batchUpdate({
+        valueInputOption: 'USER_ENTERED',
+        data: [{ range: quoted + '!A' + (first + 1), values: part }]
+      }, ss.getId());
+      chunks++;
+    }
+    return { rows: rows, cols: cols, chunks: chunks };
   }
 };
+
+/** Is the Sheets advanced service usable (and not switched off by USE_SHEETS_API in Grid.js)? */
+function bulkSheetsApiAvailable_() {
+  return (typeof USE_SHEETS_API === 'undefined' || !!USE_SHEETS_API)
+    && typeof Sheets !== 'undefined' && !!Sheets && !!Sheets.Spreadsheets && !!Sheets.Spreadsheets.Values;
+}
+
+/** The API's number format type for a pattern ("#,##0" NUMBER, "yyyy-mm-dd hh:mm" DATE_TIME, "0%" PERCENT, "@" TEXT ...); the same rule as Grid.js (numberFormatType_). */
+function bulkNumberFormatType_(pattern) {
+  const p = String(pattern).replace(/"[^"]*"|\[[^\]]*\]/g, '');
+  const date = /[yd]/i.test(p), time = /[hs]/i.test(p);
+  if (p === '@') return 'TEXT';
+  if (date && time) return 'DATE_TIME';
+  if (date) return 'DATE';
+  if (time) return 'TIME';
+  if (p.indexOf('%') >= 0) return 'PERCENT';
+  return 'NUMBER';
+}

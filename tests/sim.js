@@ -142,6 +142,7 @@ class SimBook {
     this.sheets = {}; this.nextId = 1;
     this.requests = [];             // every batchUpdate (arrays of requests)
     this.gets = [];                 // every spreadsheets.get (its options)
+    this.valueUpdates = [];         // every spreadsheets.values.batchUpdate (its body)
     this.alignLog = [];             // every value the Spreadsheet service was given for a horizontal alignment
     this.serviceCalls = 0;          // calls made through the Spreadsheet service on ranges / sheets (a rough cost)
     this.build();
@@ -177,7 +178,8 @@ class SimBook {
     } };
     this.Sheets = { Spreadsheets: {
       get: (id, o) => book.apiGet(o),
-      batchUpdate: (b, id) => { book.requests.push(b.requests); book.apply(b.requests); }
+      batchUpdate: (b, id) => { book.requests.push(b.requests); book.apply(b.requests); },
+      Values: { batchUpdate: (b, id) => book.apiValues(b) }
     } };
     this.SpreadsheetApp = {
       WrapStrategy: { WRAP: 'WRAP', OVERFLOW: 'OVERFLOW', CLIP: 'CLIP' },
@@ -397,6 +399,24 @@ class SimBook {
     }) };
   }
 
+  /** spreadsheets.values.batchUpdate: the values are entered as typed (USER_ENTERED); the simulation stores them as given (null = empty). */
+  apiValues(body) {
+    if (body.valueInputOption !== 'USER_ENTERED') throw new Error('SimBook: values.batchUpdate needs valueInputOption USER_ENTERED');
+    this.valueUpdates.push(body);
+    body.data.forEach(d => {
+      const m = d.range.match(/^'((?:[^']|'')*)'!([A-Z]+)(\d+)(?::[A-Z]+\d+)?$/);
+      if (!m) throw new Error('SimBook: unsupported values range ' + d.range);
+      const s = this.sheets[m[1].replace(/''/g, "'")];
+      if (!s) throw new Error('SimBook: no sheet ' + m[1]);
+      const r0 = Number(m[3]), c0 = colNum(m[2]);
+      d.values.forEach((row, i) => row.forEach((v, j) => {
+        if (Object.prototype.toString.call(v) === '[object Date]' || (v !== null && typeof v === 'object')) throw new Error('SimBook: values must be JSON scalars');
+        s.setValue(r0 + i, c0 + j, v, '');
+      }));
+    });
+    return { totalUpdatedCells: body.data.reduce((n, d) => n + d.values.reduce((k, row) => k + row.length, 0), 0) };
+  }
+
   apiRule(s, spec) {
     const f = hex => ({ red: parseInt(hex.slice(1, 3), 16) / 255, green: parseInt(hex.slice(3, 5), 16) / 255, blue: parseInt(hex.slice(5, 7), 16) / 255 });
     return { ranges: spec.ranges.map(g => ({ sheetId: s.id, startRowIndex: g.r1 - 1, endRowIndex: g.r2, startColumnIndex: g.c1 - 1, endColumnIndex: g.c2 })),
@@ -452,6 +472,20 @@ class SimBook {
       } else if (k === 'autoResizeDimensions') {
         const g = x.dimensions, s = this.byId(g.sheetId);
         s.fitted[g.dimension === 'ROWS' ? 'rows' : 'columns'].push([g.startIndex + 1, g.endIndex - g.startIndex]);
+      } else if (k === 'updateCells' && !x.start) {                 // no rows: the fields of every cell in the range are cleared
+        const g = rect(x.range), fields = String(x.fields).split(',');
+        for (let r = g.r1; r <= g.r2; r++) for (let c = g.c1; c <= g.c2; c++) {
+          const y = g.s.cell(r, c);
+          if (!y) continue;
+          fields.forEach(f => {
+            if (f === 'userEnteredValue') { y.v = ''; y.f = ''; }
+            else if (f === 'userEnteredFormat') y.fmt = {};
+            else if (f === 'dataValidation') y.dv = null;
+            else if (f === 'note') y.note = '';
+            else throw new Error('SimBook: unsupported updateCells clear field ' + f);
+          });
+          g.s.prune(r, c);
+        }
       } else if (k === 'updateCells') {
         const s = this.byId(x.start.sheetId), fields = String(x.fields).split(',');
         (x.rows || []).forEach((row, i) => (row.values || []).forEach((cell, j) => {

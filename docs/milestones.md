@@ -31,6 +31,7 @@ Still to do
 - (done on branch `refactor-login-and-rest`: login flow behind `BCAuth`, `docs/login-flow.md`; the status check was already thin forwarders to `Agents`)
 - (done on branch `refactor-login-and-rest`: BC layer reorganised and cleaned of test-only code, `docs/bc-layer.md`)
 - (done: the old-name forwarders and dead leftovers removed)
+- (done: bugs-todo #4/#6/#8/#10 closed - `ManagedSheets` cache; `BulkSheet` Sheets API path written and tested on the simulated spreadsheet only)
 - (done: the time trigger as two live-check jobs `refresh.scheduled` / `refresh.retired`; the dead "Test item" menu entry and its verifier removed; live check helpers re-pinned)
 
 

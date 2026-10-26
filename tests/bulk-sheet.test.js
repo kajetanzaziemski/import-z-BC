@@ -15,8 +15,8 @@ const FILES = ['Data Type.js', 'BulkSheet.js', 'ResultSheet.js'];
 module.exports = function register(t) {
   const { test } = t;
 
-  function scope(prefill) {
-    const book = new SimBook({ api: false });
+  function scope(prefill, mode) {
+    const book = new SimBook({ api: mode === 'api' });
     const ctx = vm.createContext({ console: { log() {}, error() {} } });
     book.install(ctx);
     FILES.forEach(f => new vm.Script(fs.readFileSync(path.join(ROOT, f), 'utf8'), { filename: f }).runInContext(ctx));
@@ -30,8 +30,8 @@ module.exports = function register(t) {
     Array.from({ length: rows }, (_, r) => Array.from({ length: cols }, (_, c) => (c % 3 === 0 ? r : c % 3 === 1 ? 'x' + r : r / 4))));
 
   function same(name, table, types, prefill) {
-    test('golden: ResultSheet.write - ' + name, () => {
-      const old = scope(prefill), now = scope(prefill);
+    ['service', 'api'].forEach(mode => test('golden: ResultSheet.write - ' + name + ' [' + mode + ']', () => {
+      const old = scope(prefill), now = scope(prefill, mode);
       [old, now].forEach(s => { s.ctx.__table = JSON.parse(JSON.stringify(table)); s.ctx.__types = types; });
       old.run(`LegacyResultSheet.write('Wynik', __table, __types)`);
       now.run(`ResultSheet.write('Wynik', __table, __types)`);
@@ -41,7 +41,7 @@ module.exports = function register(t) {
         assert.fail('sheets differ, first at cell ' + key + ': new ' + JSON.stringify(a.cells[key]) + ' old ' + JSON.stringify(b.cells[key]));
       }
       assert.deepStrictEqual(Object.keys(now.book.sheets), Object.keys(old.book.sheets));
-    });
+    }));
   }
   const T = [['No', 'Name', 'Qty', 'Posted', 'Ok'], ['1', 'A', 2.5, 45000, true], ['2', '', 0, '', false]];
   const TYPES = ['Edm.String', 'Edm.String', 'Edm.Decimal', 'Edm.DateTimeOffset', 'Edm.Boolean'];
@@ -117,9 +117,80 @@ module.exports = function register(t) {
   test('rule: BulkSheet.js knows nothing of the project and loads alone; only it clears and fills a result table', () => {
     const text = fs.readFileSync(path.join(ROOT, 'BulkSheet.js'), 'utf8').split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
     assert.ok(!/Konfiguracja|Ustawienia|OData|\bBC\b|DataType|getMainSettings|Settings|Controller/.test(text));
-    assert.ok(!/Sheets\.Spreadsheets/.test(text), 'service only');
+    assert.ok(/Sheets\.Spreadsheets/.test(text), 'the Sheets API path exists');
     vm.runInNewContext(fs.readFileSync(path.join(ROOT, 'BulkSheet.js'), 'utf8'), {});
     const rs = fs.readFileSync(path.join(ROOT, 'ResultSheet.js'), 'utf8').split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
     assert.ok(!/SpreadsheetApp|getRange|getSheetByName|insertSheet/.test(rs));
+  });
+
+  // ---- the Sheets API path ---------------------------------------------------------------------------------------------------------------
+  // Structure (clear, growth, number formats) is ONE spreadsheets.batchUpdate; the values go through spreadsheets.values.batchUpdate with USER_ENTERED -
+  // the same "typed in" reading of strings that Range.setValues has; the Spreadsheet service is used only to create a missing sheet.
+  test('api: one structure batchUpdate (clear, growth, formats) and the values in chunks - no write through the Spreadsheet service', () => {
+    const s = scope(book => { book.add('W'); }, 'api');
+    s.ctx.__table = tall(1000, 7);
+    const before = s.book.serviceCalls;
+    s.run(`BulkSheet.writeTable('W', __table, { columnFormats: ['0.0', null, '@'], chunkCells: 1500 })`);
+    assert.strictEqual(s.book.requests.length, 1, 'one batchUpdate');
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(s.book.requests[0].map(r => Object.keys(r)[0]))), ['updateCells', 'appendDimension', 'repeatCell', 'repeatCell'], '1001 rows on a 1000-row sheet');
+    assert.strictEqual(s.book.valueUpdates.length, 5, '1001 rows x 7 cells in chunks of 214 rows');
+    assert.ok(s.book.valueUpdates.every(b => b.valueInputOption === 'USER_ENTERED'));
+    assert.strictEqual(s.book.serviceCalls - before, 0, 'the Spreadsheet service wrote nothing');
+    assert.strictEqual(s.book.sheets['W'].cell(1001, 7).v, s.ctx.__table[1000][6]);
+  });
+
+  test('api: a missing sheet is created through the service (once), then written through the API; a sheet too small grows by appendDimension', () => {
+    const s = scope(null, 'api');
+    s.ctx.__table = tall(1500, 30);
+    s.run(`BulkSheet.writeTable('Nowy', __table, {})`);
+    const w = s.book.sheets['Nowy'];
+    assert.ok(w.rowCount >= 1501 && w.colCount >= 30, w.rowCount + 'x' + w.colCount);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(s.book.requests[0].map(r => Object.keys(r)[0]))), ['updateCells', 'appendDimension', 'appendDimension']);
+    assert.strictEqual(w.cell(1501, 30).v, s.ctx.__table[1500][29]);
+  });
+
+  test('api: a sheet name with an apostrophe and spaces is quoted in every range', () => {
+    const s = scope(book => { book.add("Dane wg. 'K 1'"); }, 'api');
+    s.run(`BulkSheet.writeTable("Dane wg. 'K 1'", [['a', 'b'], [1, 'x']], {})`);
+    assert.strictEqual(s.book.sheets["Dane wg. 'K 1'"].cell(2, 2).v, 'x');
+    assert.ok(s.book.valueUpdates[0].data[0].range.startsWith("'Dane wg. ''K 1'''!A1"), s.book.valueUpdates[0].data[0].range);
+  });
+
+  test('api: empty cells (null / undefined) are written empty, booleans and numbers stay what they are, a Date becomes a date-time string the sheet reads in', () => {
+    const s = scope(book => { book.add('W'); }, 'api');
+    s.ctx.Utilities = { formatDate: (d, tz, pattern) => 'DATE(' + tz + ',' + pattern + ',' + d.toISOString() + ')' };
+    s.run(`BulkSheet.writeTable('W', [['a', 'b', 'c', 'd'], [null, undefined, true, 2.5], [new Date(Date.UTC(2025, 0, 2, 3, 4, 5)), 0, '', 'x']], {})`);
+    const w = s.book.sheets['W'];
+    assert.deepStrictEqual([1, 2, 3, 4].map(c => (w.cell(2, c) || { v: '' }).v), ['', '', true, 2.5]);
+    assert.strictEqual(w.cell(3, 1).v, 'DATE(Asia/Tokyo,yyyy-MM-dd HH:mm:ss,2025-01-02T03:04:05.000Z)');
+    assert.strictEqual(w.cell(3, 2).v, 0);
+  });
+
+  test('api: the old contents are cleared everywhere (values, formats, notes, validations), also beyond the new table', () => {
+    const s = scope(book => { const w = book.add('W'); for (let r = 1; r <= 30; r++) { w.setValue(r, 12, 'old', ''); w.cell(r, 12, true).fmt.bg = '#ff0000'; } w.cell(3, 3, true).note = 'n'; }, 'api');
+    s.run(`BulkSheet.writeTable('W', [['a']], {})`);
+    const w = s.book.sheets['W'];
+    assert.deepStrictEqual(Object.keys(w.cells), ['1,1']);
+    assert.strictEqual(w.cell(1, 1).v, 'a');
+  });
+
+  test('api: USE_SHEETS_API = false (Grid.js switch) or no advanced service means the Spreadsheet service path', () => {
+    const off = scope(book => { book.add('W'); }, 'api');
+    vm.runInContext('globalThis.USE_SHEETS_API = false', off.ctx);
+    off.run(`BulkSheet.writeTable('W', [['a'], [1]], {})`);
+    assert.strictEqual(off.book.requests.length, 0);
+    assert.strictEqual(off.book.valueUpdates.length, 0);
+    assert.strictEqual(off.book.sheets['W'].cell(2, 1).v, 1);
+    const none = scope(book => { book.add('W'); });
+    none.run(`BulkSheet.writeTable('W', [['a'], [1]], {})`);
+    assert.strictEqual(none.book.sheets['W'].cell(2, 1).v, 1);
+  });
+
+  test('api: the number format type follows the pattern exactly as Grid.js does', () => {
+    const ctx = vm.createContext({ console: { log() {}, error() {} } });
+    new SimBook({ api: true }).install(ctx);
+    ['Grid.js', 'Grid Util.js', 'BulkSheet.js'].forEach(f => new vm.Script(fs.readFileSync(path.join(ROOT, f), 'utf8'), { filename: f }).runInContext(ctx));
+    ['@', '#', '#,##0', '#,##0.00', '0.0', 'yyyy-mm-dd', 'yyyy-mm-dd hh:mm:ss', 'hh:mm', '0%', '"zł" #,##0.00', '[$€-2] 0.00'].forEach(p =>
+      assert.strictEqual(vm.runInContext(`bulkNumberFormatType_(${JSON.stringify(p)})`, ctx), vm.runInContext(`numberFormatType_(${JSON.stringify(p)})`, ctx), p));
   });
 };
