@@ -95,3 +95,7 @@ Found while building and testing the live check helpers (`docs/live-check.md`), 
   (`tests/offline-refresh.test.js`; with the connection refused outright - `ConnectionError` - the lights were already idle, also pinned there).
 - **#17 an unspecified row limit: FIXED.** A `limit` line with an empty cell (or text, 0, a negative number) made `getLimit()` return nothing while the url said `$top=100`, so the estimate of the rows was "not a number". `setLimit` keeps the default of 100 for anything
   that is not a positive number or `unlimited` (`tests/bc-layer.test.js`).
+- **#18 operator dropdown rejecting the value picked from it (Sheets API path): FIXED by writing those lists through the Spreadsheet service.** The operator list is stored with apostrophe-prefixed items (`'<`, `'=` ... `ConfigDValStore`; the prefix makes the picked
+  value plain text, so a lone `=` is not a formula). Written by `Grid` through the Sheets API, such a validation marked the picked value as invalid ("podana wartość musi należeć do zakresu"); the same list written by the Spreadsheet service worked
+  (real sheet; the validation sidebar showed the same apostrophe items for both, so the difference is how the platform treats them). `Grid` now sends any list with an apostrophe-prefixed item through the service, after the batchUpdate
+  (`quotedList_`, `tests/validation-quote.test.js`). The reason is a platform behaviour seen on one sheet, not understood: if it turns out to be general, the other lists may need the same.
