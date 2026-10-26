@@ -84,3 +84,9 @@ Found while building and testing the live check helpers (`docs/live-check.md`), 
 - #2, #3, #5-#10: unchanged (the refactor keeps them on purpose; tests pin them where they are observable).
 - **#2 Nested `Controller.run` loses log saves: FIXED.** There are no nested runs any more (the status check calls `StatusManager.forceRefresh()` instead of the entry point `forceAgentRefresh`; a nested call is reported as `NESTED RUN`
   and done inline), and the closing phase runs actions registered while it runs, so the trigger logs and the agent pair installed by the status check are saved. `docs/controller.md`.
+
+### Small bugs, closed
+- **#4 implicit global `configSheet`: FIXED** with the extraction of `EstimateSheet` (a local variable; pinned by a test). The entry above was stale.
+- **#6 `readAllPages()` without a co-editor: FIXED.** The status switch in the `catch` block and after the loop is guarded like the others; a failing read gives its own error back (`tests/bc-layer.test.js`).
+- **#8 `onOpen` result: FIXED.** `onOpen` returns what its run returns (`true` when the agents are active, `null` when the gate skipped the run); `tests/agents.test.js`.
+- **#10 unrelated edits building `SettingsSheet`: FIXED with a cache** (`Managed Sheets.js`, `docs/router.md`): filled on open, refreshed by edits / structure changes in the settings sheet and by the wizard, expires after an hour.

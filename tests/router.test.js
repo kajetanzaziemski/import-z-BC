@@ -13,7 +13,7 @@ const { FakePlatform } = require('./platform-fakes');
 const ROOT = path.join(__dirname, '..');
 const BASE = ['Custom errors.js', 'Helper Data Store.js', 'Store.js', 'Settings.js', 'Main Settings.js', 'Controller.js', 'Trigger Manager.js',
   'Global Add-on Settings.js', 'Quick Start.js', 'functions.js', 'Track onEdit Triggers.js', 'Status Manager.js', 'Agent Reconciler.js', 'Agents.js', 'Verify Agent.js', 'Data Type.js', 'Menu.js', 'Menu Actions.js', 'Settings Sheet.js'];
-const NEW_FILES = ['Import Query.js', 'BulkSheet.js', 'ResultSheet.js', 'RefreshSheet.js', 'EstimateSheet.js', 'RefreshAll.js', 'ScheduleRefresh.js', 'AnalyseConfig.js', 'Router.js']
+const NEW_FILES = ['Import Query.js', 'BulkSheet.js', 'ResultSheet.js', 'RefreshSheet.js', 'EstimateSheet.js', 'RefreshAll.js', 'ScheduleRefresh.js', 'AnalyseConfig.js', 'Router.js', 'Managed Sheets.js']
   .filter(f => fs.existsSync(path.join(ROOT, f)));
 
 const FAKES = `
@@ -30,6 +30,7 @@ const FAKES = `
   getMainSettings = () => {
     __settingsCalls.n++;
     return {
+      getConfigSheetNames: () => __cfg.configSheets.slice(),
       isConfigSheet: name => __cfg.configSheets.includes(name),
       isRefreshFrequencyCell: range => !!__cfg.freqCell,
       sheetEdit: e => { if (__cfg.freqCell) __log.push(['setRefreshTrigger']); },
@@ -94,11 +95,13 @@ module.exports = function register(t) {
     assert.deepStrictEqual(sc.calls(), []);
   });
 
-  test('edit: in any other sheet -> nothing happens (the settings sheet object is still built: bugs-todo #10)', () => {
+  test('edit: in any other sheet -> nothing happens (the settings sheet object is built once to fill the cache of managed sheets, then not again: bugs-todo #10)', () => {
     const sc = scenario({ active: 'Arkusz1' });
     sc.edit();
     assert.deepStrictEqual(sc.calls(), []);
-    assert.ok(sc.settingsCalls.n >= 1);
+    assert.strictEqual(sc.settingsCalls.n, 1);
+    sc.edit();
+    assert.strictEqual(sc.settingsCalls.n, 1, 'the second edit is answered from the cache');
   });
 
   test('edit: the sheet is the ACTIVE sheet, not the one of the edited range (quirk kept)', () => {
@@ -183,7 +186,7 @@ module.exports = function register(t) {
 
   test('edit: a refresh frequency edit leaves the permit of the new time trigger in the store (bugs-todo #1: it used to be lost)', () => {
     const sc = scenario({ active: 'Ustawienia', freqCell: true });
-    sc.ex.eval(`getMainSettings = () => ({ isConfigSheet: () => false, isRefreshFrequencyCell: () => true,
+    sc.ex.eval(`getMainSettings = () => ({ getConfigSheetNames: () => [], isConfigSheet: () => false, isRefreshFrequencyCell: () => true,
       setRefreshTrigger: () => ScheduleRefresh.setUp({ freq: 6, unit: 'hrs' }) })`);
     sc.edit();
     const stored = JSON.parse(sc.p.props.document.importSettingsArray);

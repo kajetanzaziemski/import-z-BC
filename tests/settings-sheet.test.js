@@ -31,6 +31,7 @@ module.exports = function register(t) {
     vm.runInContext(`
       globalThis.dbgLog = () => {};
       globalThis.MainSettings = { getSettingsSheetName: () => 'Ustawienia', setSettingsSheetName() {} };
+      globalThis.__stored = []; globalThis.ManagedSheets = { store: s => __stored.push(s.getConfigSheetNames()) };
       const builder = fn => { const b = { forSpreadsheet: () => b, onEdit: () => { b.type = 'edit'; return b; }, onChange: () => { b.type = 'change'; return b; }, create: () => __created.push(fn + ':' + b.type) }; return b; };
       globalThis.ScriptApp = { getUserTriggers: () => (__existing || []), newTrigger: builder };
       globalThis.__existing = [];
@@ -101,6 +102,16 @@ module.exports = function register(t) {
       assert.deepStrictEqual(now.created, []);
     });
   });
+
+  MODES.forEach(mode => test('addNewSheetInfo hands the new list of config sheets to the managed sheets cache (once per added line) [' + mode + ']', () => {
+    const s = scope(mode, sh => fillSettings(sh, { configs: CONFIGS }));
+    s.run(`globalThis.__ss = new SettingsSheet()`);
+    assert.deepStrictEqual(JSON.parse(s.run('JSON.stringify(__stored)')), [], 'building the object stores nothing');
+    s.run(`__ss.addNewSheetInfo('N', 'Dane N', true)`);
+    const stored = JSON.parse(s.run('JSON.stringify(__stored)'));
+    assert.strictEqual(stored.length, 1);
+    assert.strictEqual(stored[0][stored[0].length - 1], 'N');
+  }));
 
   test('API path: building the sheet object is one read; adding a config sheet and a refresh time are one batchUpdate each', () => {
     const s = scope('api', sh => fillSettings(sh, { configs: CONFIGS }));

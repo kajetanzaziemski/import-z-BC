@@ -30,8 +30,7 @@ see `ScheduleRefresh`), the sidebars. The wizard that inserts a config sheet is 
 - `routeEdit(e)` / `routeChange(e)` only **look** and return a route; `perform(route)` announces the job (`Controller.intent`) and then runs it. Nothing else decides what an edit means.
 - The entry points stay (`sheetEdit`, `sheetChange`, `sheetEditAction(e)`, `sheetChangeAction(e)`, with their `Controller.run` action names and `checkInput` hooks); `sheetEditAction` / `sheetChangeAction` are one-liners that call the router.
   The trigger's own business stays in the entry point: recording the edit for the simple trigger, the power check, logging the trigger's use.
-- Behaviour is exactly the old one (`tests/router.test.js` was written first against the old code): the sheet is the **active** sheet, not the sheet of the edited range; the settings sheet object is built for every edit/change that
-  is not an EDIT/FORMAT one (bugs-todo #10); `sheetChange` runs the action **before** the power check (a powered-off trigger still co-edits; trigger-management #5).
+- Behaviour is exactly the old one (`tests/router.test.js` was written first against the old code): the sheet is the **active** sheet, not the sheet of the edited range; which sheets are config sheets comes from the cache of managed sheets (`Managed Sheets.js`, bugs-todo #10: the settings sheet object is built only for the settings sheet itself, or when the cache is empty); `sheetChange` runs the action **before** the power check (a powered-off trigger still co-edits; trigger-management #5).
 - To add a job: a line in `ROUTE_ACTIONS_`, a branch in `routeEdit`/`routeChange`, an entry in `LIVE_CHECK_INTENTS` and a verifier with the same name in `Live Check Verifiers.js`
   (`tests/live-check.test.js` fails until all four agree).
 
@@ -46,3 +45,8 @@ see `ScheduleRefresh`), the sidebars. The wizard that inserts a config sheet is 
 ## Jobs outside the router
 The time trigger is not routed, but it announces its two jobs the same way (`Controller.intent`, from `ScheduleRefresh.run` / `runLegacy`): `refresh.scheduled` (the permit names this trigger: the ticked sheets are refreshed, the permit records the run)
 and `refresh.retired` (it does not: the trigger deletes itself). Both have a catalogue entry and a verifier; `requestAutoRefesh` keeps only the technical check (an event with a trigger id) and judges the content itself only when no job was announced.
+
+## The cache of managed sheets (`Managed Sheets.js`)
+`{ settings: <settings sheet name>, configs: [<config sheet names>] }` in the **document cache**, key `managedSheets`, ttl 3600 s. Filled when the document opens (`onOpen` run, only where the add-on is ON and a settings sheet exists -
+it never creates one), replaced by every edit or structure change in the settings sheet and by `addNewSheetInfo`, not used when it was made for another settings sheet name, and rebuilt from the settings sheet when it has expired or the cache
+service is unavailable. A config sheet added by hand to the settings sheet is therefore known after that very edit; one added while the triggers were off, within the hour. Tests: `tests/managed-sheets.test.js`.

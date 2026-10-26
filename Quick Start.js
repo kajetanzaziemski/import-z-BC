@@ -8,7 +8,7 @@ function onOpen(e) {
   // testFunc_errorReporting();
   menuSelector();
   Controller.checkInput("onOpen",{e});
-  if(e.authMode != ScriptApp.AuthMode.NONE) return Controller.run("onOpen",() => StatusManager.lightStatusCheck(),e);     // true when the agents are active
+  if(e.authMode != ScriptApp.AuthMode.NONE) return Controller.run("onOpen",() => { ManagedSheets.warmUp(); return StatusManager.lightStatusCheck(); },e);     // true when the agents are active
 }
 
 function onEdit(e) {                    

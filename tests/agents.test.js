@@ -77,7 +77,7 @@ module.exports = function register(t) {
           Logger: { log: line => d.log.push(String(line).replace(/\[AGENT-CHECK [^\]]*\] /, '')) },
           SpreadsheetApp: { getActiveSpreadsheet: () => ss, getUi: () => ({ alert() { d.alerts++; } }), flush() {}, openById: () => ss }
         }, more || {}));
-        ex.eval(`globalThis.getMainSettings = () => ({ isConfigSheet: () => false }); globalThis.dbgLog = () => {}; globalThis.menuSelector = () => {}; globalThis.Router = { edit() {}, change() {} };
+        ex.eval(`globalThis.getMainSettings = () => ({ isConfigSheet: () => false }); globalThis.dbgLog = () => {}; globalThis.menuSelector = () => {}; globalThis.Router = { edit() {}, change() {} }; globalThis.ManagedSheets = { warmUp() {} };
                  { const D = Date; globalThis.Date = class extends D { constructor(...a) { if (a.length) super(...a); else super(__p.now); } static now() { return __p.now; } }; }`);
         return ex.eval(code);
       };

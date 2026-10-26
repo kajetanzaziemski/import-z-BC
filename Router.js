@@ -14,8 +14,8 @@
 //
 // routeEdit / routeChange only LOOK (they return a route: { intent, sheet, event }); perform() announces the intent to the live check
 // (Controller.intent) and runs the action. Nothing else decides what an edit means.
-// Quirks kept from before: the sheet is the ACTIVE sheet, not the sheet of the edited range; the settings sheet object is built for every
-// edit and change that is not an EDIT / FORMAT one (bugs-todo #10).
+// Quirk kept from before: the sheet is the ACTIVE sheet, not the sheet of the edited range. Which sheets are config sheets comes from the cache
+// (Managed Sheets.js); the settings sheet object is built only for an edit or a change in the settings sheet itself (bugs-todo #10, fixed).
 // ---------------------------------------------------------------------------
 
 const ROUTE_ACTIONS_ = {
@@ -34,16 +34,22 @@ const Router = {
   routeEdit(e){
     const sheet = e.source.getActiveSheet().getName();
     if(sheet == MainSettings.getSettingsSheetName()){
-      return {intent: getMainSettings().isRefreshFrequencyCell(e.range) ? "settings.refreshFrequency" : "settings.edit", sheet: sheet, event: e};
+      const settings = getMainSettings();      // the list of config sheets may have changed with this edit: the cache is replaced
+      ManagedSheets.store(settings);
+      return {intent: settings.isRefreshFrequencyCell(e.range) ? "settings.refreshFrequency" : "settings.edit", sheet: sheet, event: e};
     }
-    return {intent: getMainSettings().isConfigSheet(sheet) ? "config.coedit" : "sheet.ignored", sheet: sheet, event: e};
+    return {intent: ManagedSheets.isConfigSheet(sheet) ? "config.coedit" : "sheet.ignored", sheet: sheet, event: e};
   },
 
   /** The installable onChange event -> a route. A structure change carries no event of the cells. */
   routeChange(e){
     if(e.changeType=="EDIT" || e.changeType=="FORMAT") return {intent: "change.ignored", changeType: e.changeType};
     const sheet = e.source.getActiveSheet().getName();
-    return {intent: getMainSettings().isConfigSheet(sheet) ? "config.coedit" : "sheet.ignored", sheet: sheet, changeType: e.changeType};
+    if(sheet == MainSettings.getSettingsSheetName()){
+      ManagedSheets.rebuild();                 // a line inserted or deleted in the settings sheet
+      return {intent: "sheet.ignored", sheet: sheet, changeType: e.changeType};
+    }
+    return {intent: ManagedSheets.isConfigSheet(sheet) ? "config.coedit" : "sheet.ignored", sheet: sheet, changeType: e.changeType};
   },
 
   /** Announces the intent (live check) and runs what it stands for. */

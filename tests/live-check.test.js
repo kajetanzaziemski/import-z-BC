@@ -350,7 +350,7 @@ module.exports = function register(t) {
   });
 
   // ---- jobs (intents): a run is reported under what it DID, via the technical trigger ---------------------------------------------------------
-  const JOB_FILES = ['Import Query.js', 'BulkSheet.js', 'ResultSheet.js', 'RefreshSheet.js', 'EstimateSheet.js', 'RefreshAll.js', 'ScheduleRefresh.js', 'AnalyseConfig.js', 'Router.js',
+  const JOB_FILES = ['Import Query.js', 'BulkSheet.js', 'ResultSheet.js', 'RefreshSheet.js', 'EstimateSheet.js', 'RefreshAll.js', 'ScheduleRefresh.js', 'AnalyseConfig.js', 'Router.js', 'Managed Sheets.js',
     'Data Type.js', 'Menu.js', 'Menu Actions.js', 'Sheet Coeditor.js', 'Grid.js', 'Grid Util.js', 'Config Grid.js'];
 
   test('live check jobs: every job the code announces (Controller.intent, the router\'s action table) is in the catalogue and has a verifier, and none is orphaned', () => {
@@ -395,7 +395,7 @@ module.exports = function register(t) {
     ex.eval(`Agents.ensureActive = () => {};
       globalThis.CCTImportConfig = class { constructor(v) { this.v = v; } };
       SheetCoeditor.prototype.sheetEdit = function () {};
-      getMainSettings = () => ({ isConfigSheet: n => n === 'Konfiguracja 1', isRefreshFrequencyCell: r => isInRange(4, 4, r) || isInRange(4, 5, r),
+      getMainSettings = () => ({ getConfigSheetNames: () => ['Konfiguracja 1'], isConfigSheet: n => n === 'Konfiguracja 1', isRefreshFrequencyCell: r => isInRange(4, 4, r) || isInRange(4, 5, r),
         setRefreshTrigger: () => ScheduleRefresh.setUp({ freq: 6, unit: 'hrs' }), getSheetListWithRefreshTrue: () => [], setLastRefresh: () => {} });`);
     ex.eval(`new SheetCoeditor('Konfiguracja 1', false)`);
     if (o.breakIt) ex.eval(o.breakIt);

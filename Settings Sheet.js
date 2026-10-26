@@ -144,6 +144,7 @@ class SettingsSheet{
     if(this.lastRefreshPos > after) this.lastRefreshPos++;
     if(this.refreshFrequencyPos > after) this.refreshFrequencyPos++;
     this.sheetList.push(this.createObjectFromList(["configSheet","resultSheet","refresh"],[configSheetName,resultSheetName,refresh]));
+    ManagedSheets.store(this);
     return this.sheetList[this.sheetList.length-1];
   }
 
