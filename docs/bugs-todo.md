@@ -90,3 +90,8 @@ Found while building and testing the live check helpers (`docs/live-check.md`), 
 - **#6 `readAllPages()` without a co-editor: FIXED.** The status switch in the `catch` block and after the loop is guarded like the others; a failing read gives its own error back (`tests/bc-layer.test.js`).
 - **#8 `onOpen` result: FIXED.** `onOpen` returns what its run returns (`true` when the agents are active, `null` when the gate skipped the run); `tests/agents.test.js`.
 - **#10 unrelated edits building `SettingsSheet`: FIXED with a cache** (`Managed Sheets.js`, `docs/router.md`): filled on open, refreshed by edits / structure changes in the settings sheet and by the wizard, expires after an hour.
+- **#16 refresh with BC answering an error document (not authorised / logged out): FIXED.** `ODataConnection.readAllPages` returned early on an error document without switching the connection light off (C2 stayed red), and `RefreshSheet` then crashed
+  on the column types (an error document has no column info), so the sheet ended with the connection light on after a `TypeError`. Now the light is put back, and the error (code / message rows) is written to the result sheet as text, as the early return was meant to
+  (`tests/offline-refresh.test.js`; with the connection refused outright - `ConnectionError` - the lights were already idle, also pinned there).
+- **#17 an unspecified row limit: FIXED.** A `limit` line with an empty cell (or text, 0, a negative number) made `getLimit()` return nothing while the url said `$top=100`, so the estimate of the rows was "not a number". `setLimit` keeps the default of 100 for anything
+  that is not a positive number or `unlimited` (`tests/bc-layer.test.js`).

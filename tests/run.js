@@ -596,6 +596,7 @@ require('./state.test.js')({ test, suffix: ' [+live check files]', extraFiles: [
 // ---- refresh and estimate workflows (real Menu.js / use cases, faked config reader and BC connection) ---------------------------
 require('./refresh.test.js')({ test });
 require('./menu.test.js')({ test });
+require('./offline-refresh.test.js')({ test });
 require('./auth.test.js')({ test });
 require('./bc-layer.test.js')({ test });
 

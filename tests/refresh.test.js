@@ -41,6 +41,7 @@ const FAKES = `
     readAllPages(shCoed) { __log.push(['conn.readAllPages', shCoed === __coeditor]); if (__cfg.readError) throw new Error(__cfg.readError); return this; }
     getColumnInfo() { return __cfg.columnInfo; }
     getDataArray() { return __cfg.dataArray; }
+    getError() { return null; }
     fetchHttpResponse() { __log.push(['conn.fetch']); if (__cfg.fetchError) throw new Error(__cfg.fetchError); return this; }
     readPage() { __log.push(['conn.readPage']); return this; }
     getTotalRows() { return __cfg.totalRows; }

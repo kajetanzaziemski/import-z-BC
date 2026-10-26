@@ -271,7 +271,7 @@ module.exports = function register(t) {
       globalThis.ODataConnection = class { setODataQuery() { return this } setExtendQuery() { return this } setupConnection() { this.queryURL = 'u'; return this }
         readAllPages(sh) { sh.switchConnectionControl(true); sh.setTotRowsInfo(1); sh.switchConnectionControl(false); return this }
         fetchHttpResponse() { return this } readPage() { return this } getTotalRows() { return 1 }
-        getColumnInfo() { return [{ table: null, field: 'No' }] } getDataArray() { return [['No'], ['C1']] } };
+        getColumnInfo() { return [{ table: null, field: 'No' }] } getDataArray() { return [['No'], ['C1']] } getError() { return null } };
       getMetadata = () => ({ getDataType: () => 'Edm.String' });
       getMainSettings = () => ({ getConfigSheetName: n => (n === 'Konfiguracja 1' ? n : null), getResultSheetName: () => 'Wynik', getConfigSheetNames: () => ['Konfiguracja 1'], getSheetList: () => [{ configSheet: 'Konfiguracja 1', resultSheet: 'Wynik' }] });`);
     ex.eval(`new SheetCoeditor('Konfiguracja 1', false)`);                       // the sheet with its header

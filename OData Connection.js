@@ -67,6 +67,7 @@ class ODataConnection{
         if(i==2 && shCoed) shCoed.setTotRowsInfo(this.getTotalRows());
         if(this.error){
           this.dataArray = Object.entries(this.error);
+          if(shCoed) shCoed.switchConnectionControl(false);      // BC answered with an error document: nothing more will be fetched
           return this;
         }
       }
@@ -113,6 +114,11 @@ class ODataConnection{
     if(!requestURL) return this;
     this.response = BCConnection.fetchURL(requestURL);
     return this;
+  }
+
+  /** The error document BC answered with (an object with code and message), or null/undefined when the last page was fine. */
+  getError(){
+    return this.error;
   }
 
   getDataArray(){

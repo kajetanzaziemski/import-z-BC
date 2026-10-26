@@ -73,4 +73,29 @@ module.exports = function register(t) {
     b.ex.eval(`BCConnection.fetchURL = () => { throw new Error('BC down'); }`);
     assert.strictEqual(b.ex.eval(`try { new ODataConnection().setODataQuery('Customer', [['select', 'No']], {}).setupConnection().readAllPages(); 'no error' } catch (e) { e.message }`), 'BC down');
   });
+
+  // ---- the row limit: unspecified (no line, an empty cell, nonsense) means 100 ---------------------------------------------------------------------
+  test('limit: a limit that is not specified or not a positive number is 100 - in the url AND in what the connection counts on (it was NaN for an empty cell)', () => {
+    const { ex } = scenario([]);
+    const q = lines => plain(ex.eval(`(() => { const q = new ODataQuery(${JSON.stringify(lines)}); return [q.getLimit(), q.queryText()]; })()`));
+    const top = (lim, text) => ({ lim, top: (text.match(/\$top=(\d+)/) || [])[1] ?? null });
+    const r = lines => { const [lim, text] = q(lines); return top(lim, text); };
+    assert.deepStrictEqual(r([['select', 'No']]), { lim: 100, top: '100' }, 'no limit line');
+    [[['limit']], [['limit', '']], [['limit', '', '']], [['limit', null]], [['limit', 'abc']], [['limit', 0]], [['limit', -5]], [['limit', '0']], [['limit', ' ']]].forEach(lines =>
+      assert.deepStrictEqual(r(lines), { lim: 100, top: '100' }, JSON.stringify(lines)));
+    assert.deepStrictEqual(r([['limit', 250]]), { lim: 250, top: '250' });
+    assert.deepStrictEqual(r([['limit', '250']]), { lim: '250', top: '250' });
+    assert.deepStrictEqual(r([['limit', 'unlimited']]), { lim: 'unlimited', top: null }, 'unlimited is the one word that lifts the limit');
+    assert.deepStrictEqual(r([['limit', 5], ['limit', '']]), { lim: 100, top: '100' }, 'the later line wins, also when it is empty');
+  });
+
+  test('limit: the estimate of the rows follows the effective limit - an empty limit cell counts 100 rows, not "not a number"', () => {
+    const many = { '@odata.count': 1000, value: [{ No: 'C1' }] };
+    const a = scenario([many]);
+    a.ex.eval(`globalThis.__c = new ODataConnection().setODataQuery('Customer', [['select', 'No'], ['limit', '']], {}).setupConnection(); __c.readAllPages();`);
+    assert.strictEqual(a.ex.eval('__c.totalRows'), 100);
+    const b = scenario([many]);
+    b.ex.eval(`globalThis.__c = new ODataConnection().setODataQuery('Customer', [['select', 'No'], ['limit', 'unlimited']], {}).setupConnection(); __c.readAllPages();`);
+    assert.strictEqual(b.ex.eval('__c.totalRows'), 1000);
+  });
 };

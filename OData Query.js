@@ -96,8 +96,10 @@ class ODataQuery {
     return this.query.filterLogic.get(filteringField) ?? "AND";
   }
 
+  /** A positive number of rows, or "unlimited". Anything else - an empty cell, text, 0, a negative number - is not a limit: the default of 100 rows stays. */
   setLimit(noOfRows){
-    this.query.limit = noOfRows;
+    const value = typeof noOfRows === 'string' ? noOfRows.trim() : noOfRows;
+    this.query.limit = value === "unlimited" ? "unlimited" : value > 0 ? noOfRows : 100;
     return this;
   }
 

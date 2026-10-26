@@ -24,7 +24,10 @@ const RefreshSheet = {
       odConnection = ImportQuery.connectionFor(shCoed);
       odConnection.readAllPages(shCoed);
 
-      columnDataTypes = odConnection.getColumnInfo().map(info => getMetadata().getDataType(info.field,info.table ?? shCoed.getTable()));
+      // An error document from BC is shown as it is (code / message rows, text): it has no columns to look up in the metadata.
+      columnDataTypes = odConnection.getError()
+        ? odConnection.getDataArray()[0].map(() => 'Edm.String')
+        : odConnection.getColumnInfo().map(info => getMetadata().getDataType(info.field,info.table ?? shCoed.getTable()));
     } catch(e) {
       shCoed.switchReadingControl(false);
       throw e;  
