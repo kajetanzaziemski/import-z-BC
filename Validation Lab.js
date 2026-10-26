@@ -20,18 +20,21 @@ const ValidationLab = {
     const apiOk = typeof Sheets !== "undefined" && !!Sheets && !!Sheets.Spreadsheets;
 
     const quoted = ODataQuery.listComparisonOperators().map(op => "'"+op);
+    const all = ODataQuery.listComparisonOperators();
     const plain = ODataQuery.listComparisonOperators().filter(op => op != "=");     // a lone "=" cannot be a plain item (it would be a formula)
     const rules = [
       {row: 5, label: "reguła: usługa, elementy z apostrofem",     items: quoted, by: "service"},
       {row: 6, label: "reguła: API, elementy z apostrofem",        items: quoted, by: "api"},
       {row: 7, label: "reguła: usługa, elementy bez apostrofu",    items: plain,  by: "service"},
-      {row: 8, label: "reguła: API, elementy bez apostrofu",       items: plain,  by: "api"}
+      {row: 8, label: "reguła: API, elementy bez apostrofu",       items: plain,  by: "api"},
+      {row: 9, label: "reguła: API, bez apostrofu, Z '='",          items: all,    by: "api"},
+      {row: 10, label: "reguła: usługa, bez apostrofu, Z '='",      items: all,    by: "service"}
     ];
     const columns = [
-      {col: 2, head: ">= (usługa)",              text: ">=", typed: ">=", by: "service"},
-      {col: 3, head: ">= (API)",                 text: ">=", typed: ">=", by: "api"},
-      {col: 4, head: "= (usługa, jako tekst)",   text: "=",  typed: "'=", by: "service"},
-      {col: 5, head: "= (API)",                  text: "=",  typed: "=",  by: "api"},
+      {col: 2, head: "wartość >= (usługa)",              text: ">=", typed: ">=", by: "service"},
+      {col: 3, head: "wartość >= (API)",                 text: ">=", typed: ">=", by: "api"},
+      {col: 4, head: "wartość '=' (usługa, jako tekst)",   text: "=",  typed: "'=", by: "service"},
+      {col: 5, head: "wartość '=' (API)",                  text: "=",  typed: "=",  by: "api"},
       {col: 6, head: "pusta: wybierz z listy",   text: "",   typed: null, by: null}
     ];
 
@@ -54,9 +57,15 @@ const ValidationLab = {
     }
 
     const ruleRequests = [];
+    const problems = new Set();
     rules.forEach(r => columns.forEach(c => {
       if(r.by == "service"){
-        sheet.getRange(r.row,c.col).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(r.items,true).setAllowInvalid(true).build());
+        try{
+          sheet.getRange(r.row,c.col).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(r.items,true).setAllowInvalid(true).build());
+        }
+        catch(e){
+          problems.add("wiersz " + r.row + ": usługa nie przyjęła reguły (" + e.message + ")");
+        }
       }
       else if(apiOk){
         ruleRequests.push({updateCells: {rows: [{values: [{dataValidation: {condition: {type: "ONE_OF_LIST", values: r.items.map(x => ({userEnteredValue: x}))}, showCustomUi: true}}]}],
@@ -68,7 +77,8 @@ const ValidationLab = {
       Sheets.Spreadsheets.batchUpdate({requests: ruleRequests},ss.getId());
     }
     sheet.autoResizeColumns(1,6);
-    if(!apiOk) return "Arkusz \"" + ValidationLab.SHEET + "\" utworzony, ale bez usługi Sheets (API): wiersze i kolumny API są puste.";
-    return "Arkusz \"" + ValidationLab.SHEET + "\" utworzony. Zobacz, które komórki mają czerwony trójkąt, i wybierz wartości z listy w kolumnie F.";
+    const problemText = problems.size ? " Problemy: " + [...problems].join("; ") : "";
+    if(!apiOk) return "Arkusz \"" + ValidationLab.SHEET + "\" utworzony, ale bez usługi Sheets (API): wiersze i kolumny API są puste." + problemText;
+    return "Arkusz \"" + ValidationLab.SHEET + "\" utworzony. Zobacz, które komórki mają czerwony trójkąt, i wybierz wartości z listy w kolumnie F." + problemText;
   }
 };

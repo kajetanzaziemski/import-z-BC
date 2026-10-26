@@ -23,6 +23,7 @@ module.exports = function register(t) {
     return { book, ctx, run: code => vm.runInContext(code, ctx) };
   }
   const OPS = ["'<", "'>", "'=", "'<>", "'<=", "'>=", "'endswith", "'startswith", "'contains"];
+  const ALL = ['<', '>', '=', '<>', '<=', '>=', 'endswith', 'startswith', 'contains'];
   const PLAIN = ['<', '>', '<>', '<=', '>=', 'endswith', 'startswith', 'contains'];
   const dvList = (book, r, c) => { const dv = (book.sheets['Test weryfikacji'].cell(r, c) || {}).dv || ''; const m = dv.match(/^list:(.*):(strict|loose):(dropdown|plain)$/); return m ? { items: m[1].split('|'), mode: m[2] } : dv; };
   const val = (book, r, c) => (book.sheets['Test weryfikacji'].cell(r, c) || { v: '' }).v;
@@ -33,14 +34,15 @@ module.exports = function register(t) {
       s.run(`ValidationLab.build()`);
       assert.ok(s.book.sheets['Test weryfikacji']);
       // (the simulated service keeps the apostrophe of "'=" - the real one takes it as the sign of plain text)
-      [5, 6, 7, 8].forEach(r => {
+      [5, 6, 7, 8, 9, 10].forEach(r => {
         assert.strictEqual(typeof val(s.book, r, 1), 'string', 'a label in column A');
         const want = mode === 'api' ? ['>=', '>=', "'=", '=', ''] : ['>=', '', "'=", '', ''];
         assert.deepStrictEqual([2, 3, 4, 5, 6].map(c => val(s.book, r, c)), want, 'row ' + r);
       });
-      const rows = (list, expectedRows) => expectedRows.forEach(r => [2, 3, 4, 5, 6].forEach(c => assert.deepStrictEqual(dvList(s.book, r, c), r === 6 || r === 8 ? (mode === 'api' ? list : '') : list, `rule ${r},${c}`)));
+      const rows = (list, expectedRows) => expectedRows.forEach(r => [2, 3, 4, 5, 6].forEach(c => assert.deepStrictEqual(dvList(s.book, r, c), r === 6 || r === 8 || r === 9 ? (mode === 'api' ? list : '') : list, `rule ${r},${c}`)));
       rows({ items: OPS, mode: 'loose' }, [5, 6]);
       rows({ items: PLAIN, mode: 'loose' }, [7, 8]);
+      rows({ items: ALL, mode: 'loose' }, [9, 10]);
     });
   });
 
@@ -50,9 +52,9 @@ module.exports = function register(t) {
     const reqs = s.book.requests.flat();
     const rules = reqs.filter(r => r.updateCells && r.updateCells.fields === 'dataValidation');
     const values = reqs.filter(r => r.updateCells && r.updateCells.fields === 'userEnteredValue');
-    assert.strictEqual(rules.length, 10, 'two API rule rows x five columns');
-    assert.deepStrictEqual(JSON.parse(JSON.stringify(rules.map(r => r.updateCells.start.rowIndex).sort())), [5, 5, 5, 5, 5, 7, 7, 7, 7, 7], 'rows 6 and 8 (0-based 5 and 7)');
-    assert.strictEqual(values.length, 8, 'two API value columns x four rows');
+    assert.strictEqual(rules.length, 15, 'three API rule rows (6, 8, 9) x five columns');
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(rules.map(r => r.updateCells.start.rowIndex).sort())), [5, 5, 5, 5, 5, 7, 7, 7, 7, 7, 8, 8, 8, 8, 8], 'rows 6, 8 and 9 (0-based 5, 7, 8)');
+    assert.strictEqual(values.length, 12, 'two API value columns x six rows');
     assert.ok(values.every(v => v.updateCells.rows[0].values[0].userEnteredValue.stringValue !== undefined));
     assert.deepStrictEqual(JSON.parse(JSON.stringify(rules[0].updateCells.rows[0].values[0].dataValidation.condition.values.map(v => v.userEnteredValue))), OPS);
   });
@@ -64,6 +66,21 @@ module.exports = function register(t) {
     assert.ok(/API/.test(String(val(s.book, 6, 1))));
     assert.strictEqual(dvList(s.book, 6, 2), '', 'no rule in an API row');
     assert.strictEqual(val(s.book, 5, 3), '', 'no value in an API column');
+  });
+
+  test('lab: no header or label begins with "=" (it would be read as a formula)', () => {
+    const s = scope('api');
+    s.run(`ValidationLab.build()`);
+    const sh = s.book.sheets['Test weryfikacji'];
+    for (let r = 1; r <= 4; r++) for (let c = 1; c <= 6; c++) assert.ok(!String(((sh.cell(r, c)) || { v: '' }).v).startsWith('='), r + ',' + c);
+    for (let r = 5; r <= 10; r++) assert.ok(!String(sh.cell(r, 1).v).startsWith('='), 'label ' + r);
+  });
+
+  test('lab: a rule the service refuses is reported in the note, not thrown', () => {
+    const s = scope('service');
+    s.run(`(() => { const nv = SpreadsheetApp.newDataValidation; SpreadsheetApp.newDataValidation = () => { const b = nv(); const f = b.requireValueInList; b.requireValueInList = (items, d) => { if (items.includes('=')) throw new Error('bad item'); return f.call(b, items, d); }; return b; }; })()`);
+    const note = s.run(`ValidationLab.build()`);
+    assert.ok(/wiersz 10: usługa nie przyjęła reguły \(bad item\)/.test(note), note);
   });
 
   test('lab: building it again replaces the old sheet (nothing else is touched)', () => {
