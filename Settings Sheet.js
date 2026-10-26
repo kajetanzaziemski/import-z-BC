@@ -7,7 +7,6 @@ class SettingsSheet{
 
     if(!SettingsGrid.exists(name)) SettingsGrid.create(name);
     this.grid = SettingsGrid.open(name);
-    this.setupEditTriggers();
     this.settings = this.getAllSettingsData();
     this.lastConfigSheetPos = 2;
     this.lastRefreshPos = null;
@@ -25,13 +24,6 @@ class SettingsSheet{
   //   // if(!storedSettings.getArray().importSheetName) storedSettings.storageArray.importSheetName = "Ustawienia Importu";
   //   return storedSettings.getArray().importSheetName;
   // }
-
-  setupEditTriggers(){
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    let triggers = ScriptApp.getUserTriggers(ss);
-    if (triggers.find(trigger => trigger.getHandlerFunction()=="sheetEdit")==null) ScriptApp.newTrigger('sheetEdit').forSpreadsheet(ss).onEdit().create();
-    if(triggers.find(trigger => trigger.getHandlerFunction()=="sheetChange")==null) ScriptApp.newTrigger('sheetChange').forSpreadsheet(ss).onChange().create();
-  }
 
   /** Is the edited range (part of) the refresh frequency: its number (column D) or its unit (column E)? */
   isRefreshFrequencyCell(range){

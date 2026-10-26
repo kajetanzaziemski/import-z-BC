@@ -34,7 +34,7 @@ Found while building and testing the live check helpers (`docs/live-check.md`), 
 8. **`onOpenAction`** does not return what `lightStatusCheck()` returns, so a caller cannot tell whether the agents are active.
 9. **`sheetChange`** checks the trigger power after running the action (also #5 in `trigger-management-todo.md`).
 10. **Unrelated edits still build `SettingsSheet`.** `updateAfterEdit()` calls `getMainSettings()` for every edit in every
-    sheet, which reads the whole settings sheet and creates it (plus two unlogged triggers) when missing - see the earlier
+    sheet, which reads the whole settings sheet and creates it (its raw triggers are gone) when missing - see the earlier
     discussion about firewalling add-on runs in unrelated files.
 11. **`SettingsSheet` row positions go stale.** `addNewSheetInfo()` inserts a config line (after row 2 while there are no config lines, i.e. above the `lastRefresh` /
     `refreshFrequency` lines) but does not move `lastRefreshPos` / `refreshFrequencyPos`; a `setLastRefresh()` later in the same execution writes into the wrong row.

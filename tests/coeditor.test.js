@@ -334,7 +334,7 @@ module.exports = function register(t) {
   // start - the same 13 rows, the same hash, 8-11 s on, through re-reads and waits - until its own flush (after its own commit) brought the view up to date
   // (the probes had shown the same: reads lag until the reading execution calls SpreadsheetApp.flush()). An execution that started after the commit read it
   // right away. So it inserted the extend line and the empty queryOption line again. The model below is that: reads of an execution are served from the
-  // state at its start until it flushes. ConfigGrid.lines() now flushes before it reads.
+  // state at its start until it flushes. Grid.open now flushes before it reads.
   const countLabels = sh => { const n = {}; for (let r = 6; r <= sh.lastRow(); r++) { const l = (sh.cell(r, 2) || {}).v; const blank = ![3, 4, 5, 6].some(c => (sh.cell(r, c) || {}).v); const k = l + (blank ? '(empty)' : ''); n[k] = (n[k] || 0) + 1; } return n; };
   const cloneSheet = sim => Object.assign(Object.create(Object.getPrototypeOf(sim)), sim, { cells: JSON.parse(JSON.stringify(sim.cells)), merges: sim.merges.map(m => Object.assign({}, m)), condRules: [] });
   /** Reads of the Spreadsheet service come from `frozen` (state of the sheets at the start of the reading execution) until SpreadsheetApp.flush() is called; writes go to the sheet. */
@@ -362,7 +362,7 @@ module.exports = function register(t) {
       isStale: () => frozen !== null
     };
   }
-  const WITHOUT_FLUSH = `ConfigGrid.lines = eval('({' + ConfigGrid.lines.toString().replace('SpreadsheetApp.flush();', '') + '})').lines;`;      // ConfigGrid.lines as it was
+  const WITHOUT_FLUSH = `Grid.open = eval('(' + Grid.open.toString().replace('if (!sheetsApiAvailable_()) SpreadsheetApp.flush();', '') + ')');`;      // Grid.open as it was
 
   {
     const staleRun = (beforeSecond) => {

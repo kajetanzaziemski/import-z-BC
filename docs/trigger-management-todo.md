@@ -8,7 +8,7 @@ Findings from the review of `Trigger Manager.js`, `Status Manager.js`, `Quick St
 3. **`TriggerWrapper.deleteTrigger(trigger)`** with a Trigger object passes the object to `deleteEntryWithTriggerId`, so log entries are never removed (installNew pre-delete). Use `trigger.getUniqueId()`. `recruitAgent` can then return a stale id.
 4. **Eviction** (`deleteOldest`): user-log entry is removed only when the current document's log had the id; the victim document keeps an ON entry. See design below.
 5. **`sheetChange`** runs `sheetChangeAction` before the power check (`Quick Start.js`).
-6. **`SettingsSheet.setupEditTriggers()`** (called from the constructor) creates unlogged `sheetEdit`/`sheetChange` triggers bypassing `AgentManager` and the 5-set limit. Remove or route through `AgentManager`.
+6. **`SettingsSheet.setupEditTriggers()`** (called from the constructor) creates unlogged `sheetEdit`/`sheetChange` triggers bypassing `AgentManager` and the 5-set limit. Remove or route through `AgentManager`. **DONE:** removed; the standard status check is the only way agents are installed (docs/agent-lifecycle.md).
 
 ## Weak spots
 - Four sources of truth (project triggers, doc log, user log, `agentStorage`) reconciled only by `logCleanUp`. `deleteTrigger` does not touch `agentStorage`; drift makes eviction start too early or never.

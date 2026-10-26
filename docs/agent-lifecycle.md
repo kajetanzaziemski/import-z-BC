@@ -33,8 +33,7 @@ at most one edit and one change trigger per user and document (otherwise `Simple
 
 `recruitAgent()` first asks "active?" — if yes it returns the existing edit trigger's id and does nothing. Otherwise: if the **pair list already has 5 pairs** (all documents of the user together) it evicts one first (below), else it installs.
 
-**Raw triggers** (a different path, quirk): `SettingsSheet`'s constructor creates `sheetEdit` and `sheetChange` triggers directly when the user has none for this document — not logged, not in the pair list, not
-subject to the limit. This happens in every run that builds the settings sheet object (`getMainSettings()`). They are not "active" (logs empty), so the next status check deletes them as part of `installNew()` and installs a logged pair.
+**No other path.** `SettingsSheet` used to create raw `sheetEdit` / `sheetChange` triggers (not logged, outside the limit) whenever it was built; that is gone. The agents come only from the status check / the button above.
 
 ## When agents are REPLACED
 `forceRefresh()` = **power off** every agent of the document (document log and user log, `powerOn=false`) -> **clean up** the logs against the project triggers (table below) -> `recruitAgent()`.
@@ -76,5 +75,5 @@ ON|OFF|V  user powered OFF (tombstone), remove doc, uninstall   (the document's 
 ## What this adds up to (observed in `tests/agents.test.js`)
 - One user with agents in six documents: the sixth evicts the first. The first document believes it is covered (ghost entries), nothing repairs it; its next edits trigger the detector (suspect, then dead + OFF),
   and its next menu click repairs it — by evicting the *next* oldest pair. With more than five documents the documents take each other's slots in turn.
-- Real quota: 20 triggers per user and script; five pairs are ten, plus the time triggers of the automatic refresh and the raw triggers of `SettingsSheet`. Nothing counts them.
+- Real quota: 20 triggers per user and script; five pairs are ten, plus the time triggers of the automatic refresh. Nothing counts them.
 - Logs are whole-array snapshots written at the end of a run (`StorageArray`): two runs of one document that both change a log can overwrite each other.

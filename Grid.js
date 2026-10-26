@@ -1022,6 +1022,9 @@ function sheetsApiAvailable_() {
  */
 Grid.open = function (spec) {
   const fresh = !!spec.reset;
+  // An execution sees the spreadsheet as of its start or its last flush, not as other executions left it (real trace: docs/coedit-tracking.md). The service path
+  // reads that view, so it flushes first; the Sheets API reads the server and needs nothing.
+  if (!sheetsApiAvailable_()) SpreadsheetApp.flush();
   if (!fresh && !SpreadsheetApp.getActiveSpreadsheet().getSheetByName(spec.sheetName)) return null;   // both paths: a missing sheet is null
   if (sheetsApiAvailable_()) return loadGridViaApi_(spec, fresh);
 

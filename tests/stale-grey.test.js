@@ -133,12 +133,46 @@ module.exports = function register(t) {
     assert.ok(/setLineFormats\(/.test(text));
   });
 
-  ['api', 'service'].forEach(mode => test(`reading the lines flushes first - reads without a flush were seen a moment behind on a real sheet [${mode}]`, () => {
+  test('reading the lines flushes first - reads without a flush were seen a moment behind on a real sheet [service]', () => {
+    const ev = flushOrder('service', `ConfigGrid.lines('K').values();`);
+    assert.strictEqual(ev[0], 'flush', JSON.stringify(ev));
+    assert.strictEqual(ev.filter(x => x === 'flush').length, 1);
+  });
+
+  function flushOrder(mode, code) {
     const s = scope(mode);
     s.run(`ConfigGrid.create('K')`);
-    s.run(`globalThis.__order = []; const f = SpreadsheetApp.flush; SpreadsheetApp.flush = () => { __order.push('flush'); f(); }; const o = Grid.open; Grid.open = spec => { __order.push('open'); return o(spec); };
-      ConfigGrid.lines('K');`);
-    assert.deepStrictEqual(JSON.parse(s.run('JSON.stringify(__order)')), ['flush', 'open']);
+    const ev = [];
+    const sheetObj = s.book.sheetObj.bind(s.book);
+    s.book.sheetObj = sim => { const o = sheetObj(sim), gr = o.getRange; o.getRange = (...a) => { ev.push('read'); return gr(...a); }; return o; };
+    s.ctx.__ev = ev;
+    s.run(`const f = SpreadsheetApp.flush; SpreadsheetApp.flush = () => { __ev.push('flush'); f(); };`);
+    s.run(code);
+    return ev;
+  }
+  test('Grid.open on the service path flushes before it reads anything (any Grid reader sees what other executions wrote) [service]', () => {
+    const ev = flushOrder('service', `Grid.open({ sheetName: 'K' });`);
+    assert.strictEqual(ev[0], 'flush', JSON.stringify(ev));
+    assert.strictEqual(ev.filter(x => x === 'flush').length, 1, 'one flush per open');
+    assert.ok(ev.includes('read'));
+  });
+
+  test('Grid.open on the API path does not flush (the API reads the server, only creating a sheet flushes) [api]', () => {
+    const s = scope('api');
+    s.run(`ConfigGrid.create('K')`);
+    s.run(`globalThis.__n = 0; const f = SpreadsheetApp.flush; SpreadsheetApp.flush = () => { __n++; f(); }; Grid.open({ sheetName: 'K' });`);
+    assert.strictEqual(s.run('__n'), 0);
+  });
+
+  ['api', 'service'].forEach(mode => test(`every status switch flushes right after its commit - the user watches the colours [${mode}]`, () => {
+    const s = scope(mode);
+    s.run(`ConfigGrid.create('K')`);
+    s.run(`globalThis.__ev = []; const f = SpreadsheetApp.flush; SpreadsheetApp.flush = () => { __ev.push('flush'); f(); };
+      const h = ConfigGrid.status('K'); __ev.length = 0;
+      h.set('reading', true); __ev.push('|'); h.set('connection', false); __ev.push('|'); h.set('writing', true); __ev.push('|');
+      h.setEstimateActive(false); __ev.push('|'); h.setTotalRows(5); __ev.push('|');`);
+    const ev = JSON.parse(s.run('JSON.stringify(__ev)'));
+    assert.deepStrictEqual(ev, ['flush', '|', 'flush', '|', 'flush', '|', 'flush', '|', 'flush', '|']);
   }));
 
   // ---- the argument separator follows the locale of the spreadsheet (Polish: ";") ----------------------------------------------------------------------

@@ -156,17 +156,6 @@ module.exports = function register(t) {
     assert.strictEqual(a.state().suspect, null);
   });
 
-  test('agents: quirk - SettingsSheet creates RAW sheetEdit / sheetChange triggers (not logged, not in the pair list) whenever none exists; the next status check replaces them with a logged pair', () => {
-    const w = world(), a = w.doc('A');
-    a.run(`SettingsSheet.prototype.setupEditTriggers.call({})`, {});
-    assert.deepStrictEqual(a.state(), { project: ['trig-1:sheetEdit@A', 'trig-2:sheetChange@A'], doc: [], user: [], pairs: [], suspect: null });
-    a.run(`SettingsSheet.prototype.setupEditTriggers.call({})`);
-    assert.strictEqual(a.p.triggers.length, 2, 'not again while they exist');
-    click(a);                                                                           // checkIfActive is false (logs are empty): installNew deletes ALL user edit/change triggers of the document first
-    assert.deepStrictEqual(a.state().project, ['trig-3:sheetEdit@A', 'trig-4:sheetChange@A']);
-    assert.deepStrictEqual(a.state().pairs, [['trig-3', 'trig-4']]);
-  });
-
   // ---- the limit and eviction ---------------------------------------------------------------------------------------------------------------
   function sixDocs() {
     const w = world();
@@ -394,10 +383,10 @@ module.exports = function register(t) {
     });
   });
 
-  test('rule: only Trigger Manager.js (TriggerGateway) creates, deletes and lists triggers for the agents; the other ScriptApp callers are the time trigger and the settings sheet\'s raw triggers', () => {
+  test('rule: only Trigger Manager.js (TriggerGateway) creates, deletes and lists triggers for the agents; the other ScriptApp caller is the time trigger', () => {
     const users = fs.readdirSync(ROOT).filter(f => /\.js$/.test(f) && !/^(Live Check|Test Functions)/.test(f))
       .filter(f => /ScriptApp\.(newTrigger|deleteTrigger|getProjectTriggers|getUserTriggers)/.test(code(f))).sort();
-    assert.deepStrictEqual(users, ['ScheduleRefresh.js', 'Settings Sheet.js', 'Trigger Manager.js']);
+    assert.deepStrictEqual(users, ['ScheduleRefresh.js', 'Trigger Manager.js']);
   });
 
   test('rule: outside the agent files nobody reaches into the registers or the pool - they ask Agents (Quick Start.js keeps the old global getters for the service itself)', () => {

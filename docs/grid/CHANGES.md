@@ -17,6 +17,7 @@
 | horizontal alignment | `'general'`, `'general-left'`, `'general-right'` (what `getHorizontalAlignments` returns for a cell without an explicit alignment) all mean "not set": the general alignment renders text left and numbers right by itself. |
 
 ## Changed
+- `Grid.open` on the **service path** calls `SpreadsheetApp.flush()` before it reads (an execution sees the sheet as of its start or last flush, not as other executions left it; the API path reads the server and does not flush). Status switches (`ConfigGrid.status`) and saves flush right after their commit.
 - `spec.anchor` is optional (default row 1); `Grid.open` returns `null` for a missing sheet on **both** paths (wyceny threw on the API path).
 - The window **grows**: with `insertRowsAfter` (wyceny cut it back to its old height), and with any write past it. A write to a row past the end of the
   sheet throws; a write past the last column appends columns to the sheet. Notes and validations also reach their cells. (Before, such writes were dropped silently.)

@@ -52,7 +52,6 @@ module.exports = function register(t) {
       assert.deepStrictEqual(answers[1], answers[0], 'answers');
       // (opts.noApiLook: a Date written by the Sheets API into a cell without a number format shows as a number - Grid's API path does not guess a format)
       if (!(opts && opts.noApiLook && mode === 'api')) assert.deepStrictEqual(snap(now.book), snap(old.book), 'sheets');
-      assert.deepStrictEqual(now.created, old.created, 'triggers set up');
     }));
   }
 
@@ -95,12 +94,11 @@ module.exports = function register(t) {
     `__ss.setLastRefresh(new Date(Date.UTC(2025, 5, 1, 8, 15)))`, `__ss.addNewSheetInfo('Z', 'Dane Z', true)`, `__ss.getSheetList()`], s => fillSettings(s, { configs: CONFIGS }));
 
   MODES.forEach(mode => {
-    test('golden: the edit triggers are set up only when missing (same as before) [' + mode + ']', () => {
+    test('building the settings sheet object sets up NO triggers any more (the frozen class created raw, unlogged ones); agents come from the status check only [' + mode + ']', () => {
       const old = scope('service'), now = scope(mode);
-      [old, now].forEach(s => s.run(`__existing = [{ getHandlerFunction: () => 'sheetEdit' }]`));
       old.run(`new LegacySettingsSheet()`); now.run(`new SettingsSheet()`);
-      assert.deepStrictEqual(now.created, old.created);
-      assert.deepStrictEqual(old.created, ['sheetChange:change']);
+      assert.deepStrictEqual(old.created, ['sheetEdit:edit', 'sheetChange:change'], 'the frozen class');
+      assert.deepStrictEqual(now.created, []);
     });
   });
 
@@ -120,8 +118,7 @@ module.exports = function register(t) {
   test('rule: Settings Sheet.js and the settings code around it reach the sheet through SettingsGrid only', () => {
     const text = fs.readFileSync(path.join(ROOT, 'Settings Sheet.js'), 'utf8').split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
     assert.ok(!/getRange\(|getSheetByName|insertSheet|insertRowAfter|getLastRow|\.setValues\(|setNumberFormat|insertCheckboxes|autoResizeColumns/.test(text));
-    const uses = (text.match(/SpreadsheetApp\.\w+/g) || []);
-    assert.deepStrictEqual([...new Set(uses)], ['SpreadsheetApp.getActiveSpreadsheet'], 'only for the triggers');
+    assert.ok(!/SpreadsheetApp|ScriptApp/.test(text), 'no platform service at all');
   });
 
   test('rule: Settings Grid.js reaches the sheet through Grid only (SpreadsheetApp.flush and Utilities.formatDate are all it calls) and loads alone', () => {
