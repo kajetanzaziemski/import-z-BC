@@ -240,7 +240,7 @@ module.exports = function register(t) {
   function analyseScope(mode, hookAt) {
     const book = new SimBook({ api: mode === 'api' });
     const p = new FakePlatform();
-    const files = ['Custom errors.js', 'Helper Data Store.js', 'Store.js', 'Controller.js', 'functions.js', ...FILES.filter(f => !['functions.js', 'Custom errors.js'].includes(f)), 'AnalyseConfig.js', 'Coedit Trace.js'];
+    const files = ['Custom errors.js', 'Helper Data Store.js', 'Store.js', 'Controller.js', 'functions.js', ...FILES.filter(f => !['functions.js', 'Custom errors.js'].includes(f)), 'AnalyseConfig.js'];
     const run = (code, extra) => {
       const ex = p.execution(files, Object.assign({ SpreadsheetApp: book.SpreadsheetApp, Utilities: Object.assign({}, book.Utilities, { sleep: ms => { p.advance(ms / 1000); } }), Sheets: mode === 'api' ? book.Sheets : undefined, __hookAt: hookAt, __book: book }, extra || {}));
       ex.eval(`globalThis.dbgLog = () => {}; globalThis.__calls = {}; globalThis.getMetadata = () => ({
@@ -390,51 +390,5 @@ module.exports = function register(t) {
       assert.strictEqual(n['extend(empty)'], 1, JSON.stringify(n));
       assert.strictEqual(n['queryOption(empty)'], 1, JSON.stringify(n));
     });
-
-    test('the flight recorder shows the stale view the way the real one did: stale-suspected, a re-read that brings nothing, then the same inserts again', () => {
-      const s = staleRun(WITHOUT_FLUSH);
-      const runs = Object.keys(s.p.props.document).filter(k => k.indexOf('coeditTrace:') === 0).sort().map(k => JSON.parse(s.p.props.document[k]));
-      const second = runs[1].events.map(x => x.e);
-      assert.ok(second.includes('stale-suspected') && second.includes('reread') && !second.includes('stale-confirmed') && second.includes('insert'), second.join(','));
-      const ev = runs[1].events, read = ev.slice(0, ev.findIndex(x => x.e === 'insert')).filter(x => x.e === 'read');       // up to the first insert
-      assert.ok(read.length >= 2 && read.every(x => x.hash === read[0].hash && x.rows === read[0].rows), 'the same picture again and again');
-    });
   }
-
-  ['api', 'service'].forEach(mode => {
-    test(`the flight recorder: every co-edit leaves its events in its own property; coeditTrace() prints them in time order [${mode}]`, () => {
-      const s = analyseScope(mode, { name: 'none', nth: 0 });
-      s.run(`ConfigGrid.create('K')`);
-      fillLines(s.book, [['table', 'Customers'], ['queryOption', 'select'], ['select', 'Name']]);
-      s.run(`AnalyseConfig.run('K', {}); AnalyseConfig.run('K', {});`);
-      const keys = Object.keys(s.p.props.document).filter(k => k.indexOf('coeditTrace:') === 0).sort();
-      assert.strictEqual(keys.length, 2, 'one property per co-edit: ' + keys.join(', '));
-      const [a, b] = keys.map(k => JSON.parse(s.p.props.document[k]));
-      const names = r => r.events.map(x => x.e);
-      assert.deepStrictEqual(names(a).slice(0, 5), ['start', 'read', 'ticket', 'lock', 'read'], 'start, the constructor\'s read, the ticket, the lock, the in-lock read');
-      assert.ok(names(a).includes('insert') && names(a).includes('commit'), names(a).join(','));
-      assert.strictEqual(a.events.find(x => x.e === 'insert').lines.length, 2, 'the extend and the empty queryOption line');
-      assert.ok(!names(b).includes('insert') && !names(b).includes('stale-suspected'), 'the second finds the lines and the right row count: ' + names(b).join(','));
-      assert.strictEqual(names(a).at(-1), 'end');
-      assert.strictEqual(a.events.at(-1).outcome, 'completed');
-      const text = s.run(`coeditTrace()`);
-      const lines = text.split('\n');
-      assert.ok(lines.length >= 15 && lines.every(l => /^\d\d:\d\d:\d\d\.\d\d\d \[[0-9a-z]{4}\] /.test(l)), text);
-    });
-
-    test(`the flight recorder keeps the last 20 runs only and coeditTraceClear() empties it; a dropped run and an error leave their story too [${mode}]`, () => {
-      const s = analyseScope(mode, { name: 'none', nth: 0 });
-      s.run(`ConfigGrid.create('K')`);
-      fillLines(s.book, [['table', 'Customers']]);
-      s.run(`for (let i = 0; i < 23; i++) AnalyseConfig.run('K', {});`);
-      assert.strictEqual(Object.keys(s.p.props.document).filter(k => k.indexOf('coeditTrace:') === 0).length, 20);
-      s.run(`coeditTraceClear()`);
-      assert.strictEqual(Object.keys(s.p.props.document).filter(k => k.indexOf('coeditTrace:') === 0).length, 0);
-      s.run(`SheetCoeditor.prototype.sheetEdit = function (e, isLatest) { Store.set('document', 'K_coedit', 'a-newer-run'); coeditNote_('checkpoint', { n: 1, continue: isLatest() }); return isLatest(); }; AnalyseConfig.run('K', {})`);
-      s.run(`SheetCoeditor.prototype.sheetEdit = () => { throw new Error('boom'); }; try { AnalyseConfig.run('K', {}); } catch (e) {}`);
-      const all = Object.keys(s.p.props.document).filter(k => k.indexOf('coeditTrace:') === 0).map(k => JSON.parse(s.p.props.document[k]).events.map(x => x.e).join(','));
-      assert.ok(all.some(x => /error/.test(x)), 'the error run: ' + all.join(' | '));
-      assert.ok(all.some(x => /checkpoint.*end$/.test(x) || /checkpoint/.test(x)), 'the dropped run: ' + all.join(' | '));
-    });
-  });
 };

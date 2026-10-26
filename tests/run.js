@@ -582,9 +582,6 @@ require('./agents.test.js')({ test });
 // ---- developer tools: build version, reportFailedChecks, sidebar scrolling ----------------------------------------------------------
 require('./version.test.js')({ test });
 
-// ---- concurrency probes (for a real spreadsheet) ----------------------------------------------------------------------------------
-require('./probe.test.js')({ test });
-
 // ---- the query is built from the cells a line is made of (stale cells beyond its width are ignored) ---------------------------------------
 require('./query-lines.test.js')({ test });
 

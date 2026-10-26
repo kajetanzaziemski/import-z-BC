@@ -75,54 +75,26 @@ function md5Hash(string){
  * Returns "completed" (the action finished and no newer run came), "dropped" (a newer run exists: leave what the newer one needs - the reading indicator -
  * to it) or "timeout" (never got the lock; the caller was the newest and nobody will do its work). An error from the action goes on to the caller.
  */
-/** Notes an event for the co-edit's flight recorder (Coedit Trace.js) when that file is in the project; the co-edit works without it. */
-function coeditNote_(event,data){
-  if(typeof CoeditTrace !== "undefined") CoeditTrace.note(event,data);
-}
-
-/** Short hash of the lines (Coedit Trace.js), or null when the recorder file is not in the project. */
-function coeditHash_(values){
-  return typeof CoeditTrace !== "undefined" ? CoeditTrace.hash(values) : null;
-}
-
-/** What the last co-edit of a sheet left behind ({t, rows, hash}), kept in a document property so that the next one - another execution - can check its reading. */
-function coeditMarkerSet_(sheetName,marker){
-  if(typeof Store !== "undefined") Store.set("document","coeditExpected:"+sheetName,JSON.stringify(marker));
-}
-
-function coeditMarkerGet_(sheetName){
-  try{
-    const raw = typeof Store !== "undefined" ? Store.get("document","coeditExpected:"+sheetName) : null;
-    return raw ? JSON.parse(raw) : null;
-  } catch(err) {
-    return null;
-  }
-}
-
 const LATEST_WAIT_MS = 90000;
 const LATEST_POLL_MS = 2000;
 
 function runLatestOnly(action,flag="scriptLocked__"){
   const ticket = Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,8);
   Store.set("document",flag,ticket);
-  coeditNote_("ticket",{ticket: ticket, was: "see the next run"});
   const isLatest = () => Store.get("document",flag) === ticket;
 
   const lock = LockService.getScriptLock();
-  const waitStart = Date.now();
   for(let tries = 0; !lock.hasLock(); tries++){
-    if(!isLatest()){ coeditNote_("dropped",{while: "waiting for the lock", tries: tries}); return "dropped"; }
-    if(tries * LATEST_POLL_MS >= LATEST_WAIT_MS){ coeditNote_("timeout",{tries: tries}); return "timeout"; }
+    if(!isLatest()) return "dropped";
+    if(tries * LATEST_POLL_MS >= LATEST_WAIT_MS) return "timeout";
     lock.tryLock(LATEST_POLL_MS);
   }
-  coeditNote_("lock",{waitedMs: Date.now() - waitStart});
   try {
-    if(!isLatest()){ coeditNote_("dropped",{while: "just after getting the lock"}); return "dropped"; }
+    if(!isLatest()) return "dropped";
     const result = action(isLatest);
     return result !== false && isLatest() ? "completed" : "dropped";
   } finally {
     lock.releaseLock();
-    coeditNote_("released",{});
   }
 }
 

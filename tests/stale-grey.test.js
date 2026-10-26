@@ -21,7 +21,7 @@ module.exports = function register(t) {
     const ctx = vm.createContext({ console: { log() {}, error() {} } });
     book.install(ctx);
     FILES.forEach(f => new vm.Script(fs.readFileSync(path.join(ROOT, f), 'utf8'), { filename: f }).runInContext(ctx));
-    vm.runInContext(`globalThis.dbgLog = () => {}; globalThis.coeditNote_ = () => {}; globalThis.coeditHash_ = () => null; globalThis.coeditMarkerGet_ = () => null; globalThis.coeditMarkerSet_ = () => {};
+    vm.runInContext(`globalThis.dbgLog = () => {};
       globalThis.getMetadata = () => ({ listTables: () => ['Customers'], listProperties: () => ['No', 'Name'], listNavProperties: () => ['Lines'], getDataType: () => 'Edm.String' });`, ctx);
     return { book, ctx, run: code => vm.runInContext(code, ctx) };
   }

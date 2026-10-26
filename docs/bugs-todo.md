@@ -65,8 +65,8 @@ Found while building and testing the live check helpers (`docs/live-check.md`), 
     copied) and only a later run could repair it. (c) A co-edit that dropped out for a newer one is reported by the live check as SKIP ("dropped"), not judged on a sheet the newer run is still completing - the earlier FAILs of such runs
     ("no extend row", "E8 should be a dropdown") were this, not errors. The remaining reads cost two extra window reads per co-edit.
 
-14. **Doubled `queryOption` / `extend` pairs after overlapping co-edits (real sheet, build `c06ab0e+`): OPEN, instrumented.** Not reproducible in the simulation except by modelling stale reads; hypotheses, probes and the flight recorder
-    (`Coedit Trace.js`, `Concurrency Probe.js`) are in `docs/coedit-tracking.md`. A freshness safeguard (`confirmFresh_`) is in.
+14. **Doubled `queryOption` / `extend` pairs after overlapping co-edits (real sheet, build `c06ab0e+`): FIXED.** An execution sees the sheet as of its last flush or start, so a co-edit that got the lock right after another
+    one read the lines without that one's inserts. `ConfigGrid.lines()` flushes before reading. Cause, evidence, and the instruments that found it (since removed): `docs/coedit-tracking.md`.
 
 15. **Stale cells in a query line (a shorter line pasted over a longer one): FIXED** (`my-todo.md` "Guarding against stale data in query area"). (a) The query is built from the cells each option is made of, counted from column B: table / extend 2,
     select / limit 3 (so `select` is ONE field now - before, every cell to its right was a field), filterLogic / orderBy 4, filter 5, an unknown option word 2; anything to the right of that, and anything after the first empty cell of a line,

@@ -177,7 +177,6 @@ module.exports = function register(t) {
     globalThis.SimpleError = class SimpleError extends Error {};
     globalThis.CCTImportConfig = class { constructor(values) { this.values = values; } };     // the query model is not under test here
     globalThis.getMetadata = () => ({});
-    globalThis.coeditNote_ = () => {}; globalThis.coeditHash_ = () => null; globalThis.coeditMarkerGet_ = () => null; globalThis.coeditMarkerSet_ = () => {};      // (functions.js: the flight recorder helpers)
   }
 
   both('SheetCoeditor: a missing config sheet is created with the golden header and the reading cell lit', env => {
