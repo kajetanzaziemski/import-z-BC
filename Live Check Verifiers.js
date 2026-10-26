@@ -525,6 +525,11 @@ function buildLiveCheckVerifiers_(){
       verify(c){ lcVerifyNothingChanged_(c,menuNoise); c.skip("sidebar shown","the UI cannot be read back by a script"); }
     },
 
+    requestShowCellValidation: {
+      needs: ["sheets","docProps"],
+      verify(c){ lcVerifyNothingChanged_(c); c.skip("dialog shown","the UI cannot be read back by a script"); }
+    },
+
     requestStatusCheck: {
       needs: ["sheets","docProps"],
       verify(c){ lcVerifyNothingChanged_(c); c.skip("sidebar shown","the UI cannot be read back by a script"); }

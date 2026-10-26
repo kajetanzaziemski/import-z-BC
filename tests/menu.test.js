@@ -88,9 +88,20 @@ module.exports = function register(t) {
     assert.deepStrictEqual(a.calls(), [['sidebar', 'Ustawienia połączenia BC'], ['sidebar', 'Konfiguracja'], ['sidebar', 'Wszystkie Triggery w projekcie']]);
   });
 
+  test('menu: "Weryfikacja danych komórki" shows the report of the active cell in a modal dialog, text escaped, and changes nothing', () => {
+    const a = scenario();
+    a.ex.eval(`CellInspector = { text: () => '{"v": "<b>&amp;"}' };
+      HtmlService.createHtmlOutput = h => ({ html: h, setWidth() { return this; }, setHeight() { return this; } });
+      SpreadsheetApp.getUi = () => ({ alert() {}, createAddonMenu: () => ({}), showModalDialog: (h, title) => __log.push(['dialog', title, h.html]) });
+      showCellValidation()`);
+    const [kind, title, html] = a.calls()[0];
+    assert.deepStrictEqual([kind, title], ['dialog', 'Weryfikacja danych komórki']);
+    assert.ok(html.includes('&lt;b&gt;&amp;amp;') && !html.includes('<b>'), html);
+  });
+
   test('menu: the action names the live check and the gate rely on are kept', () => {
     const text = fs.readFileSync(path.join(ROOT, 'Menu.js'), 'utf8');
-    ['requestCheckConfigSheet', 'menuConnectionSetup', 'menuAuthFlow', 'menuInsertImportWizard', 'menuLogoutFlow', 'requestStatusCheck', 'requestListAllTriggers']
+    ['requestCheckConfigSheet', 'menuConnectionSetup', 'menuAuthFlow', 'menuInsertImportWizard', 'menuLogoutFlow', 'requestStatusCheck', 'requestListAllTriggers', 'requestShowCellValidation']
       .forEach(a => assert.ok(text.includes('Controller.run("' + a + '"'), a));
   });
 

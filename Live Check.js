@@ -519,6 +519,7 @@ const LIVE_CHECK_ENTRY_POINTS = [
   {action: "menuAuthFlow",                    entry: "menu: Autoryzuj"},
   {action: "requestStatusCheck",              entry: "menu: Stan konfiguracji"},
   {action: "requestListAllTriggers",          entry: "menu: Narzędzia programisty -> Wszystkie triggery"},
+  {action: "requestShowCellValidation",       entry: "menu: Narzędzia programisty -> Weryfikacja danych komórki"},
   {action: "requestLiveCheckSidebar",         entry: "menu: Narzędzia programisty -> Live check"},
   {action: "menuInsertImportWizard",          entry: "menu: Nowy kreator importu"},
   {action: "requestCheckConfigSheet",         entry: "menu: Analizuj zapytanie"},

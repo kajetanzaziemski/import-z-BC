@@ -99,3 +99,6 @@ Found while building and testing the live check helpers (`docs/live-check.md`), 
   value plain text, so a lone `=` is not a formula). Written by `Grid` through the Sheets API, such a validation marked the picked value as invalid ("podana wartość musi należeć do zakresu"); the same list written by the Spreadsheet service worked
   (real sheet; the validation sidebar showed the same apostrophe items for both, so the difference is how the platform treats them). `Grid` now sends any list with an apostrophe-prefixed item through the service, after the batchUpdate
   (`quotedList_`, `tests/validation-quote.test.js`). The reason is a platform behaviour seen on one sheet, not understood: if it turns out to be general, the other lists may need the same.
+  **To find the real difference (instead of the service detour):** select an operator cell written through the service and one written through the API (`USE_SHEETS_API` true/false, then "Analizuj zapytanie"), and for each run the menu
+  *Rozszerzenia → Import z BC → Narzędzia programisty → Weryfikacja danych komórki* (`Cell Inspector.js`): it shows the rule as the service reads it and as the Sheets API reads it (`userEnteredValue` of every list item, `strict`, `showCustomUi`,
+  the cell's own value). The two outputs show what the API has to be sent to get the service's rule.
