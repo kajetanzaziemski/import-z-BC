@@ -1,8 +1,5 @@
 class BCMetadata{
   constructor(){
-    this.table = null;
-    this.schema = null; // Should set to default schema on construction!
-    
     this.request = getGlobalSettings().getODataURL()+`$metadata`;
     this.metadata = null;
   }
@@ -30,7 +27,7 @@ class BCMetadata{
     return this.metadata ?? this.downloadEdmxDocument();
   }
 
-  getTables(schema = this.schema){
+  getTables(schema){
     let tables = Store.optional.getCache("document",this.getCacheKey("tables"));
     if(tables){
       // dbgLog("Returning from cache: ");
@@ -42,7 +39,7 @@ class BCMetadata{
     return tables;
   }
 
-  getTableData(table,schema = this.schema){
+  getTableData(table,schema){
     let tableData = Store.optional.getCache("document",this.getCacheKey(table));
     if(tableData){
       // dbgLog("Returning from cache: ");
@@ -60,19 +57,19 @@ class BCMetadata{
   }
 
   // - - - - - - - - Read  - - - - - - - -   
-  listTables(schema = this.schema){
+  listTables(schema){
     return this.getTables(schema);    
   }
 
-  listProperties(table = this.table,schema = this.schema){
+  listProperties(table,schema){
     return this.getTableData(table,schema).fields.map(fieldItem => fieldItem.Name);
   }
   
-  listNavProperties(table = this.table,schema = this.schema){
+  listNavProperties(table,schema){
     return this.getTableData(table,schema).navProperties;
   }
 
-  getDataType(field,table=this.table,schema = this.schema){
+  getDataType(field,table,schema){
     const property = this.getTableData(table,schema).fields.find(p => p.Name == field);
     return property ? property.Type : null;
   }

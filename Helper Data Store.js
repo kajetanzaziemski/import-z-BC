@@ -1,6 +1,5 @@
 const HDS_SCOPES = ['document','user','script'];
 const HDS_SERVICES = ['properties','cache'];
-const HDS_ACTIONS = ['get','set','delete'];
 
 class HelperDataStore{
   /** 

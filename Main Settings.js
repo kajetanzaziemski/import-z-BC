@@ -1,5 +1,3 @@
-const IMPORT_SETTINGS_SHEET_NAME_KEY = "importSettingsSheetName";
-
 /** The StorageObject behind the import settings (see Settings.js). */
 function getImportSettings(){
   return Settings.store();

@@ -259,12 +259,12 @@ module.exports = function register(t) {
   });
 
   // ---- the refresh loops --------------------------------------------------------------------------------------------------------------------
-  test('refresh loops: refreshAll() = every pair of the settings sheet in order, refreshAllTrue() = only the ticked ones, nothing ticked = nothing', () => {
+  test('refresh loops: refreshAll() = every pair of the settings sheet in order, RefreshAll.ticked() = only the ticked ones, nothing ticked = nothing', () => {
     const a = scenario(); a.ex.eval(`refreshAll()`);
     assert.deepStrictEqual(a.calls(), [['refresh', 'K1'], ['refresh', 'K2'], ['refresh', 'K3']]);
-    const b = scenario(); b.ex.eval(`refreshAllTrue()`);
+    const b = scenario(); b.ex.eval(`RefreshAll.ticked()`);
     assert.deepStrictEqual(b.calls(), [['refresh', 'K1'], ['refresh', 'K3']]);
-    const c = scenario({ sheetList: [{ configSheet: 'K2', resultSheet: 'R2', refresh: false }] }); c.ex.eval(`refreshAllTrue()`);
+    const c = scenario({ sheetList: [{ configSheet: 'K2', resultSheet: 'R2', refresh: false }] }); c.ex.eval(`RefreshAll.ticked()`);
     assert.deepStrictEqual(c.calls(), []);
   });
 
@@ -276,7 +276,7 @@ module.exports = function register(t) {
 
   test('refresh loops: the first failing sheet stops the loop (later sheets are not refreshed)', () => {
     const sc = scenario({ refreshError: 'boom' });
-    assert.throws(() => sc.ex.eval(`refreshAllTrue()`), /boom/);
+    assert.throws(() => sc.ex.eval(`RefreshAll.ticked()`), /boom/);
     assert.deepStrictEqual(sc.calls(), [['refresh', 'K1']]);
   });
 
@@ -296,7 +296,7 @@ module.exports = function register(t) {
     assert.ok(/function autoRefreshFunction\(e\)\{\s*RefreshAll\.scheduled\(\);\s*\}/.test(ss));
     assert.ok(/function autoRefreshContent\(e\) \{\s*ScheduleRefresh\.run\(e\);\s*\}/.test(ss));
     assert.ok(/function autoRefreshContentOld\(e\) \{\s*ScheduleRefresh\.runLegacy\(e\);\s*\}/.test(ss));
-    assert.ok(/function refreshAllTrue\(\)\{\s*RefreshAll\.ticked\(\);\s*\}/.test(menu));
+    assert.ok(!/refreshAllTrue/.test(menu));
     assert.ok(/Controller\.run\("menuRefreshAll",\(\) => RefreshAll\.all\(\)\)/.test(menu));
     assert.ok(!/ScriptApp\.newTrigger\('autoRefreshHandler'\)/.test(ss));
   });

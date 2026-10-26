@@ -92,21 +92,6 @@ function refreshAll(){
   Controller.run("menuRefreshAll",() => RefreshAll.all());
 }
 
-/** Kept under its old name; the work is in RefreshAll.js. */
-function refreshAllTrue(){
-  RefreshAll.ticked();
-}
-
-/** Kept under its old name (Test Functions.js, anything that still calls it); the work is in RefreshSheet.js. */
-function refreshAllDataForConfigSheet(configSheetName,resultSheetName){
-  return RefreshSheet.run(configSheetName,resultSheetName);
-}
-
-/** Kept under its old name; the work is in EstimateSheet.js. */
-function estimateResponseSize(configSheetName){
-  return EstimateSheet.run(configSheetName);
-}
-
 /**
  * Function triggered by menu selection.
  */

@@ -118,6 +118,3 @@ function nextName(name) {
   const num = match ? parseInt(match[2], 10) : 0;
   return `${base} ${num + 1}`;
 }
-
-// - - - - - - - - Debugging - - - - - - - -   
-const DEBUG_turncate_table_output = true;

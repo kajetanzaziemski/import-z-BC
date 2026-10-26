@@ -93,7 +93,7 @@ module.exports = function register(t) {
   // ---- refreshAllDataForConfigSheet -------------------------------------------------------------------------------------------
   test('refresh: reads the config, queries BC, switches reading -> writing, and writes the result sheet (values and number formats per column)', () => {
     const { book, ex, log, calls } = scenario();
-    ex.eval(`refreshAllDataForConfigSheet('Konfiguracja 1', 'Wynik')`);
+    ex.eval(`RefreshSheet.run('Konfiguracja 1', 'Wynik')`);
     assert.deepStrictEqual(names(calls()), ['coed.new', 'conn.new', 'conn.query', 'conn.extend', 'conn.setup', 'conn.readAllPages', 'meta.type', 'meta.type', 'meta.type', 'reading', 'writing', 'writing']);
     assert.deepStrictEqual(calls().slice(0, 1), [['coed.new', 'Konfiguracja 1', true]], 'the reading cell is lit by the constructor');
     assert.deepStrictEqual(calls().filter(c => /^(reading|writing)$/.test(c[0])), [['reading', false], ['writing', true], ['writing', false]]);
@@ -105,7 +105,7 @@ module.exports = function register(t) {
 
   test('refresh: the query is built from the config (table, query lines, extend, data types) and read with the coeditor that lights the indicators', () => {
     const { ex, calls } = scenario({ extendTable: 'SalesLines', extendArray: [['select', 'Qty']], dataTypes: { No: 'Edm.String', Qty: 'Edm.Int32' } });
-    ex.eval(`refreshAllDataForConfigSheet('Konfiguracja 1', 'Wynik')`);
+    ex.eval(`RefreshSheet.run('Konfiguracja 1', 'Wynik')`);
     const c = calls();
     assert.deepStrictEqual(c.find(x => x[0] === 'conn.query'), ['conn.query', 'Customers', [['select', 'No']], { No: 'Edm.String', Qty: 'Edm.Int32' }]);
     assert.deepStrictEqual(c.find(x => x[0] === 'conn.extend'), ['conn.extend', 'SalesLines', [['select', 'Qty']], { No: 'Edm.String', Qty: 'Edm.Int32' }]);
@@ -114,7 +114,7 @@ module.exports = function register(t) {
 
   test('refresh: the data type of a column comes from the metadata, with the table of the column or else the main table', () => {
     const { ex, calls } = scenario();
-    ex.eval(`refreshAllDataForConfigSheet('Konfiguracja 1', 'Wynik')`);
+    ex.eval(`RefreshSheet.run('Konfiguracja 1', 'Wynik')`);
     assert.deepStrictEqual(calls().filter(c => c[0] === 'meta.type'), [['meta.type', 'No', 'Customers'], ['meta.type', 'Balance', 'Customers'], ['meta.type', 'Since', 'Sales']]);
   });
 
@@ -123,7 +123,7 @@ module.exports = function register(t) {
     const old = book.add('Wynik');
     old.setValue(1, 1, 'old', ''); old.setValue(9, 9, 'far away', ''); old.cell(9, 9).fmt.bg = '#ff0000'; old.cell(1, 1).fmt.numFmt = '0.0%';
     const other = book.add('Inna'); other.setValue(1, 1, 'mine', '');
-    ex.eval(`refreshAllDataForConfigSheet('Konfiguracja 1', 'Wynik')`);
+    ex.eval(`RefreshSheet.run('Konfiguracja 1', 'Wynik')`);
     assert.strictEqual(Object.keys(book.sheets).filter(n => n === 'Wynik').length, 1);
     assert.strictEqual(book.sheets['Wynik'].cell(9, 9), undefined, 'the whole old data range was cleared');
     assert.strictEqual(book.sheets['Wynik'].cell(1, 1).v, 'No');
@@ -133,7 +133,7 @@ module.exports = function register(t) {
 
   test('refresh: the result sheet name defaults to the settings sheet\'s, the config sheet to the first one', () => {
     const { book, ex, calls } = scenario({ configSheets: ['Konfiguracja 7', 'Konfiguracja 8'] });
-    ex.eval(`refreshAllDataForConfigSheet()`);
+    ex.eval(`RefreshSheet.run()`);
     assert.deepStrictEqual(calls()[0], ['coed.new', 'Konfiguracja 7', true]);
     assert.deepStrictEqual(calls().find(c => c[0] === 'settings.resultName'), ['settings.resultName', 'Konfiguracja 7']);
     assert.ok(book.sheets['Dane wg. Konfiguracja 7']);
@@ -141,7 +141,7 @@ module.exports = function register(t) {
 
   test('refresh: without a table in the config sheet it only puts the reading cell back to idle (nothing is queried or written)', () => {
     const { book, ex, calls } = scenario({ table: null });
-    ex.eval(`refreshAllDataForConfigSheet('Konfiguracja 1', 'Wynik')`);
+    ex.eval(`RefreshSheet.run('Konfiguracja 1', 'Wynik')`);
     assert.deepStrictEqual(calls(), [['coed.new', 'Konfiguracja 1', true], ['reading', false]]);
     assert.deepStrictEqual(Object.keys(book.sheets), []);
   });
@@ -149,26 +149,26 @@ module.exports = function register(t) {
   test('refresh: a failure while reading gives the error back, puts reading idle, never lights writing, leaves the result sheet alone', () => {
     const { book, ex, calls } = scenario({ readError: 'BC down' });
     book.add('Wynik').setValue(1, 1, 'keep me', '');
-    assert.throws(() => ex.eval(`refreshAllDataForConfigSheet('Konfiguracja 1', 'Wynik')`), /BC down/);
+    assert.throws(() => ex.eval(`RefreshSheet.run('Konfiguracja 1', 'Wynik')`), /BC down/);
     assert.deepStrictEqual(calls().filter(c => /^(reading|writing)$/.test(c[0])), [['reading', false]]);
     assert.strictEqual(book.sheets['Wynik'].cell(1, 1).v, 'keep me');
   });
 
   test('refresh: a failure while the config is read (table lookup) gives the error back and puts reading idle', () => {
     const { ex, calls } = scenario({ tableError: 'config broken' });
-    assert.throws(() => ex.eval(`refreshAllDataForConfigSheet('Konfiguracja 1', 'Wynik')`), /config broken/);
+    assert.throws(() => ex.eval(`RefreshSheet.run('Konfiguracja 1', 'Wynik')`), /config broken/);
     assert.deepStrictEqual(calls().filter(c => /^(reading|writing)$/.test(c[0])), [['reading', false]]);
   });
 
   test('refresh: a failure while writing puts writing back to idle and gives the error back', () => {
     const { ex, calls } = scenario({ dataArray: [] });            // an empty table: BulkSheet refuses it
-    assert.throws(() => ex.eval(`refreshAllDataForConfigSheet('Konfiguracja 1', 'Wynik')`), /nothing to write to "Wynik"/);
+    assert.throws(() => ex.eval(`RefreshSheet.run('Konfiguracja 1', 'Wynik')`), /nothing to write to "Wynik"/);
     assert.deepStrictEqual(calls().filter(c => /^(reading|writing)$/.test(c[0])), [['reading', false], ['writing', true], ['writing', false]]);
   });
 
   test('refresh: the "no data" message of the connection is written like any result (one cell)', () => {
     const { book, ex } = scenario({ dataArray: [['Brak danych spełniających zadane kryteria.']], columnInfo: [{ table: null, field: 'x' }], types: { x: null } });
-    ex.eval(`refreshAllDataForConfigSheet('Konfiguracja 1', 'Wynik')`);
+    ex.eval(`RefreshSheet.run('Konfiguracja 1', 'Wynik')`);
     assert.strictEqual(book.sheets['Wynik'].cell(1, 1).v, 'Brak danych spełniających zadane kryteria.');
     assert.strictEqual(book.sheets['Wynik'].cell(1, 1).fmt.numFmt, 'General', 'unknown type -> General');
   });
@@ -176,7 +176,7 @@ module.exports = function register(t) {
   // ---- estimateResponseSize ---------------------------------------------------------------------------------------------------
   test('estimate: reading -> idle, connection on while one page is fetched, connection off, then the estimate is written', () => {
     const { ex, calls } = scenario({ totalRows: 12345 });
-    ex.eval(`estimateResponseSize('Konfiguracja 1')`);
+    ex.eval(`EstimateSheet.run('Konfiguracja 1')`);
     assert.deepStrictEqual(names(calls()), ['coed.new', 'reading', 'connection', 'conn.new', 'conn.query', 'conn.extend', 'conn.setup', 'conn.fetch', 'conn.readPage', 'connection', 'totRows']);
     assert.deepStrictEqual(calls().filter(c => /^(reading|connection|totRows)$/.test(c[0])), [['reading', false], ['connection', true], ['connection', false], ['totRows', 12345]]);
     assert.deepStrictEqual(calls()[0], ['coed.new', 'Konfiguracja 1', true]);
@@ -184,31 +184,31 @@ module.exports = function register(t) {
 
   test('estimate: nothing is written to any sheet', () => {
     const { book, ex } = scenario();
-    ex.eval(`estimateResponseSize('Konfiguracja 1')`);
+    ex.eval(`EstimateSheet.run('Konfiguracja 1')`);
     assert.deepStrictEqual(Object.keys(book.sheets), []);
   });
 
   test('estimate: a failed fetch puts the connection cell back to idle, gives the error back and writes no estimate', () => {
     const { ex, calls } = scenario({ fetchError: 'timeout' });
-    assert.throws(() => ex.eval(`estimateResponseSize('Konfiguracja 1')`), /timeout/);
+    assert.throws(() => ex.eval(`EstimateSheet.run('Konfiguracja 1')`), /timeout/);
     assert.deepStrictEqual(calls().filter(c => /^(reading|connection|totRows)$/.test(c[0])), [['reading', false], ['connection', true], ['connection', false]]);
   });
 
   test('estimate: a failure while the config is read puts reading idle and gives the error back', () => {
     const { ex, calls } = scenario({ tableError: 'config broken' });
-    assert.throws(() => ex.eval(`estimateResponseSize('Konfiguracja 1')`), /config broken/);
+    assert.throws(() => ex.eval(`EstimateSheet.run('Konfiguracja 1')`), /config broken/);
     assert.deepStrictEqual(calls().filter(c => /^(reading|connection|totRows)$/.test(c[0])), [['reading', false]]);
   });
 
   test('estimate: KNOWN QUIRK pinned - without a table it returns early and leaves the reading cell lit (the live check reports "still showing activity")', () => {
     const { ex, calls } = scenario({ table: null });
-    ex.eval(`estimateResponseSize('Konfiguracja 1')`);
+    ex.eval(`EstimateSheet.run('Konfiguracja 1')`);
     assert.deepStrictEqual(calls(), [['coed.new', 'Konfiguracja 1', true]], 'no reading(false), nothing else');
   });
 
   test('estimate: the config sheet defaults to the first one', () => {
     const { ex, calls } = scenario({ configSheets: ['Konfiguracja 3'] });
-    ex.eval(`estimateResponseSize()`);
+    ex.eval(`EstimateSheet.run()`);
     assert.deepStrictEqual(calls()[0], ['coed.new', 'Konfiguracja 3', true]);
   });
 
@@ -246,10 +246,10 @@ module.exports = function register(t) {
     assert.deepStrictEqual(a.calls().filter(c => c[0] === 'coed.new').map(c => c[1]), ['K1', 'K2', 'K3']);
     assert.deepStrictEqual(Object.keys(a.book.sheets).sort(), ['R1', 'R2', 'R3']);
     const b = scenario({ sheetList: list });
-    b.ex.eval(`refreshAllTrue()`);
+    b.ex.eval(`RefreshAll.ticked()`);
     assert.deepStrictEqual(b.calls().filter(c => c[0] === 'coed.new').map(c => c[1]), ['K1', 'K3']);
     const c = scenario({ sheetList: [{ configSheet: 'K2', resultSheet: 'R2', refresh: false }] });
-    c.ex.eval(`refreshAllTrue()`);
+    c.ex.eval(`RefreshAll.ticked()`);
     assert.deepStrictEqual(c.calls(), []);
   });
 
@@ -292,11 +292,10 @@ module.exports = function register(t) {
     ['RefreshSheet.js', 'EstimateSheet.js', 'Import Query.js'].forEach(f => assert.ok(!/SpreadsheetApp|getRange|getSheetByName|insertSheet/.test(code(f)), f));
   });
 
-  test('rule: Menu.js builds no connection and reads no config itself - the workflows are in the use cases; the old names are one-line forwarders', () => {
+  test('rule: Menu.js builds no connection and reads no config itself - the workflows are in the use cases; the old one-line forwarders are gone', () => {
     const m = code('Menu.js');
     assert.ok(!/new\s+(ODataConnection|SheetCoeditor)\b/.test(m));
-    assert.ok(/function refreshAllDataForConfigSheet\(configSheetName,resultSheetName\)\{\s*return RefreshSheet\.run\(configSheetName,resultSheetName\);\s*\}/.test(m));
-    assert.ok(/function estimateResponseSize\(configSheetName\)\{\s*return EstimateSheet\.run\(configSheetName\);\s*\}/.test(m));
+    assert.ok(!/refreshAllDataForConfigSheet|estimateResponseSize|refreshAllTrue/.test(m));
   });
 
   test('rule: only BulkSheet.js writes a result table (clear + setValues of a data range)', () => {

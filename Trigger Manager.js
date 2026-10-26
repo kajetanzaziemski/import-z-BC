@@ -106,10 +106,6 @@ function deleteAllAgents() {
 	Controller.run("requestDeleteAllAgents",()=>getAgentManager().deleteAll());
 }
 
-class TriggerManager{
-
-}
-
 class TriggerGateway{
 	/** 
 	 * This function is intended as PRIVATE. Do not call this from outside the class.
@@ -369,5 +365,3 @@ class TriggerInfoEntry{
 	}
 }
 
-/** The old name (Test Functions.js and anything else that still says it). */
-const TriggerWrapper = TriggerGateway;
