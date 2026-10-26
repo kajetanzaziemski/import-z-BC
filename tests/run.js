@@ -597,6 +597,7 @@ require('./state.test.js')({ test, suffix: ' [+live check files]', extraFiles: [
 require('./refresh.test.js')({ test });
 require('./menu.test.js')({ test });
 require('./auth.test.js')({ test });
+require('./bc-layer.test.js')({ test });
 
 // ---- automatic refresh: time trigger, permit, handlers, refresh loops (fake ScriptApp with real trigger bookkeeping) -------------
 require('./schedule.test.js')({ test });

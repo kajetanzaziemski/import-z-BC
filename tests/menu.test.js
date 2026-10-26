@@ -10,7 +10,7 @@ const { FakePlatform } = require('./platform-fakes');
 const ROOT = path.join(__dirname, '..');
 const BASE = ['Custom errors.js', 'Helper Data Store.js', 'Store.js', 'Settings.js', 'Main Settings.js', 'Controller.js', 'Trigger Manager.js',
   'Global Add-on Settings.js', 'Quick Start.js', 'functions.js', 'Track onEdit Triggers.js', 'Status Manager.js', 'Agent Reconciler.js', 'Agents.js', 'Verify Agent.js',
-  'Autoryzacja BC.js', 'Menu.js', 'Menu Actions.js'].filter(f => fs.existsSync(path.join(ROOT, f)));
+  'BC Auth.js', 'BC Connection.js', 'Menu.js', 'Menu Actions.js'].filter(f => fs.existsSync(path.join(ROOT, f)));
 
 module.exports = function register(t) {
   const { test } = t;

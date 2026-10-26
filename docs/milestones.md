@@ -29,7 +29,8 @@ Still to do
 - (done after the tag: `AgentService` regroup, facade `Agents`, `docs/agent-lifecycle.md`)
 - (done after the tag: menu items in `Menu Actions.js` - analyse, refresh, estimate, wizard, authorise, logout; `docs/use-cases.md`)
 - (done on branch `refactor-login-and-rest`: login flow behind `BCAuth`, `docs/login-flow.md`; the status check was already thin forwarders to `Agents`)
-- Remaining: BC layer reorganisation beyond the login (metadata / OData response files), dead `getTable*` in `Menu.js`
+- (done on branch `refactor-login-and-rest`: BC layer reorganised and cleaned of test-only code, `docs/bc-layer.md`)
+- Remaining: nothing planned; the old-name forwarders `refreshAllTrue` / `refreshAllDataForConfigSheet` / `estimateResponseSize` in `Menu.js` are only used by tests
 - The time trigger as two live-check jobs (`refresh.scheduled`, `refresh.retired`)
 
 

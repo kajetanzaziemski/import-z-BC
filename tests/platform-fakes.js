@@ -118,7 +118,7 @@ class FakePlatform {
     g.LockService = { getScriptLock: () => p.lock(), getDocumentLock: () => p.lock(), getUserLock: () => p.lock() };
     g.Utilities = { sleep: ms => { p.advance(ms / 1000); } };
     g.SpreadsheetApp = { getActiveSpreadsheet: () => ({ getId: () => 'ss-1', getSheetByName: () => null }), getUi: () => ({ alert() {} }), flush() {} };
-    g.XmlService = { getNamespace: () => ({}) };            // Metadata.js calls it at load time (allowed by Apps Script, noted in docs)
+    g.XmlService = { getNamespace: () => ({}) };            // Edmx.js calls it at load time (allowed by Apps Script, noted in docs)
     g.ScriptApp = this.scriptApp();
     return g;
   }

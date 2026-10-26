@@ -1,5 +1,5 @@
 // Written by tools/stamp-version.sh (run it before committing and before clasp push). Self-reported: "+" = that commit plus later changes.
-const BUILD_INFO = {commit: "87bacf0+", date: "2026-10-26", branch: "refactor-login-and-rest"};
+const BUILD_INFO = {commit: "f82654a+", date: "2026-10-26", branch: "refactor-login-and-rest"};
 
 /** "4c6d2ec+ (2026-10-25, refactor-and-grid)" - shown in the developer tools sidebars. */
 function buildVersionLabel(){

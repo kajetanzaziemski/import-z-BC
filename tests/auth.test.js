@@ -1,6 +1,6 @@
-// The login flow (Autoryzacja BC.js): how the OAuth2 service is built, who asks it for what, the authorisation sidebar, the OAuth callback, the BC fetch and logout.
-// Written FIRST against the flat functions (getBCService_, showSidebar, authCallback, logout, BCConnection); the move into BCAuth must keep all of it green.
-// REAL: Autoryzacja BC.js, Controller / Settings / Store, Global Add-on Settings, Menu Actions. FAKED: the OAuth2 library (records the chain), UrlFetchApp, the UI.
+// The login flow (BC Auth.js, BC Connection.js): how the OAuth2 service is built, who asks it for what, the authorisation sidebar, the OAuth callback, the BC fetch and logout.
+// Written FIRST against the flat functions (getBCService_, showSidebar, authCallback, logout, BCConnection); the move into BCAuth must keep all of it green (the old global names are gone since the BC layer was reorganised: the tests call BCAuth).
+// REAL: BC Auth.js, BC Connection.js, Controller / Settings / Store, Global Add-on Settings, Menu Actions. FAKED: the OAuth2 library (records the chain), UrlFetchApp, the UI.
 'use strict';
 const fs = require('fs');
 const path = require('path');
@@ -10,7 +10,7 @@ const { FakePlatform } = require('./platform-fakes');
 const ROOT = path.join(__dirname, '..');
 const FILES = ['Custom errors.js', 'Helper Data Store.js', 'Store.js', 'Settings.js', 'Main Settings.js', 'Controller.js', 'Trigger Manager.js',
   'Global Add-on Settings.js', 'Quick Start.js', 'functions.js', 'Track onEdit Triggers.js', 'Status Manager.js', 'Agent Reconciler.js', 'Agents.js', 'Verify Agent.js',
-  'Autoryzacja BC.js', 'Menu.js', 'Menu Actions.js'].filter(f => fs.existsSync(path.join(ROOT, f)));
+  'BC Auth.js', 'BC Connection.js', 'Menu.js', 'Menu Actions.js'].filter(f => fs.existsSync(path.join(ROOT, f)));
 
 module.exports = function register(t) {
   const { test } = t;
@@ -51,7 +51,7 @@ module.exports = function register(t) {
 
   test('login: the OAuth2 service is built with the tenant name, the BC urls, the client, the callback authCallback, user properties / cache / lock, scope and offline consent (every call, in order)', () => {
     const s = scenario();
-    s.ex.eval(`getBCService_()`);
+    s.ex.eval(`BCAuth.service()`);
     assert.deepStrictEqual(s.calls(), [['oauth.create', 'tenant-1']]);
     assert.deepStrictEqual(s.cfgCalls(), [
       ['setAuthorizationBaseUrl', 'https://login.microsoftonline.com/tenant-1/oauth2/v2.0/authorize'],
@@ -61,13 +61,13 @@ module.exports = function register(t) {
       ['setScope', 'scope'], ['setParam', 'access_type', 'offline'], ['setParam', 'prompt', 'consent']]);
   });
 
-  test('login: showSidebar - without access it shows the authorisation link in a sidebar; with access it shows nothing', () => {
+  test('login: BCAuth.authorise - without access it shows the authorisation link in a sidebar; with access it shows nothing', () => {
     const a = scenario({ access: false });
-    a.ex.eval(`showSidebar()`);
+    a.ex.eval(`BCAuth.authorise()`);
     assert.deepStrictEqual(a.calls().map(c => c[0]), ['oauth.create', 'service.hasAccess', 'sidebar']);
     assert.ok(a.calls()[2][1].includes('href="https://login/authorize?x=1"'));
     const b = scenario({ access: true });
-    b.ex.eval(`showSidebar()`);
+    b.ex.eval(`BCAuth.authorise()`);
     assert.deepStrictEqual(b.calls().map(c => c[0]), ['oauth.create', 'service.hasAccess']);
   });
 
@@ -106,7 +106,7 @@ module.exports = function register(t) {
 
   test('login: logout resets the service (all stored tokens)', () => {
     const a = scenario();
-    a.ex.eval(`logout()`);
+    a.ex.eval(`BCAuth.logout()`);
     assert.deepStrictEqual(a.calls(), [['oauth.create', 'tenant-1'], ['service.reset']]);
   });
 
@@ -122,8 +122,8 @@ module.exports = function register(t) {
     assert.deepStrictEqual(c.calls().map(x => x[0]), ['oauth.create', 'service.reset', 'menu.built']);
   });
 
-  test('rule: only Autoryzacja BC.js talks to the OAuth2 library; the rest of the add-on asks BCAuth (the old global names remain for Test Functions.js)', () => {
-    const offenders = fs.readdirSync(ROOT).filter(f => /\.js$/.test(f) && f !== 'Autoryzacja BC.js' && !/^(Live Check|Test Functions)/.test(f))
+  test('rule: only BC Auth.js talks to the OAuth2 library; the rest of the add-on asks BCAuth', () => {
+    const offenders = fs.readdirSync(ROOT).filter(f => /\.js$/.test(f) && f !== 'BC Auth.js' && !/^(Live Check|Test Functions)/.test(f))
       .filter(f => /OAuth2\.|getBCService_\(|\.getAccessToken\(|\.hasAccess\(/.test(fs.readFileSync(path.join(ROOT, f), 'utf8').split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n')));
     assert.deepStrictEqual(offenders, []);
   });

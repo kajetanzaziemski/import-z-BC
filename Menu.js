@@ -10,18 +10,6 @@ function menuSelector(isAuthorized){
 }
 
 /**
- * Menu available without connection to BC. The only option is to start authorization flow
- * to estabilish a new connection.
- */
-function basicMenu() {
-  const ui = SpreadsheetApp.getUi();
-  ui
-      .createAddonMenu()
-      .addItem('Autoryzuj', 'startAuthFlow')
-      .addToUi();
-}
-
-/**
  * Menu available when the connection is active.
  */
 function fullMenu() {
@@ -117,25 +105,6 @@ function refreshAllDataForConfigSheet(configSheetName,resultSheetName){
 /** Kept under its old name; the work is in EstimateSheet.js. */
 function estimateResponseSize(configSheetName){
   return EstimateSheet.run(configSheetName);
-}
-
-function getTable(tableName,queryText) {
-  var request = ODATA_URL_+`/Company('Megaron%20S.A.')/${tableName}`;
-  request += "?"+(queryText ?? "$top=100");
-  request += "&$count=true";
-  dbgLog(request);
-  return getTableWithRequest(request);
-}
-
-function getTableWithRequest(requestURL){
-  if(!requestURL) return null;
-  var response = UrlFetchApp.fetch(requestURL, {
-    headers: {
-      Authorization: 'Bearer ' + BCAuth.accessToken()
-    }
-    ,muteHttpExceptions: true
-  });
-  return new ODataResponseTable(response.getContentText());
 }
 
 /**

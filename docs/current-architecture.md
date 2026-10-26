@@ -22,14 +22,14 @@ Everything is one global scope (Apps Script); the arrows are conventions, not en
                           │               │                              │                               │
         ┌─────────────────▼──┐   ┌────────▼──────────────────┐   ┌───────▼─────────────────┐   ┌─────────▼────────────────────┐
         │ SHEET: CONFIG       │   │ BC / OData ACCESS         │   │ SHEET: SETTINGS          │   │ AGENT / TRIGGER MANAGEMENT    │
-        │ Sheet Coeditor.js   │   │ Autoryzacja BC.js (OAuth2)│   │ Settings Sheet.js        │   │ Trigger Manager.js            │
+        │ Sheet Coeditor.js   │   │ BC Auth.js (OAuth2)    │   │ Settings Sheet.js        │   │ Trigger Manager.js            │
         │  SheetCoeditor      │   │  BCConnection             │   │  SettingsSheet           │   │  AgentManager · TriggerWrapper│
         │  header block,      │   │ OData Query.js            │   │  table of config→result  │   │  Document/UserTriggerLog      │
         │  read rows, insert  │   │  ODataQuery (build $url)  │   │  sheets, refresh freq,   │   │  StorageArray / StorageObject │
-        │  rows, validations, │   │ OData Response Handling   │   │  last refresh, checkbox  │   │ Status Manager.js             │
+        │  rows, validations, │   │ OData Connection / Response   │   │  last refresh, checkbox  │   │ Status Manager.js             │
         │  status-cell colours│   │  ODataConnection (pages)  │   │  + refresh permit/trigger│   │  StatusManager (state table)  │
         │ Content Tracker.js  │   │  ODataResponseTable       │   │                          │   │ Track onEdit Triggers.js      │
-        │  CoedContentTracker │   │ Metadata.js               │   │                          │   │  simple↔installable onEdit    │
+        │  CoedContentTracker │   │ BC Metadata.js / Edmx.js  │   │                          │   │  simple↔installable onEdit    │
         │  CCTImportConfig    │   │  BCMetadata · Edmx*       │   │                          │   │  detection, doc lock, alarm   │
         │  CoedOption (cascade│   │ Data Type.js  DataType    │   │                          │   │ Main Settings.js  MainSettings│
         │  of query options)  │   │  (OData type → sheet fmt) │   │                          │   │  addon status, permits        │

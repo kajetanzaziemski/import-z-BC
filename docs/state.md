@@ -15,7 +15,7 @@ version with and without it can run on the same document. Tests: `tests/state.te
 
 ## Callers moved (mechanical, each pinned by a test)
 `Track onEdit Triggers.js` (document cache with 30 s lifetime, suspect flag), `functions.js` (`runLatestOnly` ticket), `Trigger Manager.js` (trigger logs → `getJson/setJson`,
-agent pairs → `Store.array`), `Metadata.js` (optional document cache), `Autoryzacja BC.js` (OAuth2 property store / cache = user scope via `Store.service`),
+agent pairs → `Store.array`), `BC Metadata.js` (optional document cache), `BC Auth.js` (OAuth2 property store / cache = user scope via `Store.service`),
 `Global Add-on Settings.js`, `Quick Start.js` (`getGlobalSettings`, settings sheet name).
 Rules in the tests: only `Store.js` touches `HelperDataStore`/`OptionalDataStore`; only `Helper Data Store.js` touches `PropertiesService`/`CacheService`; only `Store.js` constructs
 `StorageObject`/`StorageArray`; only `Settings.js` knows the `importSettingsArray` key. (`Test Functions.js`, the manual tests, is exempt.)
@@ -24,7 +24,7 @@ Rules in the tests: only `Store.js` touches `HelperDataStore`/`OptionalDataStore
 - `StorageObject` keeps the CLAUDE.md invariant: only changed keys, merged under a lock, a stale snapshot never reverts another run's key (two executions on one fake platform).
 - `StorageArray` still writes the **whole** array back: a test pins the lost update (`e3` lost) so that fixing it (agent registry, see `docs/agent-service.md` smell 1) is a conscious change.
 - `getAddonStatus` logged `'true'` always (operator precedence in the `dbgLog` message); the log now shows the real value. Nothing else about it changed.
-- `Metadata.js` calls `XmlService.getNamespace(...)` **at load time** (top level, line ~97). Allowed by Apps Script, but it breaks "nothing is used at load time"; left as is, the test platform has a stub.
+- `Edmx.js` calls `XmlService.getNamespace(...)` **at load time** (top level, line ~97). Allowed by Apps Script, but it breaks "nothing is used at load time"; left as is, the test platform has a stub.
 - Dead code removed from `Sheet Coeditor.js` (statements after an unconditional `return` in `loadFromStore` and `applyCoeditsWithLock`; they were the only direct `PropertiesService`/`CacheService` uses outside the store).
 - `getMainSettings()` (Quick Start) returns the **SettingsSheet** (the settings table), not `MainSettings`: a naming trap that the later `SettingsGrid` step should remove.
 

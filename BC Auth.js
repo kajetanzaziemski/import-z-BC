@@ -1,27 +1,4 @@
 
-const OData_Page_Length = 20000;
-
-// Functions adapted from tutorial for OAuth2 library: https://github.com/googleworkspace/apps-script-oauth2
-
-class BCConnection{
-  static fetchURL(url){
-    try{
-      var response = UrlFetchApp.fetch(url, {
-        headers: {
-          Authorization: 'Bearer ' + BCAuth.accessToken()
-        }
-        ,muteHttpExceptions: true
-      });
-    }
-    catch(error){
-      if(error.message == "Access not granted or expired.") throw new ConnectionError("Access not granted or expired.");
-      if(error.message == "Limit Exceeded: URLFetch URL Length.") throw new Error("Zbyt długie zapytanie. Ogranicz opcje.");
-      else throw error;
-    }
-    return response;
-  }
-}
-
 /**
  * The login to Business Central (OAuth2 library, https://github.com/googleworkspace/apps-script-oauth2). THE ONLY place that talks to the OAuth2 service:
  * everybody else asks BCAuth (the BC fetch, the menu items, the OAuth callback). The tokens live in the USER's properties / cache under the tenant name.
@@ -96,11 +73,6 @@ const BCAuth = {
     BCAuth.service().reset();
   }
 };
-
-// Names kept for callers outside the login flow (Metadata, Test Functions.js, the menu code of the old days): all forward to BCAuth.
-function getBCService_(){ return BCAuth.service(); }
-function showSidebar(){ BCAuth.authorise(); }
-function logout(){ BCAuth.logout(); }
 
 /** Function set as the OAuth callback (BCAuth.service). The result page tells the user to close the tab. */
 function authCallback(request) {
