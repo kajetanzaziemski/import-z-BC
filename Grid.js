@@ -485,11 +485,9 @@ class Grid {
       } });
     });
 
-    const viaService = [];                        // lists with apostrophe-prefixed items: the API reads them differently from the service, see quotedList_
     Object.keys(this.validations).forEach(k => {  // lists and dates (null removes the validation)
       const p = k.split(',').map(Number);
       if (!this._inWindow(p[0], p[1])) return;
-      if (quotedList_(this.validations[k])) { viaService.push([p[0], p[1], this.validations[k]]); return; }
       req.push({ updateCells: {
         rows: [{ values: [this.validations[k] ? { dataValidation: validationToApi_(this.validations[k]) } : {}] }],
         start: { sheetId: sid, rowIndex: p[0] - 1, columnIndex: p[1] - 1 },
@@ -578,12 +576,6 @@ class Grid {
     this._condRequestsApi(req, sid);
 
     Sheets.Spreadsheets.batchUpdate({ requests: req }, S.ssId);
-
-    if (viaService.length) {                      // after the batch: the cells (and rows) they sit in exist now
-      SpreadsheetApp.flush();
-      const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(this.sheetName);
-      viaService.forEach(v => sheet.getRange(v[0], v[1]).setDataValidation(validationToService_(v[2])));
-    }
 
     if (this.active) {                            // the selection is not part of the API
       const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(this.sheetName);
@@ -999,18 +991,24 @@ function validationSpec_(dv) {
   throw new Error('Grid: unsupported data validation type ' + type + '.');
 }
 
-function validationToApi_(spec) {
-  if (spec.date) return { condition: { type: 'DATE_IS_VALID' }, strict: true };
-  return { condition: { type: 'ONE_OF_LIST', values: spec.list.map(x => ({ userEnteredValue: x })) }, strict: spec.strict, showCustomUi: spec.dropdown };
+/**
+ * The items of a list as the Sheets API has to get them. The API takes list items literally: an item written with the quote prefix ("'=" - the form that enters the
+ * plain text "=", where a lone "=" cannot be typed) does not match the text it enters. The sheet accepts "'=" as input and checks it against "=", so the list carries
+ * both. The Spreadsheet service reads "'=" itself as that text and needs no twin. (Found on a real sheet, docs/bugs-todo.md #18.)
+ */
+function apiListItems_(list) {
+  const out = [];
+  list.forEach(x => {
+    if (out.indexOf(x) < 0) out.push(x);
+    const twin = String(x).charAt(0) === "'" && String(x).length > 1 ? String(x).slice(1) : null;
+    if (twin !== null && list.indexOf(twin) < 0 && out.indexOf(twin) < 0) out.push(twin);
+  });
+  return out;
 }
 
-/**
- * A list with an item that begins with an apostrophe ("'<", "'=": the quote prefix that makes the picked value plain text, so a lone "=" is not a formula).
- * Written through the Sheets API such a validation rejected the very value picked from it (real sheet: "podana wartość musi należeć do zakresu", gone when the same
- * list was written by the Spreadsheet service), so these are written by the service also when the grid commits through the API.
- */
-function quotedList_(spec) {
-  return !!spec && !spec.date && Array.isArray(spec.list) && spec.list.some(x => String(x).charAt(0) === "'");
+function validationToApi_(spec) {
+  if (spec.date) return { condition: { type: 'DATE_IS_VALID' }, strict: true };
+  return { condition: { type: 'ONE_OF_LIST', values: apiListItems_(spec.list).map(x => ({ userEnteredValue: x })) }, strict: spec.strict, showCustomUi: spec.dropdown };
 }
 
 function validationToService_(spec) {

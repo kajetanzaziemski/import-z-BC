@@ -501,8 +501,10 @@ class SimBook {
               const t = cell.note === undefined ? '' : cell.note; const y = s.cell(r, c, true); y.note = t; s.prune(r, c);
             } else if (f === 'dataValidation') {
               const y = s.cell(r, c, true), d = cell.dataValidation;
+              // (the sheet accepts "'=" as input and checks it against "=": an item that is in the list as a plain item and as "'item" is ONE item - docs/bugs-todo.md #18)
+              const items = !d || !d.condition.values ? [] : d.condition.values.map(v => v.userEnteredValue);
               y.dv = !d ? null : d.condition.type === 'BOOLEAN' ? 'checkbox' : d.condition.type === 'DATE_IS_VALID' ? 'date'
-                : 'list:' + d.condition.values.map(v => v.userEnteredValue).join('|') + ':' + (d.strict ? 'strict' : 'loose') + ':' + (d.showCustomUi ? 'dropdown' : 'plain');
+                : 'list:' + items.filter(x => !items.includes("'" + x)).join('|') + ':' + (d.strict ? 'strict' : 'loose') + ':' + (d.showCustomUi ? 'dropdown' : 'plain');
               if (d && d.condition.type === 'BOOLEAN' && y.v === '') y.v = false;
               s.prune(r, c);
             } else throw new Error('SimBook: unsupported updateCells field ' + f);

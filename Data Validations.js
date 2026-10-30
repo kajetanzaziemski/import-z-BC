@@ -42,7 +42,7 @@ class ConfigDValStore{
     this.simple = {};
     this.simple["operators"] = new MyDataValidation(
       "VALUE_IN_LIST",
-      [ODataQuery.listComparisonOperators().map(op => "'"+op)],
+      [ODataQuery.listComparisonOperators().map(op => op == "=" ? "'=" : op)],      // a lone "=" cannot be typed (it starts a formula): "'=" enters the text; the other operators are plain items (bugs-todo #18)
       "operator selection"
     );
     this.simple["queryOptions"] = new MyDataValidation(
