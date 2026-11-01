@@ -16,8 +16,11 @@ const ScheduleRefresh = {
   /**
    * @param frequency {{freq: number, unit: "hrs"|"days"|null}} As SettingsSheet.getRefreshFrequency() returns it.
    *   Empty freq or unknown unit: the old triggers are removed and no new one is created.
+   * @param startAt {{hour: number, minute: number}|null} The time of day the refresh should happen at (days: atHour + nearMinute; hours: nearMinute only).
+   *   The platform only promises "near" this time (within about 15 minutes).
+   * @returns {{nextRefresh: Date, intervalHrs: number}|null} null when the refresh was switched off.
    */
-  setUp(frequency){
+  setUp(frequency, startAt){
     // A time trigger is not bound to a document (getTriggerSourceId() is null for it, getUserTriggers(ss) does not list it) - the only link to a
     // document is the permit stored in that document. So the trigger to replace is the one THIS document's permit names, and no other (the refresh
     // triggers of other documents stay). Triggers of this document that the permit does not name - older ones, legacy `autoRefresh` ones - cannot be
@@ -32,19 +35,74 @@ const ScheduleRefresh = {
       // Refresh switched off here. A document that never had a permit gets one for nobody: an old trigger of this document that has not claimed
       // one yet would otherwise claim it when it fires (the legacy handler does) and go on refreshing; with a permit for nobody it deletes itself.
       if(!permit) MainSettings.setRefreshPermit(null,0);
-      return;
+      return null;
     }
     let trigger = ScriptApp.newTrigger('autoRefreshHandler').timeBased();
     if(frequency.unit=="days"){
       trigger.everyDays(interval);
+      if(startAt) trigger.atHour(startAt.hour);
       intervalHrs = 24 * interval;
     }else{
       trigger.everyHours(interval);
     }
+    if(startAt && startAt.minute != null) trigger.nearMinute(startAt.minute);
 
     let newTrigger = trigger.create();
     // Issue a permit for this trigger. This will override any other permits, so all old triggers will automatically uninstall.
     MainSettings.setRefreshPermit(newTrigger.getUniqueId(),intervalHrs);
+    return {nextRefresh: ScheduleRefresh.nextRefresh(new Date(), frequency.unit, interval, startAt), intervalHrs};
+  },
+
+  /**
+   * When the first refresh of a new trigger will happen (an estimate: the platform decides the exact minute).
+   * days: the next HH:mm that is still ahead (today or tomorrow), no time given: now + the interval.
+   * hours: now + the interval, moved to the minute asked for (the next one ahead of that moment).
+   */
+  nextRefresh(now, unit, interval, startAt){
+    const next = new Date(now.getTime());
+    if(unit == "days"){
+      if(!startAt) { next.setDate(next.getDate() + interval); return next; }
+      next.setHours(startAt.hour, startAt.minute ?? 0, 0, 0);
+      if(next <= now) next.setDate(next.getDate() + 1);
+      return next;
+    }
+    next.setTime(now.getTime() + interval * 3600000);
+    if(startAt && startAt.minute != null){
+      next.setMinutes(startAt.minute, 0, 0);
+      if(next <= now) next.setHours(next.getHours() + 1);
+    }
+    return next;
+  },
+
+  /**
+   * The edit of the refresh frequency: sets the trigger up and reports the result in the message area of the settings sheet.
+   * Success: the message says how often and when next; failure: the message says nothing was updated and a toast tells about it;
+   * when even the message cannot be written, only the toast is left. The error goes on to the caller as before.
+   * @param settings the settings sheet object (getMainSettings())
+   */
+  apply(settings){
+    let result;
+    try{
+      result = ScheduleRefresh.setUp(settings.getRefreshFrequency(), settings.getRefreshStartAt());
+    }catch(err){
+      ScheduleRefresh.report_(settings,{ok:false,when:new Date()});
+      throw err;
+    }
+    ScheduleRefresh.report_(settings,{ok:true,when:new Date(),frequency:settings.getRefreshFrequency(),next:result?.nextRefresh ?? null});
+  },
+
+  /** Writes the message; if that fails, or the report is a failure, a toast tells about it (the toast is the last resort and must not throw). */
+  report_(settings, report){
+    let written = false;
+    try{
+      settings.setRefreshMessage(report);
+      written = true;
+    }catch(err){
+      dbgLog(`Refresh message not written: ${err}`);
+    }
+    if(!written || !report.ok){
+      try{ settings.toastRefreshError(); }catch(err){ dbgLog(`Toast failed: ${err}`); }
+    }
   },
 
   /** @param e {Object} The time-based trigger event (e.triggerUid). */

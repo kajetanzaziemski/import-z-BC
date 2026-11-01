@@ -183,6 +183,7 @@ class SimBook {
     } };
     this.SpreadsheetApp = {
       WrapStrategy: { WRAP: 'WRAP', OVERFLOW: 'OVERFLOW', CLIP: 'CLIP' },
+      BorderStyle: { SOLID: 'SOLID', SOLID_MEDIUM: 'SOLID_MEDIUM', SOLID_THICK: 'SOLID_THICK' },
       DataValidationCriteria: { VALUE_IN_LIST: 'VALUE_IN_LIST', DATE_IS_VALID_DATE: 'DATE_IS_VALID_DATE' },
       BooleanCriteria: { CUSTOM_FORMULA: 'CUSTOM_FORMULA' },
       newConditionalFormatRule: () => book.ruleBuilder(),

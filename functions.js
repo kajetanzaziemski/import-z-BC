@@ -1,3 +1,8 @@
+/** A toast in the active spreadsheet (10 s). */
+function toastMessage(message,title){
+  SpreadsheetApp.getActiveSpreadsheet().toast(message,title ?? "Import z BC",10);
+}
+
 function listProjectTriggers(){
   return Controller.run("requestListProjectTriggers",() => StatusManager.getAllProjectTriggers());
 }

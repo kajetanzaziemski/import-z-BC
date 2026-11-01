@@ -126,6 +126,35 @@ module.exports = function register(t) {
     assert.strictEqual(s.book.gets.length, getsAfterCtor, 'no read after the first one');
   });
 
+
+  // ---- the message area and the start time (not in the frozen class) ----------------------------------------------------------------------
+  MODES.forEach(mode => test('message area: success is green with the frequency, next refresh and set-up time; failure is red; both in merged B3:E3 [' + mode + ']', () => {
+    const s = scope(mode);
+    s.run(`globalThis.__ss = new SettingsSheet()`);
+    s.run(`Utilities.formatDate = (d, tz, p) => p === 'Z' ? '+0200' : p === 'z' ? 'CEST' : d.toISOString().slice(0, 19).replace('T', ' ')`);
+    s.run(`__ss.setRefreshMessage({ ok: true, when: new Date(1750000000000), frequency: { freq: 2, unit: 'days' }, next: new Date(1750100000000) })`);
+    const get = () => s.run(`__ss.grid.rows()[2][0]`);
+    const ok = get();
+    assert.match(ok, /^Dane będą odświeżane automatycznie co 2 dni\.\nNastępne odświeżenie \d{4}-\d\d-\d\d \d\d:\d\d:\d\d UTC[+-]\d+\.\nOdświeżanie zostało ustawione /);
+    s.run(`__ss.setRefreshMessage({ ok: false, when: new Date(1750000000000) })`);
+    const bad = get();
+    assert.match(bad, /^Ustawienia odświeżania nie zostały zaktualizowane!\n.*Import z BC -> Ustawienia\.\nPróba zmiany ustawień została podjęta /);
+    assert.strictEqual(s.run(`__ss.grid.rows()[2][1]`), '');                  // merged: the rest of the area is empty
+  }));
+
+  MODES.forEach(mode => test('start time: "17:30" in F of the frequency line is read as {hour, minute}; empty or not a time -> null [' + mode + ']', () => {
+    const s = scope(mode);
+    s.run(`globalThis.__ss = new SettingsSheet()`);
+    const row = s.run(`__ss.refreshFrequencyPos`);
+    const sh = s.book.sheets['Ustawienia'];
+    const at = v => { sh.setValue(row, 6, v, ''); s.run(`globalThis.__ss = new SettingsSheet()`); return plain(s.run(`__ss.getRefreshStartAt()`)); };
+    assert.deepStrictEqual(at('17:30'), { hour: 17, minute: 30 });
+    assert.deepStrictEqual(at('7:05'), { hour: 7, minute: 5 });
+    assert.strictEqual(at(''), null);
+    assert.strictEqual(at('wieczorem'), null);
+    assert.strictEqual(at('25:00'), null);
+  }));
+
   test('rule: Settings Sheet.js and the settings code around it reach the sheet through SettingsGrid only', () => {
     const text = fs.readFileSync(path.join(ROOT, 'Settings Sheet.js'), 'utf8').split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
     assert.ok(!/getRange\(|getSheetByName|insertSheet|insertRowAfter|getLastRow|\.setValues\(|setNumberFormat|insertCheckboxes|autoResizeColumns/.test(text));

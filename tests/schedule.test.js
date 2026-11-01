@@ -312,6 +312,63 @@ module.exports = function register(t) {
     assert.deepStrictEqual(sc.calls(), [['refresh', 'K1']]);
   });
 
+
+  // ---- start time and the message area (ScheduleRefresh.apply) -------------------------------------------------------------------------------
+  test('schedule: a start time -> days: atHour + nearMinute; hours: nearMinute only', () => {
+    const sc = scenario();
+    sc.ex.eval(`ScheduleRefresh.setUp({ freq: 2, unit: 'days' }, { hour: 17, minute: 30 })`);
+    sc.ex.eval(`ScheduleRefresh.setUp({ freq: 6, unit: 'hrs' }, { hour: 17, minute: 30 })`);
+    assert.deepStrictEqual(triggers(sc.p).map(x => x.params), [{ everyHours: 6, nearMinute: 30 }]);       // the second set-up replaced the first
+    sc.ex.eval(`ScheduleRefresh.setUp({ freq: 2, unit: 'days' }, { hour: 17, minute: 30 })`);
+    assert.deepStrictEqual(triggers(sc.p).map(x => x.params), [{ everyDays: 2, atHour: 17, nearMinute: 30 }]);
+  });
+
+  test('schedule: the next refresh is an estimate: days -> the next HH:mm ahead (today or tomorrow); hours -> now + interval, on the asked minute', () => {
+    const sc = scenario();
+    const next = (now, unit, n, at) => sc.ex.eval(`ScheduleRefresh.nextRefresh(new Date(${now}), '${unit}', ${n}, ${JSON.stringify(at)}).getTime()`);
+    const t = (y, mo, d, h, mi) => new Date(y, mo, d, h, mi).getTime();
+    assert.strictEqual(next(t(2026, 10, 1, 10, 0), 'days', 1, { hour: 17, minute: 0 }), t(2026, 10, 1, 17, 0));
+    assert.strictEqual(next(t(2026, 10, 1, 18, 0), 'days', 1, { hour: 17, minute: 0 }), t(2026, 10, 2, 17, 0));
+    assert.strictEqual(next(t(2026, 10, 1, 10, 0), 'days', 3, null), t(2026, 10, 4, 10, 0));
+    assert.strictEqual(next(t(2026, 10, 1, 10, 10), 'hrs', 2, null), t(2026, 10, 1, 12, 10));
+    assert.strictEqual(next(t(2026, 10, 1, 10, 40), 'hrs', 2, { hour: 0, minute: 15 }), t(2026, 10, 1, 12, 15));
+  });
+
+  /** apply() on a settings object that records the message (the real one writes it through SettingsGrid) */
+  function applyScenario(over, fail) {
+    const sc = scenario(over);
+    sc.ex.eval(`globalThis.__msgs = []; globalThis.__toasts = [];
+      globalThis.__ss = { getRefreshFrequency: () => (${JSON.stringify(over && over.freq || { freq: 6, unit: "hrs" })}), getRefreshStartAt: () => null,
+        setRefreshMessage: r => { if (${!!(fail && fail.message)}) throw new Error('no message'); __msgs.push(r); }, toastRefreshError: () => __toasts.push('toast') };`);
+    return sc;
+  }
+  test('schedule: apply -> the trigger is set and the message reports success with the next refresh; no toast', () => {
+    const sc = applyScenario();
+    sc.ex.eval(`ScheduleRefresh.apply(__ss)`);
+    const msgs = plain(sc.ex.eval(`__msgs`));
+    assert.strictEqual(msgs.length, 1);
+    assert.strictEqual(msgs[0].ok, true);
+    assert.deepStrictEqual(msgs[0].frequency, { freq: 6, unit: 'hrs' });
+    assert.ok(msgs[0].next);
+    assert.deepStrictEqual(plain(sc.ex.eval(`__toasts`)), []);
+  });
+
+  test('schedule: apply -> setting the trigger fails: the message reports the failure, a toast tells too, the error goes on', () => {
+    const sc = applyScenario({ freq: { freq: 3, unit: null } });
+    sc.ex.eval(`__ss.getRefreshFrequency = () => null`);
+    assert.throws(() => sc.ex.eval(`ScheduleRefresh.apply(__ss)`), /Cannot read properties of null/);
+    assert.deepStrictEqual(plain(sc.ex.eval(`__msgs.map(m => m.ok)`)), [false]);
+    assert.deepStrictEqual(plain(sc.ex.eval(`__toasts`)), ['toast']);
+  });
+
+  test('schedule: apply -> the message cannot be written: a toast is the only report; a toast that fails too is swallowed', () => {
+    const sc = applyScenario(null, { message: true });
+    sc.ex.eval(`ScheduleRefresh.apply(__ss)`);
+    assert.deepStrictEqual(plain(sc.ex.eval(`__toasts`)), ['toast']);
+    sc.ex.eval(`__ss.toastRefreshError = () => { throw new Error('no toast') }`);
+    sc.ex.eval(`ScheduleRefresh.apply(__ss)`);
+  });
+
   // ---- rules -----------------------------------------------------------------------------------------------------------------------------------
   const code = f => fs.readFileSync(path.join(ROOT, f), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
 
@@ -324,7 +381,7 @@ module.exports = function register(t) {
 
   test('rule: the old names are one-line forwarders (Settings Sheet.js, Menu.js); the settings sheet no longer decides how a trigger is made', () => {
     const ss = code('Settings Sheet.js'), menu = code('Menu.js');
-    assert.ok(/setRefreshTrigger\(\)\{\s*ScheduleRefresh\.setUp\(this\.getRefreshFrequency\(\)\);\s*\}/.test(ss));
+    assert.ok(/setRefreshTrigger\(\)\{\s*ScheduleRefresh\.apply\(this\);\s*\}/.test(ss));
     assert.ok(/function autoRefreshFunction\(e\)\{\s*RefreshAll\.scheduled\(\);\s*\}/.test(ss));
     assert.ok(/function autoRefreshContent\(e\) \{\s*ScheduleRefresh\.run\(e\);\s*\}/.test(ss));
     assert.ok(/function autoRefreshContentOld\(e\) \{\s*ScheduleRefresh\.runLegacy\(e\);\s*\}/.test(ss));

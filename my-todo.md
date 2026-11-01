@@ -1,4 +1,8 @@
-# Auto refresh
+# [DONE, not yet checked on a real spreadsheet] Auto refresh
+
+Implemented on branch better-auto-refresh: start time in F of the refreshFrequency line ("17:30", text; days -> atHour + nearMinute, hours -> nearMinute; the platform only promises "near"),
+message area B3:E3 (merged, green / red thick border), toast "BŁĄD! Zobacz Import z BC -> Ustawienia." when even the message cannot be written. The F label (F2) and format are added the first
+time a message is written. "Następne odświeżenie" is an estimate (triggers do not expose their next run). Not done: the sidebar tab below.
 
 Extended freq area should allow for:
 - setting time refresh should happen at (next refresh at?).

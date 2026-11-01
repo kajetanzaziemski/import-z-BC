@@ -525,7 +525,7 @@ class Grid {
         const x = parseA1_(a1);
         const r = { updateBorders: { range: grid(x.r1, x.c1, x.r2, x.c2) } };
         ['top', 'left', 'bottom', 'right', 'innerVertical', 'innerHorizontal'].forEach((side, i) => {
-          if (a[i]) r.updateBorders[side] = black;
+          if (a[i]) r.updateBorders[side] = a[6] || a[7] ? { style: a[7] ? String(a[7]) : 'SOLID', color: a[6] ? colorToApi_(a[6]) : black.color } : black;
           else if (a[i] === false) r.updateBorders[side] = { style: 'NONE' };      // false removes the border, null leaves it
         });
         req.push(r);
@@ -753,8 +753,10 @@ class Grid {
     this.fills.forEach(m => sheet.getRange(m.r1, m.c1, m.r2 - m.r1 + 1, m.c2 - m.c1 + 1).setBackground(m.color));
     this.borders.forEach(b => {
       const list = sheet.getRangeList(b.a1);
-      if (typeof list.setBorder === 'function') list.setBorder.apply(list, b.args);
-      else list.getRanges().forEach(r => r.setBorder.apply(r, b.args));
+      const args = b.args.slice();                // the style is given by name ("SOLID_THICK"); the service wants its enum
+      if (typeof args[7] === 'string') args[7] = SpreadsheetApp.BorderStyle[args[7]];
+      if (typeof list.setBorder === 'function') list.setBorder.apply(list, args);
+      else list.getRanges().forEach(r => r.setBorder.apply(r, args));
     });
     this.rowFormats.forEach(f => {
       if (f.col) {                                  // one cell: the look only, no borders

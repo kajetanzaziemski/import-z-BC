@@ -29,10 +29,29 @@ const SETTINGS_LAYOUT = {
   frequencyRow: 6,
   units: ["godzin","dni"],
   lastRefreshFormat: "yyyy-mm-dd hh:mm",
+  startAtCol: 6,                           // F: the time of day to refresh at ("17:00", text), on the refreshFrequency line; added lazily (see open().writeRefreshMessage)
+  startAtLabel: "Godzina odświeżenia",    // F2
+  messageRow: 3,                           // the message area: B3:E3 merged, under the column labels
+  messageStyle: {
+    ok:   { background: "#d9ead3", border: "#38761d" },     // light green, green thick border
+    fail: { background: "#f4cccc", border: "#cc0000" }      // light red, red thick border
+  },
   addedLastRefreshLabel: "Ostatnie odświeżone o:"    // the label of a lastRefresh line added later (differs from the header's, as it always did)
 };
 
 const SettingsGrid = {
+  /** "2026-11-29 17:00:00 UTC+2" (the zone as an offset: +2, -5, +5:30). */
+  stamp(date, timeZone) {
+    const off = Utilities.formatDate(date, timeZone, "Z");                         // +0200
+    const h = parseInt(off.slice(1, 3), 10), m = off.slice(3);
+    return `${Utilities.formatDate(date, timeZone, "yyyy-MM-dd HH:mm:ss")} UTC${off[0]}${h}${m == "00" ? "" : ":" + m}`;
+  },
+
+  /** "dzień" / "dni" / "h" for the frequency {freq, unit}. */
+  unitName(frequency) {
+    return frequency.unit == "days" ? (frequency.freq == 1 ? "dzień" : "dni") : "h";
+  },
+
   exists(sheetName) {
     return Grid.exists(sheetName);
   },
@@ -56,6 +75,8 @@ const SettingsGrid = {
    *   lastRefresh(row)              the time (D) of the lastRefresh line at `row`
    *   addLastRefreshRow()           a lastRefresh line after the last row; returns its row number
    *   writeLastRefresh(row, time)   time into D, the time zone's name into E
+   *   startAt(row)                  the time of day (F) of the refreshFrequency line at `row`, "" when there is none
+   *   writeRefreshMessage(report)   the message area (B3:E3, merged): green when the refresh was set up, red when not (see ScheduleRefresh.apply)
    *   addConfigRow(after, config, result, refresh)   a configSheet line after row `after`, E a checkbox; returns its row number
    */
   open(sheetName) {
@@ -78,6 +99,31 @@ const SettingsGrid = {
       },
       lastRefresh(row) {
         return grid.getRange(row, L.valueCol).getValue();
+      },
+      startAt(row) {
+        return grid.getRange(row, L.startAtCol).getValue();
+      },
+      writeRefreshMessage(report) {
+        const style = L.messageStyle[report.ok ? "ok" : "fail"];
+        const stamp = d => SettingsGrid.stamp(d, grid.getTimeZone());
+        const lines = report.ok
+          ? (report.frequency?.freq && report.next
+              ? [`Dane będą odświeżane automatycznie co ${report.frequency.freq} ${SettingsGrid.unitName(report.frequency)}.`,
+                 `Następne odświeżenie ${stamp(report.next)}.`]
+              : ["Odświeżanie automatyczne jest wyłączone."])
+          : ["Ustawienia odświeżania nie zostały zaktualizowane!",
+             "Zmień ustawienia, żeby spróbować ponownie lub zobacz szczegóły w menu dodatku: Import z BC -> Ustawienia."];
+        lines.push(report.ok ? `Odświeżanie zostało ustawione ${stamp(report.when)}.` : `Próba zmiany ustawień została podjęta ${stamp(report.when)}.`);
+        const area = grid.getRange(L.messageRow, L.firstCol, 1, L.cols);
+        area.merge();
+        grid.getRange(L.messageRow, L.firstCol).setValue(lines.join("\n"));
+        area.setBackground(style.background);
+        area.setWrapStrategy("WRAP");
+        area.setBorder(true, true, true, true, null, null, style.border, "SOLID_THICK");
+        // the start time lives next to the frequency: its label and format are set when first needed (a sheet made before has neither)
+        if (!grid.getRange(L.headerRow, L.startAtCol).getValue()) grid.getRange(L.headerRow, L.startAtCol).setValue(L.startAtLabel);
+        grid.getRange(L.frequencyRow, L.startAtCol).setNumberFormat("@");
+        save();
       },
       addLastRefreshRow() {
         let row = lastUsedRow();

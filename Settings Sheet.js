@@ -145,7 +145,27 @@ class SettingsSheet{
 
   /** (Re)creates the time-based trigger for the refresh frequency of this sheet; the work is in ScheduleRefresh.js. */
   setRefreshTrigger(){
-    ScheduleRefresh.setUp(this.getRefreshFrequency());
+    ScheduleRefresh.apply(this);
+  }
+
+  /** The time of day to refresh at ({hour, minute}) from the frequency line, or null when the cell is empty or not a time. */
+  getRefreshStartAt(){
+    if(!this.grid) return null;
+    if(!this.refreshFrequencyPos) this.readSheetList();
+    if(!this.refreshFrequencyPos) return null;
+    const m = /^\s*(\d{1,2}):(\d{2})/.exec(String(this.grid.startAt(this.refreshFrequencyPos)));
+    return m && +m[1] < 24 && +m[2] < 60 ? {hour: +m[1], minute: +m[2]} : null;
+  }
+
+  /** The last resort when the outcome cannot be shown in the message area. */
+  toastRefreshError(){
+    toastMessage("Zobacz Import z BC -> Ustawienia.","BŁĄD!");
+  }
+
+  /** Shows the outcome of setting the trigger up in the message area (see SettingsGrid.writeRefreshMessage). */
+  setRefreshMessage(report){
+    if(!this.grid) return;
+    this.grid.writeRefreshMessage(report);
   }
 
   createObjectFromList(itemsNames,list){
