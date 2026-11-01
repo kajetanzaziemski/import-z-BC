@@ -350,7 +350,7 @@ module.exports = function register(t) {
   });
 
   // ---- jobs (intents): a run is reported under what it DID, via the technical trigger ---------------------------------------------------------
-  const JOB_FILES = ['Import Query.js', 'BulkSheet.js', 'ResultSheet.js', 'RefreshSheet.js', 'EstimateSheet.js', 'RefreshAll.js', 'ScheduleRefresh.js', 'AnalyseConfig.js', 'Router.js', 'Managed Sheets.js',
+  const JOB_FILES = ['Import Query.js', 'BulkSheet.js', 'ResultSheet.js', 'RefreshSheet.js', 'EstimateSheet.js', 'RefreshAll.js', 'ScheduleRefresh.js', 'AnalyseConfig.js', 'Router.js', 'Managed Sheets.js', 'Own Writes.js',
     'Data Type.js', 'Menu.js', 'Menu Actions.js', 'Sheet Coeditor.js', 'Grid.js', 'Grid Util.js', 'Config Grid.js'];
 
   test('live check jobs: every job the code announces (Controller.intent, the router\'s action table) is in the catalogue and has a verifier, and none is orphaned', () => {
@@ -398,6 +398,7 @@ module.exports = function register(t) {
       getMainSettings = () => ({ getConfigSheetNames: () => ['Konfiguracja 1'], isConfigSheet: n => n === 'Konfiguracja 1', isRefreshFrequencyCell: r => isInRange(4, 4, r) || isInRange(4, 5, r),
         setRefreshTrigger: () => ScheduleRefresh.setUp({ freq: 6, unit: 'hrs' }), getSheetListWithRefreshTrue: () => [], setLastRefresh: () => {} });`);
     ex.eval(`new SheetCoeditor('Konfiguracja 1', false)`);
+    if (!o.ownWrite) delete p.cache.document.ownWrite;          // (setting the harness up wrote to the sheet and noted it; the event under test is a user's unless the test says otherwise)
     if (o.breakIt) ex.eval(o.breakIt);
     const range = o.range ?? { sheet: o.active ?? 'Konfiguracja 1', row: 6, col: 2 };
     ex.ctx.__e = { triggerUid: 't1', changeType: o.changeType ?? 'INSERT_ROW',
@@ -479,6 +480,13 @@ module.exports = function register(t) {
     assert.strictEqual(wrong.entry.s, 'FAIL');
     const wrongChange = agentRun({ entry: 'change', changeType: 'INSERT_ROW', breakIt: `Router.routeChange = e => ({ intent: 'change.ignored', changeType: e.changeType })` });
     assert.strictEqual(wrongChange.entry.s, 'FAIL');
+  });
+
+  test('live check jobs: change.own (a structure change within seconds of the add-on\'s own write) is quiet while it passes, and a change announced as own with no write noted is a FAIL', () => {
+    agentRun({ entry: 'change', changeType: 'INSERT_GRID', ownWrite: true, expectNone: true });
+    const wrong = agentRun({ entry: 'change', changeType: 'INSERT_ROW', breakIt: `Router.routeChange = e => ({ intent: 'change.own', sheet: 'Konfiguracja 1', changeType: e.changeType })` });
+    assert.strictEqual(wrong.entry.i, 'change.own');
+    assert.strictEqual(wrong.entry.s, 'FAIL');
   });
 
   test('live check jobs: the other jobs that do nothing (settings.edit, agent.skipped) are still reported', () => {

@@ -447,7 +447,7 @@ function lcStoredResults_(){
  * Jobs that only look at an event and decide there is nothing to do. They are most of the runs (every edit anywhere in the document), so while they pass they are
  * not shown or stored at all; one that fails or warns (it was wrongly ignored) is reported like any other.
  */
-const LIVE_CHECK_QUIET_JOBS = ["sheet.ignored","change.ignored"];
+const LIVE_CHECK_QUIET_JOBS = ["sheet.ignored","change.ignored","change.own"];
 
 /** Removes the "running" placeholder of a run (it has the key of the frame / context). */
 function lcForget_(frameOrContext){
@@ -512,6 +512,7 @@ const LIVE_CHECK_INTENTS = [
   {intent: "settings.edit",              text: "another edit in the settings sheet: nothing to do"},
   {intent: "sheet.ignored",              text: "an edit or change in a sheet the add-on does not manage: nothing to do"},
   {intent: "change.ignored",             text: "a change of type EDIT or FORMAT (the cells are handled by the edit trigger): nothing to do"},
+  {intent: "change.own",                 text: "a structure change within seconds of the add-on's own write (the wizard's new sheet, a growing result sheet): nothing to do"},
   {intent: "agent.skipped",              text: "the edit trigger is powered off or not logged: the edit is skipped"},
   {intent: "refresh.scheduled",          text: "the time trigger holds the refresh permit: the ticked sheets are refreshed, the time is noted, the permit records the run"},
   {intent: "refresh.retired",            text: "the time trigger does not hold the refresh permit: it deletes itself and nothing is refreshed"}

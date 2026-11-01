@@ -607,6 +607,7 @@ require('./schedule.test.js')({ test });
 // ---- what the installable triggers make of an edit / change (which action fires) ---------------------------------------------
 require('./router.test.js')({ test });
 require('./managed-sheets.test.js')({ test });
+require('./own-writes.test.js')({ test });
 
 // ---- Controller.run: closing actions registered before / during / nested -----------------------------------------------------
 require('./controller.test.js')({ test });

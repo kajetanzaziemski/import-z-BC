@@ -14,9 +14,8 @@ Only what is **not fixed in the current code**. The fixed ones (#1 to #18 with t
 7. **`AgentManager.deleteAllInDocument()`** is an unfinished stub (an empty `forEach({})`) and nothing calls it.
 
 ## Edits and structure changes
-8. **Changes made by the add-on itself fire `sheetChange`.** Every status-light switch (`FORMAT`), result write (`EDIT`, `FORMAT`) and row insert fires the on-change trigger: a refresh produces dozens of `change.ignored` runs. Worse, a structure change from the refresh
-   (`INSERT_ROW`, `INSERT_COLUMN`, `INSERT_GRID` when the result sheet grows or is created) is routed by the **active** sheet: with a config sheet open it starts a full co-edit of that sheet for nothing. Routing by the active sheet (not the sheet that changed) is
-   inherent - an on-change event carries no sheet. Proposed: a short flag in the document cache while the add-on writes, so `sheetChange` skips structure changes meanwhile (cost: a real structure change in that window waits for the next edit). *Undecided.*
+8. **Changes made by the add-on itself still fire `sheetChange`.** Every status-light switch (`FORMAT`), result write (`EDIT`, `FORMAT`) fires the on-change trigger: a refresh produces dozens of `change.ignored` runs (cheap: decided before anything is read,
+   and quiet in the live check). The expensive part, structure changes of the add-on's own writes starting a co-edit, is fixed (#19 in `bugs-fixed.md`). What stays: a user's structure change within 20 s of an add-on write is not co-edited (the cell edits that follow are).
 9. **A dropdown left on a line the user emptied is no longer swept.** The config line range is B6 down to the last row with content (my-todo.md), so cells below it that held a dropdown are not cleared. Harmless; the validation stays on an empty cell.
 
 ## Refresh and estimate

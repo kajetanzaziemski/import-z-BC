@@ -310,6 +310,7 @@ class Grid {
     if (this.source.kind === 'api') this._commitApi();
     else this._commitService();
     this._settle();
+    if (typeof ownWriteHook === 'function') ownWriteHook();       // the project notes that the script wrote (it fires the on-change trigger a moment later)
   }
 
   /** Grid.create: inserts the sheet (Spreadsheet service), then the grid is an ordinary one. */

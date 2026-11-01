@@ -13,7 +13,7 @@ const { FakePlatform } = require('./platform-fakes');
 const ROOT = path.join(__dirname, '..');
 const BASE = ['Custom errors.js', 'Helper Data Store.js', 'Store.js', 'Settings.js', 'Main Settings.js', 'Controller.js', 'Trigger Manager.js',
   'Global Add-on Settings.js', 'Quick Start.js', 'functions.js', 'Track onEdit Triggers.js', 'Status Manager.js', 'Agent Reconciler.js', 'Agents.js', 'Verify Agent.js', 'Data Type.js', 'Menu.js', 'Menu Actions.js', 'Settings Sheet.js'];
-const NEW_FILES = ['Import Query.js', 'BulkSheet.js', 'ResultSheet.js', 'RefreshSheet.js', 'EstimateSheet.js', 'RefreshAll.js', 'ScheduleRefresh.js', 'AnalyseConfig.js', 'Router.js', 'Managed Sheets.js']
+const NEW_FILES = ['Import Query.js', 'BulkSheet.js', 'ResultSheet.js', 'RefreshSheet.js', 'EstimateSheet.js', 'RefreshAll.js', 'ScheduleRefresh.js', 'AnalyseConfig.js', 'Router.js', 'Managed Sheets.js', 'Own Writes.js']
   .filter(f => fs.existsSync(path.join(ROOT, f)));
 
 const FAKES = `
@@ -215,6 +215,27 @@ module.exports = function register(t) {
     assert.deepStrictEqual(r({ changeType: 'INSERT_ROW' }), ['config.coedit', 'Konfiguracja 1', 'INSERT_ROW']);
     assert.deepStrictEqual(r({ changeType: 'INSERT_GRID', active: 'Arkusz1' }), ['sheet.ignored', 'Arkusz1', 'INSERT_GRID']);
     assert.deepStrictEqual(r({ changeType: 'REMOVE_ROW', active: 'Ustawienia', freqCell: true }), ['sheet.ignored', 'Ustawienia', 'REMOVE_ROW']);
+  });
+
+  test('router: a structure change right after the add-on wrote is "change.own" - nothing is done, however the active sheet is a config sheet (the wizard / refresh case)', () => {
+    const sc = scenario({ changeType: 'INSERT_GRID' });
+    sc.p.cache.document.ownWrite = { value: '1', expires: sc.p.now + 20000 };
+    assert.deepStrictEqual(route(sc, 'change'), { intent: 'change.own', sheet: 'Konfiguracja 1', changeType: 'INSERT_GRID' });
+    const later = scenario({ changeType: 'INSERT_GRID' });
+    assert.strictEqual(route(later, 'change').intent, 'config.coedit', 'no own write noted: the user did it');
+    const quiet = withIntentLog(scenario({ changeType: 'INSERT_ROW' }));
+    quiet.p.cache.document.ownWrite = { value: '1', expires: quiet.p.now + 20000 };
+    quiet.change();
+    assert.deepStrictEqual(quiet.calls(), [['intent', 'change.own', { sheet: 'Konfiguracja 1', changeType: 'INSERT_ROW' }]], 'no co-editor was started');
+  });
+
+  test('router: the note changes nothing for edits (a script write does not fire the on-edit trigger) and EDIT / FORMAT changes stay change.ignored', () => {
+    const sc = scenario();
+    sc.p.cache.document.ownWrite = { value: '1', expires: sc.p.now + 20000 };
+    assert.strictEqual(route(sc, 'edit').intent, 'config.coedit');
+    const f = scenario({ changeType: 'FORMAT' });
+    f.p.cache.document.ownWrite = { value: '1', expires: f.p.now + 20000 };
+    assert.strictEqual(route(f, 'change').intent, 'change.ignored');
   });
 
   test('router: routing only LOOKS - no action runs and no intent is announced until perform()', () => {

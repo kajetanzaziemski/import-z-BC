@@ -50,3 +50,7 @@ and `refresh.retired` (it does not: the trigger deletes itself). Both have a cat
 `{ settings: <settings sheet name>, configs: [<config sheet names>] }` in the **document cache**, key `managedSheets`, ttl 3600 s. Filled when the document opens (`onOpen` run, only where the add-on is ON and a settings sheet exists -
 it never creates one), replaced by every edit or structure change in the settings sheet and by `addNewSheetInfo`, not used when it was made for another settings sheet name, and rebuilt from the settings sheet when it has expired or the cache
 service is unavailable. A config sheet added by hand to the settings sheet is therefore known after that very edit; one added while the triggers were off, within the hour. Tests: `tests/managed-sheets.test.js`.
+
+## `change.own`
+A structure change that arrives within `OWN_WRITE_WINDOW` (20 s) of a write by the add-on itself (`Own Writes.js`: the Grid and `BulkSheet` note every write in the document cache) is not the user's: the job is `change.own` and nothing is done. Without it the wizard's new sheet, or a result sheet
+that grows while a config sheet is open, started a second co-edit of the sheet in front of the user. EDIT / FORMAT changes stay `change.ignored`; edits are not affected (a script write does not fire the on-edit trigger).

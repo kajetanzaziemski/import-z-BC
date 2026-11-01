@@ -37,8 +37,9 @@ const BulkSheet = {
       }
     }
 
-    if (bulkSheetsApiAvailable_()) return BulkSheet.writeTableViaApi_(sheetName, table, formats, options);
-    return BulkSheet.writeTableViaService_(sheetName, table, formats, options);
+    const result = bulkSheetsApiAvailable_() ? BulkSheet.writeTableViaApi_(sheetName, table, formats, options) : BulkSheet.writeTableViaService_(sheetName, table, formats, options);
+    if (typeof ownWriteHook === 'function') ownWriteHook();       // the project notes that the script wrote (it fires the on-change trigger a moment later)
+    return result;
   },
 
   writeTableViaService_(sheetName, table, formats, options) {

@@ -10,6 +10,7 @@
 //   settings.edit                 any other edit in the settings sheet                       nothing
 //   sheet.ignored                 an edit / change in any other sheet                        nothing
 //   change.ignored                a change of type EDIT or FORMAT                            nothing
+//   change.own                    a structure change within seconds of the add-on's own write (Own Writes.js)  nothing
 //   agent.skipped                 the trigger is powered off (set by sheetEdit before routing) nothing
 //
 // routeEdit / routeChange only LOOK (they return a route: { intent, sheet, event }); perform() announces the intent to the live check
@@ -26,7 +27,8 @@ const ROUTE_ACTIONS_ = {
   },
   "settings.edit": () => {},
   "sheet.ignored": () => {},
-  "change.ignored": () => {}
+  "change.ignored": () => {},
+  "change.own": () => {}
 };
 
 const Router = {
@@ -45,6 +47,7 @@ const Router = {
   routeChange(e){
     if(e.changeType=="EDIT" || e.changeType=="FORMAT") return {intent: "change.ignored", changeType: e.changeType};
     const sheet = e.source.getActiveSheet().getName();
+    if(OwnWrites.recent()) return {intent: "change.own", sheet: sheet, changeType: e.changeType};      // the add-on's own write (Own Writes.js)
     if(sheet == MainSettings.getSettingsSheetName()){
       ManagedSheets.rebuild();                 // a line inserted or deleted in the settings sheet
       return {intent: "sheet.ignored", sheet: sheet, changeType: e.changeType};

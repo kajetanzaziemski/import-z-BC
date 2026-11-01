@@ -137,5 +137,5 @@ Every platform entry goes through `Controller.run` now (`docs/controller.md`): `
   (the sheet and indicator checks still see its effects).
 
 ## Quiet jobs
-`sheet.ignored` and `change.ignored` (`LIVE_CHECK_QUIET_JOBS`, `Live Check.js`) only look at an event and do nothing; they were most of the report. While they **pass** (or skip) nothing is logged, stored or shown, and their "running" placeholder
+`sheet.ignored`, `change.ignored` and `change.own` (`LIVE_CHECK_QUIET_JOBS`, `Live Check.js`) only look at an event and do nothing; they were most of the report. While they **pass** (or skip) nothing is logged, stored or shown, and their "running" placeholder
 is removed at once. One that fails or warns (an edit in a config sheet wrongly ignored) is recorded and shown like any other run. `settings.edit` and `agent.skipped` also do nothing but are still reported.

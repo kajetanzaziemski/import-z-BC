@@ -976,6 +976,13 @@ function lcJobVerifiers_(){
       }
     },
 
+    "change.own": {
+      verify(c){
+        if(lcSkipUnpoweredChange_(c)) return;
+        c.expect("the add-on wrote within the last seconds (else this change is the user's and must be co-edited)",!!CacheService.getDocumentCache().get("ownWrite"),"no own write is noted");
+      }
+    },
+
     "agent.skipped": {
       verify(c){
         c.expect("the trigger is powered off or not logged",!lcAgentPowerBefore_(c),"the trigger was powered on, but the edit was skipped");
