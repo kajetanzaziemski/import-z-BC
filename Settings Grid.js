@@ -2,12 +2,17 @@
 // SETTINGS GRID: the only place that knows the LAYOUT of the import settings sheet ("Ustawienia importu") and touches it.
 //
 //   row 2      column labels (B..E)
-//   row 4      headerGeneralSettings
-//   row 5      lastRefresh: D = time of the last refresh (date format), E = the time zone's name
-//   row 6      refreshFrequency: D = number, E = unit (godzin / dni, a dropdown)
-//   row 7      refreshTime: D = the time of day to refresh at ("17:30"), E empty
-//   row 8      refreshStatus: C:E merged = the message about the last change of the refresh settings (green / red)
-//   row 9 ...  configSheet lines: B "configSheet", C config sheet, D result sheet, E checkbox "refresh automatically"
+//   row 3 ...  configSheet lines: B "configSheet", C config sheet, D result sheet, E checkbox "refresh automatically".
+//              The list STARTS at row 3: a new line is inserted after the last configSheet line (after row 2 while there is none), so
+//              the first one takes row 3 and everything that stood below moves down. Row 3 of a freshly made sheet is the empty slot for it.
+//   below the list (rows 4-8 of a sheet with no config line yet; they move down with every config line added):
+//              headerGeneralSettings
+//              lastRefresh: D = time of the last refresh (date format), E = the time zone's name
+//              refreshFrequency: D = number, E = unit (godzin / dni, a dropdown)
+//              refreshTime: D = the time of day to refresh at ("17:30" / "5:30 PM"), E empty
+//              refreshStatus: C:E merged = the message about the last change of the refresh settings (green / red)
+//
+// Rows are NEVER addressed by number outside a fresh sheet: every line is found by the key in column B (SettingsSheet.readSheetList, keyRow below).
 //
 // It talks to the sheet through Grid (Grid.js) only. SettingsSheet (Settings Sheet.js) keeps the meaning of the lines (which row
 // is what, the sheet list, the refresh frequency) and asks this file for cell values and for writes. The pre-Grid code is frozen in
@@ -19,7 +24,7 @@ const SETTINGS_LAYOUT = {
   cols: 4,                                 // B..E
   valueCol: 4,                             // D
   unitCol: 5,                              // E
-  header: [                                // rows 2-6, from column B
+  header: [                                // rows 2-8, from column B: the column labels, the empty slot for the first configSheet line (row 3), the general settings block
     ["Opis linii","Arkusz konfiguracji","Arkusz docelowy         .","Odświeżanie automatyczne"],
     ["","","",""],
     ["headerGeneralSettings","Ustawienia odświeżania automatycznego","",""],

@@ -139,6 +139,18 @@ module.exports = function register(t) {
     assert.strictEqual(s.run(`__ss.refreshTimePos`), 7);
   }));
 
+  MODES.forEach(mode => test('row 3 is where the config list starts: the first config line takes it and the general settings lines (and the message) move down, found by key [' + mode + ']', () => {
+    const s = scope(mode);
+    s.run(`globalThis.__ss = new SettingsSheet(); __ss.addNewSheetInfo('N', 'Dane N', true)`);
+    const keys = plain(s.run(`__ss.grid.rows().map(r => r[0])`));
+    assert.deepStrictEqual(keys.slice(2, 5), ['configSheet', '', 'headerGeneralSettings']);
+    assert.deepStrictEqual([s.run(`__ss.refreshFrequencyPos`), s.run(`__ss.refreshTimePos`)], [7, 8]);
+    s.run(`Utilities.formatDate = (d, tz, p) => p === 'Z' ? '+0200' : 'x'`);
+    s.run(`__ss.setRefreshMessage({ ok: false, when: new Date(1750000000000) })`);
+    assert.match(s.run(`__ss.grid.rows()[8][1]`), /^Ustawienia odświeżania/);                    // row 9 now, found by its key
+    assert.strictEqual(s.run(`__ss.grid.rows()[2][1]`), 'N');                                    // the config line was not touched
+  }));
+
   MODES.forEach(mode => test('message: success is green with the frequency, next refresh and set-up time; failure is red; in C:E of the refreshStatus line [' + mode + ']', () => {
     const s = scope(mode);
     s.run(`globalThis.__ss = new SettingsSheet()`);

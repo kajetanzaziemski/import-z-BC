@@ -142,6 +142,7 @@ class SettingsSheet{
     // the lines below the new one moved down: the rows remembered for them with it (they were left where they had been, bugs-fixed #11)
     if(this.lastRefreshPos > after) this.lastRefreshPos++;
     if(this.refreshFrequencyPos > after) this.refreshFrequencyPos++;
+    if(this.refreshTimePos > after) this.refreshTimePos++;
     this.sheetList.push(this.createObjectFromList(["configSheet","resultSheet","refresh"],[configSheetName,resultSheetName,refresh]));
     ManagedSheets.store(this);
     return this.sheetList[this.sheetList.length-1];
