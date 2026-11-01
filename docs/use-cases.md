@@ -10,7 +10,7 @@ Pure move: same calls in the same order, same error handling, same status-cell s
 | `ResultSheet.write(sheetName, table, columnDataTypes)` (`ResultSheet.js`) | the inline block at the end of the refresh | create-if-missing, wipe (`getDataRange().clear()`), one number format per column from the data type, one `setValues` |
 
 `Menu.js` keeps the menu entry points and their action names (`menuRefreshCurrentSheet`, `menuRefreshAll`, `menuEstimateForCurrentSheet`, so the live check still recognises them) and now
-calls the use cases. `refreshAllDataForConfigSheet` and `estimateResponseSize` stay as one-line forwarders (`Test Functions.js` and anything old still use the names).
+calls the use cases. (The old names `refreshAllDataForConfigSheet`, `estimateResponseSize` and `refreshAllTrue` are gone.)
 
 ## Behaviour kept on purpose (pinned by tests)
 - The reading cell is lit by the `SheetCoeditor` constructor; refresh puts it idle *before* lighting writing; an error anywhere puts the lit cell back to idle and is rethrown.

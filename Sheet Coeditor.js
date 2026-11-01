@@ -24,11 +24,6 @@ class SheetCoeditor{
     ConfigGrid.create(sheetName);            // inserts the sheet and writes the header block (config layout: Config Grid.js)
   }
 
-  /** Rewrites the header block of the config sheet (for repairing a sheet by hand, see Test Functions.js; the argument is not needed any more). */
-  setupConfigHeader(){
-    ConfigGrid.resetHeader(this.sheetName);
-  }
-
   // - - - - - - - - Get - - - - - - - -   
   getTable(){
     return this.cct.getTable();

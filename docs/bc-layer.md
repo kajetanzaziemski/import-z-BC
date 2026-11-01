@@ -13,7 +13,7 @@
 Pinned by `tests/auth.test.js`, `tests/bc-layer.test.js`, `tests/state.test.js` (metadata cache), `tests/refresh.test.js`.
 
 ## Deleted
-`Test Functions.js` is out of scope (not used, not maintained): code that only it needed was removed, so **it no longer works** and must be kept on its own branch/tag before the merge into `main` (reminder in `docs/milestones.md`).
+`Test Functions.js` (the testers' manual code) was out of scope and is removed: code that only it needed was deleted. It is kept, working, on the branch `before-refactoring-and-test-functions` (`docs/milestones.md`).
 - `ODataConnection.readAllPages_test` / `readPage_test` (a hard-coded tenant url), `detDataTypes`
 - `getTable`, `getTableWithRequest` (`Menu.js`; they used `ODATA_URL_`, which is defined nowhere), `basicMenu`
 - `userSafe` (`Custom errors.js`), the globals `getBCService_`, `showSidebar`, `logout`

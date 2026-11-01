@@ -18,7 +18,7 @@ version with and without it can run on the same document. Tests: `tests/state.te
 agent pairs → `Store.array`), `BC Metadata.js` (optional document cache), `BC Auth.js` (OAuth2 property store / cache = user scope via `Store.service`),
 `Global Add-on Settings.js`, `Quick Start.js` (`getGlobalSettings`, settings sheet name).
 Rules in the tests: only `Store.js` touches `HelperDataStore`/`OptionalDataStore`; only `Helper Data Store.js` touches `PropertiesService`/`CacheService`; only `Store.js` constructs
-`StorageObject`/`StorageArray`; only `Settings.js` knows the `importSettingsArray` key. (`Test Functions.js`, the manual tests, is exempt.)
+`StorageObject`/`StorageArray`; only `Settings.js` knows the `importSettingsArray` key.
 
 ## What the tests pin (and found)
 - `StorageObject` keeps the CLAUDE.md invariant: only changed keys, merged under a lock, a stale snapshot never reverts another run's key (two executions on one fake platform).

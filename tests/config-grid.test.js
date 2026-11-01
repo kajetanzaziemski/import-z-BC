@@ -217,14 +217,6 @@ module.exports = function register(t) {
     assert.strictEqual(s.cell(1, 2).v, 'Moj tytuł');
   });
 
-  both('SheetCoeditor.setupConfigHeader(sheet) still works for the manual repair in Test Functions.js', env => {
-    coeditorEnv();
-    const co = new SheetCoeditor('K', false);
-    env.book.sheets['K'].setValue(1, 2, 'zepsute', '');
-    co.setupConfigHeader();
-    assert.strictEqual(env.book.sheets['K'].cell(1, 2).v, 'Zapytanie do bazy danych BC');
-  });
-
   both('SheetCoeditor: a status switch on a sheet deleted meanwhile says so (no silent success)', env => {
     coeditorEnv();
     const co = new SheetCoeditor('K', false);

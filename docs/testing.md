@@ -87,7 +87,6 @@ the refactor** and verify each entry point's outcome in a real spreadsheet. The 
   3. *Jobs* (`Live Check.js`, `Live Check Verifiers.js`, `Live Check Sidebar*.js/html`): a run is stored and reported under the job the router found (`liveCheckIntent`, `LIVE_CHECK_INTENTS`, a verifier per job);
      the trigger's verifier keeps the bookkeeping and the job's verifier judges what was done; each job re-derives its premise from the event. See `docs/router.md`.
   2. *Sidebar details* (`Live Check Sidebar.html`): FAIL lines are red, WARN lines amber, PASS grey, SKIP grey italic; the head line has the colour of the run's status.
-  `testConfigGridIndicators("Konfiguracja 1")` (Test Functions.js) prints the same reads on demand.
 - In a real spreadsheet: `liveCheckEnable()`, then use the add-on (menu, edits, triggers) and read the sidebar (add-on menu -> Narzędzia programisty -> Live check) or
   `liveCheckReport(20, true)`. **Known findings in the old code show as `FAIL` / `WARN`** (see `docs/bugs-fixed.md`: settings writes lost in `sheetEdit`, nested `Controller.run`,
   offline `ConnectionError`); the refactor keeps them on purpose - a finding that disappears or a new `FAIL` is a behaviour change to look at.

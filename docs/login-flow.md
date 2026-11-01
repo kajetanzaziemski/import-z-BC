@@ -14,9 +14,9 @@ Before: the service was built by the global function `getBCService_()` and used 
 | menu "Wyloguj" (`MenuActions.logout`, global `logout`) | `getBCService_().reset()` | `BCAuth.logout()` -> `service().reset()` |
 | every BC request (`BCConnection.fetchURL`) | `getBCService_().getAccessToken()` | `BCAuth.accessToken()`; the error mapping is unchanged ("Access not granted or expired." -> `ConnectionError`, URL length -> Polish message) |
 | `BCMetadata.downloadEdmxDocument` | built a service and **never used it** | line removed (it only built an object) |
-| `getTableWithRequest` (`Menu.js`, only `Test Functions.js` called it) | `getBCService_().getAccessToken()` | deleted with `getTable` |
+| `getTableWithRequest` (`Menu.js`, nothing in the add-on called it) | `getBCService_().getAccessToken()` | deleted with `getTable` |
 
-The global names `getBCService_`, `showSidebar`, `logout` and `postAuthorizationFlow` are gone (only `Test Functions.js` could still use them; see `docs/bc-layer.md`).
+The global names `getBCService_`, `showSidebar`, `logout` and `postAuthorizationFlow` are gone (nothing in the add-on used them).
 
 ## What did NOT change
 - The service configuration (names, urls, client id / secret, callback function `authCallback`, user property store, user cache, user lock, scope, `access_type=offline`, `prompt=consent`) - every call is pinned in order.

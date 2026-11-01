@@ -1,16 +1,6 @@
 # Milestones of the refactoring
 
-## half-way-through-refactoring  (commit `a20b4b9`, branch `refactor-and-grid`)
-
-**The tag could not be pushed from the working session**: GitHub (through the session's git proxy) answers a tag push with `HTTP 403` (only the branch may be pushed), so the tag exists only
-in the container that made it. This file is the record. To create it on GitHub from a normal clone:
-
-```
-git fetch origin refactor-and-grid
-git tag -a half-way-through-refactoring a20b4b92cbd9171a93d4b377ed716d226a4d42a2 -m "Half-way through refactoring"
-git push origin half-way-through-refactoring
-```
-(The name is `half-way-through-refactoring`: tag names cannot contain spaces.)
+## Half-way through the refactoring  (commit `a20b4b9`, branch `refactor-and-grid`)
 
 State at this milestone (330 offline tests passing; nothing verified on a real spreadsheet since the controller / router work):
 
@@ -34,6 +24,6 @@ Still to do
 - (done: bugs-fixed #4/#6/#8/#10 closed - `ManagedSheets` cache; `BulkSheet` Sheets API path written and tested on the simulated spreadsheet only)
 - (done: the time trigger as two live-check jobs `refresh.scheduled` / `refresh.retired`; the dead "Test item" menu entry and its verifier removed; live check helpers re-pinned)
 
-
-## Reminders
-- **Before merging `refactor-and-grid` into `main`: keep `Test Functions.js` on a separate branch or tag** (agreed: it is the testers' manual code, ignored by the refactor and by the tests). Remind when the merge comes up.
+## Merged into the default branch
+`refactor-and-grid` was merged into `remote-main` (the repository's default branch; there is no branch called `main`). The state before the refactoring - including `Test Functions.js`, the testers' manual code, which was removed with the refactor because the code it called is gone - is kept on the branch
+`before-refactoring-and-test-functions` (the commit `remote-main` was at when `refactor-and-grid` branched off). Switch to it if the manual tests are needed.
