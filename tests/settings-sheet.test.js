@@ -139,6 +139,41 @@ module.exports = function register(t) {
     assert.strictEqual(s.run(`__ss.refreshTimePos`), 7);
   }));
 
+  MODES.forEach(mode => test('the refresh time cell (D of refreshTime): HH:mm, right aligned - on a new sheet, and on a legacy sheet when the line is inserted (directly below refreshFrequency, refreshStatus directly below it); never set again [' + mode + ']', () => {
+    const fmtOf = (s, row) => { const c = s.book.sheets['Ustawienia'].cells[row + ',4']; return c && { numFmt: c.fmt.numFmt, hAlign: c.fmt.hAlign }; };
+    const fresh = scope(mode);
+    fresh.run(`globalThis.__ss = new SettingsSheet()`);
+    assert.deepStrictEqual(fmtOf(fresh, 7), { numFmt: 'HH:mm', hAlign: 'right' });
+
+    const s = scope(mode, sh => fillSettings(sh, { configs: CONFIGS }));
+    s.run(`globalThis.__ss = new SettingsSheet(); Utilities.formatDate = (d, tz, p) => p === 'Z' ? '+0200' : 'x'`);
+    const f = plain(s.run(`__ss.refreshFrequencyPos`));
+    s.run(`__ss.setRefreshMessage({ ok: true, when: new Date(1750000000000), frequency: { freq: 6, unit: 'hrs' }, next: new Date(1750100000000) })`);
+    const keys = plain(s.run(`__ss.grid.rows().map(r => r[0])`));
+    assert.deepStrictEqual(keys.slice(f - 1, f + 2), ['refreshFrequency', 'refreshTime', 'refreshStatus']);
+    assert.deepStrictEqual(fmtOf(s, f + 1), { numFmt: 'HH:mm', hAlign: 'right' });
+    // the user changes the look; a later message leaves it alone
+    const cell = s.book.sheets['Ustawienia'].cells[(f + 1) + ',4'];
+    cell.fmt.numFmt = 'h:mm AM/PM'; cell.fmt.hAlign = 'left';
+    s.run(`__ss.setRefreshMessage({ ok: false, when: new Date(1750000000000) })`);
+    assert.deepStrictEqual(fmtOf(s, f + 1), { numFmt: 'h:mm AM/PM', hAlign: 'left' });
+  }));
+
+  MODES.forEach(mode => test('refresh time typed as a bare hour: 17 -> 17:00, as text, a number, or what the sheet gives back for 17 in a time cell (the 17th day at midnight) [' + mode + ']', () => {
+    const s = scope(mode);
+    s.run(`globalThis.__ss = new SettingsSheet()`);
+    const sh = s.book.sheets['Ustawienia'];
+    s.run(`{ const f = Utilities.formatDate; const wall = (d, tz) => { const z = f(d, tz, 'Z'); return new Date(d.getTime() + (z[0] === '-' ? -1 : 1) * (+z.slice(1, 3) * 60 + +z.slice(3)) * 60000).toISOString(); };
+      Utilities.formatDate = (d, tz, p) => p === 'yyyy-MM-dd' ? wall(d, tz).slice(0, 10) : p === 'HH:mm' ? wall(d, tz).slice(11, 16) : f(d, tz, p); }`);
+    const at = v => { sh.cells['7,4'].v = v; s.run(`globalThis.__ss = new SettingsSheet()`); return plain(s.run(`__ss.getRefreshStartAt()`)); };
+    assert.deepStrictEqual(at('17'), { hour: 17, minute: 0 });
+    assert.deepStrictEqual(at('5 PM'), { hour: 17, minute: 0 });
+    assert.deepStrictEqual(at(17), { hour: 17, minute: 0 });        // the sheet's number 17 (days) is read back as a Date by a time format, see the next line
+    assert.deepStrictEqual(at(0.75), { hour: 18, minute: 0 });
+    assert.strictEqual(at(24), null);
+    assert.strictEqual(at(17.5), null);
+  }));
+
   MODES.forEach(mode => test('row 3 is where the config list starts: the first config line takes it and the general settings lines (and the message) move down, found by key [' + mode + ']', () => {
     const s = scope(mode);
     s.run(`globalThis.__ss = new SettingsSheet(); __ss.addNewSheetInfo('N', 'Dane N', true)`);

@@ -38,6 +38,7 @@ const SETTINGS_LAYOUT = {
   headerRow: 2,
   lastRefreshRow: 5,
   frequencyRow: 6,
+  timeRow: 7,
   units: ["godzin","dni"],
   lastRefreshFormat: "yyyy-mm-dd hh:mm",
   messageStyle: {
@@ -48,6 +49,12 @@ const SETTINGS_LAYOUT = {
 };
 
 const SettingsGrid = {
+  /** The look of the cell the refresh time is typed in (D of the refreshTime line): HH:mm, right aligned. Set when the line is made and left to the user after. */
+  styleTime(range) {
+    range.setNumberFormat("HH:mm");
+    range.setHorizontalAlignment("right");
+  },
+
   /** "2026-11-29 17:00:00 UTC+2" (the zone as an offset: +2, -5, +5:30). */
   stamp(date, timeZone) {
     const off = Utilities.formatDate(date, timeZone, "Z");                         // +0200
@@ -55,14 +62,25 @@ const SettingsGrid = {
     return `${Utilities.formatDate(date, timeZone, "yyyy-MM-dd HH:mm:ss")} UTC${off[0]}${h}${m == "00" ? "" : ":" + m}`;
   },
 
-  /** A time of day from what a cell holds: text "17:30" / "5:30 PM", a time value (Date) or a fraction of a day; null when it is none of these. */
+  /**
+   * A time of day from what a cell holds. Text: "17:30", "17", "5:30 PM", "5 pm". A time value (Date, what a cell in HH:mm gives); a fraction of a day.
+   * A bare whole number 0..23 is the hour: typed "17" into a cell in HH:mm the sheet stores 17 (days), which reads back as the 17th day after the
+   * zero date at midnight (or the number 17). null when it is none of these.
+   */
   parseTime(v, timeZone) {
-    if (v instanceof Date) v = Utilities.formatDate(v, timeZone, "HH:mm");
-    else if (typeof v === "number" && v >= 0 && v < 1) { const mins = Math.round(v * 1440); v = `${Math.floor(mins / 60)}:${String(mins % 60).padStart(2, "0")}`; }
-    const m = /^\s*(\d{1,2})[:.](\d{2})\s*([ap]\.?m\.?)?\s*$/i.exec(String(v));
+    if (Object.prototype.toString.call(v) === "[object Date]") {
+      const days = Math.round((Date.parse(Utilities.formatDate(v, timeZone, "yyyy-MM-dd") + "T00:00:00Z") - Date.UTC(1899, 11, 30)) / 86400000);
+      const hhmm = Utilities.formatDate(v, timeZone, "HH:mm");
+      v = days === 0 ? hhmm : (hhmm === "00:00" ? days : null);
+    }
+    if (typeof v === "number") {
+      if (v >= 0 && v < 1) { const mins = Math.round(v * 1440); v = `${Math.floor(mins / 60)}:${String(mins % 60).padStart(2, "0")}`; }
+      else v = Number.isInteger(v) && v < 24 ? `${v}:00` : null;
+    }
+    const m = /^\s*(\d{1,2})(?:[:.](\d{2}))?\s*([ap]\.?m\.?)?\s*$/i.exec(String(v ?? ""));
     if (!m) return null;
     let hour = +m[1];
-    const minute = +m[2];
+    const minute = m[2] ? +m[2] : 0;
     if (m[3]) { if (hour < 1 || hour > 12) return null; hour = hour % 12 + (/^p/i.test(m[3]) ? 12 : 0); }
     return hour < 24 && minute < 60 ? { hour, minute } : null;
   },
@@ -83,6 +101,7 @@ const SettingsGrid = {
     grid.getRange(L.headerRow, L.firstCol, L.header.length, L.cols).setValues(L.header);
     grid.getRange(L.frequencyRow, L.unitCol).setDataValidation({ list: L.units, strict: false, dropdown: true });
     grid.getRange(L.lastRefreshRow, L.valueCol).setNumberFormat(L.lastRefreshFormat);
+    SettingsGrid.styleTime(grid.getRange(L.timeRow, L.valueCol));
     grid.autoResizeColumns(L.firstCol, L.cols + 1);
     grid.commit();
   },
@@ -119,8 +138,10 @@ const SettingsGrid = {
     };
     /** A line (4 cells, B..E) after `after`; returns its row. */
     const addLine = (after, line) => {
+      if (!after) throw new Error("Settings sheet: no line to put the new one under");
       grid.insertRowsAfter(after, 1);
       grid.getRange(after + 1, L.firstCol, 1, L.cols).setValues([line]);
+      if (line[0] === "refreshTime") SettingsGrid.styleTime(grid.getRange(after + 1, L.valueCol));     // once, when the line is made; never touched again
       return after + 1;
     };
     return {
@@ -152,7 +173,6 @@ const SettingsGrid = {
         if (!timeRow) timeRow = addLine(keyRow("refreshFrequency"), L.timeLine);
         let row = keyRow("refreshStatus");
         if (!row) row = addLine(timeRow, L.statusLine);
-        grid.getRange(timeRow, L.valueCol).setNumberFormat("@");
         const area = grid.getRange(row, L.firstCol + 1, 1, L.cols - 1);
         area.merge();
         grid.getRange(row, L.firstCol + 1).setValue(lines.join("\n"));
