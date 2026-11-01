@@ -46,6 +46,9 @@ module.exports = function register(t) {
   function same(name, steps, prefill, opts) {
     MODES.forEach(mode => test('golden: SettingsSheet - ' + name + ' [' + mode + ']', () => {
       const old = scope('service', prefill), now = scope(mode, prefill);
+      // a sheet that does not exist yet is made by SettingsGrid.create in both scopes: the frozen class would make the OLD header (without the refreshTime
+      // and refreshStatus lines); how a new sheet looks is pinned by its own test below
+      if (!prefill) [old, now].forEach(x => x.run(`SettingsGrid.create('Ustawienia')`));
       const answers = [old, now].map((s, i) => {
         s.run(`globalThis.__ss = new ${i === 0 ? 'LegacySettingsSheet' : 'SettingsSheet'}()`);
         return steps.map(code => plain(s.run(code)));
@@ -127,32 +130,53 @@ module.exports = function register(t) {
   });
 
 
-  // ---- the message area and the start time (not in the frozen class) ----------------------------------------------------------------------
-  MODES.forEach(mode => test('message area: success is green with the frequency, next refresh and set-up time; failure is red; both in merged B3:E3 [' + mode + ']', () => {
+  // ---- the refreshTime and refreshStatus lines (not in the frozen class) ------------------------------------------------------------------
+  MODES.forEach(mode => test('a new settings sheet: the old header, then the refreshTime and refreshStatus lines, (config lines are added where they were) [' + mode + ']', () => {
+    const s = scope(mode);
+    s.run(`globalThis.__ss = new SettingsSheet()`);
+    const rows = plain(s.run(`__ss.grid.rows()`));
+    assert.deepStrictEqual(rows.slice(4, 8).map(r => r[0]), ['lastRefresh', 'refreshFrequency', 'refreshTime', 'refreshStatus']);
+    assert.strictEqual(s.run(`__ss.refreshTimePos`), 7);
+  }));
+
+  MODES.forEach(mode => test('message: success is green with the frequency, next refresh and set-up time; failure is red; in C:E of the refreshStatus line [' + mode + ']', () => {
     const s = scope(mode);
     s.run(`globalThis.__ss = new SettingsSheet()`);
     s.run(`Utilities.formatDate = (d, tz, p) => p === 'Z' ? '+0200' : p === 'z' ? 'CEST' : d.toISOString().slice(0, 19).replace('T', ' ')`);
+    const msg = () => s.run(`__ss.grid.rows()[7][1]`);
     s.run(`__ss.setRefreshMessage({ ok: true, when: new Date(1750000000000), frequency: { freq: 2, unit: 'days' }, next: new Date(1750100000000) })`);
-    const get = () => s.run(`__ss.grid.rows()[2][0]`);
-    const ok = get();
-    assert.match(ok, /^Dane będą odświeżane automatycznie co 2 dni\.\nNastępne odświeżenie \d{4}-\d\d-\d\d \d\d:\d\d:\d\d UTC[+-]\d+\.\nOdświeżanie zostało ustawione /);
+    assert.match(msg(), /^Dane będą odświeżane automatycznie co 2 dni\.\nNastępne odświeżenie \d{4}-\d\d-\d\d \d\d:\d\d:\d\d UTC\+2\.\nOdświeżanie zostało ustawione /);
     s.run(`__ss.setRefreshMessage({ ok: false, when: new Date(1750000000000) })`);
-    const bad = get();
-    assert.match(bad, /^Ustawienia odświeżania nie zostały zaktualizowane!\n.*Import z BC -> Ustawienia\.\nPróba zmiany ustawień została podjęta /);
-    assert.strictEqual(s.run(`__ss.grid.rows()[2][1]`), '');                  // merged: the rest of the area is empty
+    assert.match(msg(), /^Ustawienia odświeżania nie zostały zaktualizowane!\n.*Import z BC -> Ustawienia\.\nPróba zmiany ustawień została podjęta /);
+    assert.deepStrictEqual(plain(s.run(`__ss.grid.rows()[7].slice(2)`)), ['', '']);     // merged: D and E are empty
+    assert.ok(s.book.sheets['Ustawienia'].snapshot().merges.includes('8,3,8,5'));
   }));
 
-  MODES.forEach(mode => test('start time: "17:30" in F of the frequency line is read as {hour, minute}; empty or not a time -> null [' + mode + ']', () => {
+  MODES.forEach(mode => test('a sheet made before the two lines: the first message adds them after the frequency line; the lines below and the remembered rows move [' + mode + ']', () => {
+    const s = scope(mode, sh => fillSettings(sh, { configs: CONFIGS }));
+    s.run(`globalThis.__ss = new SettingsSheet(); Utilities.formatDate = (d, tz, p) => p === 'Z' ? '+0200' : 'x'`);
+    const before = plain(s.run(`__ss.getConfigSheetNames()`));
+    s.run(`__ss.setRefreshMessage({ ok: true, when: new Date(1750000000000), frequency: { freq: 6, unit: 'hrs' }, next: new Date(1750100000000) })`);
+    const keys = plain(s.run(`__ss.grid.rows().map(r => r[0])`));
+    const f = keys.indexOf('refreshFrequency');
+    assert.deepStrictEqual(keys.slice(f, f + 3), ['refreshFrequency', 'refreshTime', 'refreshStatus']);
+    assert.deepStrictEqual(plain(s.run(`__ss.getConfigSheetNames()`)), before);
+    assert.strictEqual(s.run(`__ss.refreshTimePos`), f + 2);
+    assert.strictEqual(s.run(`__ss.refreshFrequencyPos`), f + 1);
+  }));
+
+  MODES.forEach(mode => test('refresh time: "17:30", "5:30 PM", "3:45 pm", 7:05 -> {hour, minute}; empty, text, 25:00, 13:00 PM -> null; no such line -> null; editing it is a frequency edit [' + mode + ']', () => {
     const s = scope(mode);
     s.run(`globalThis.__ss = new SettingsSheet()`);
-    const row = s.run(`__ss.refreshFrequencyPos`);
     const sh = s.book.sheets['Ustawienia'];
-    const at = v => { sh.setValue(row, 6, v, ''); s.run(`globalThis.__ss = new SettingsSheet()`); return plain(s.run(`__ss.getRefreshStartAt()`)); };
+    const at = v => { sh.setValue(7, 4, v, ''); s.run(`globalThis.__ss = new SettingsSheet()`); return plain(s.run(`__ss.getRefreshStartAt()`)); };
     assert.deepStrictEqual(at('17:30'), { hour: 17, minute: 30 });
+    assert.deepStrictEqual(at('5:30 PM'), { hour: 17, minute: 30 });
+    assert.deepStrictEqual(at('3:45 pm'), { hour: 15, minute: 45 });
+    assert.deepStrictEqual(at('12:10 AM'), { hour: 0, minute: 10 });
     assert.deepStrictEqual(at('7:05'), { hour: 7, minute: 5 });
-    assert.strictEqual(at(''), null);
-    assert.strictEqual(at('wieczorem'), null);
-    assert.strictEqual(at('25:00'), null);
+    ['', 'wieczorem', '25:00', '13:00 PM'].forEach(v => assert.strictEqual(at(v), null, v));
+    assert.strictEqual(s.run(`__ss.isRefreshFrequencyCell({ getRow: () => 7, getColumn: () => 4, getLastRow: () => 7, getLastColumn: () => 4 })`), true);
   }));
 
   test('rule: Settings Sheet.js and the settings code around it reach the sheet through SettingsGrid only', () => {

@@ -11,6 +11,7 @@ class SettingsSheet{
     this.lastConfigSheetPos = 2;
     this.lastRefreshPos = null;
     this.refreshFrequencyPos = null;
+    this.refreshTimePos = null;
     this.sheetList = this.getSheetList();
     this.refreshFrequency = this.readRefreshFrequency();
     this.lastRefresh = this.readLastRefresh();
@@ -27,7 +28,7 @@ class SettingsSheet{
 
   /** Is the edited range (part of) the refresh frequency: its number (column D) or its unit (column E)? */
   isRefreshFrequencyCell(range){
-    return isInRange(this.refreshFrequencyPos,4,range) || isInRange(this.refreshFrequencyPos,5,range);
+    return isInRange(this.refreshFrequencyPos,4,range) || isInRange(this.refreshFrequencyPos,5,range) || isInRange(this.refreshTimePos,4,range);
   }
 
   sheetEdit(e){
@@ -72,6 +73,9 @@ class SettingsSheet{
           break;
         case 'refreshFrequency':
           this.refreshFrequencyPos = i;
+          break;
+        case 'refreshTime':
+          this.refreshTimePos = i;
           break;
       }
     });
@@ -148,13 +152,9 @@ class SettingsSheet{
     ScheduleRefresh.apply(this);
   }
 
-  /** The time of day to refresh at ({hour, minute}) from the frequency line, or null when the cell is empty or not a time. */
+  /** The time of day to refresh at ({hour, minute}) from the refreshTime line, or null when there is none or it is no time. */
   getRefreshStartAt(){
-    if(!this.grid) return null;
-    if(!this.refreshFrequencyPos) this.readSheetList();
-    if(!this.refreshFrequencyPos) return null;
-    const m = /^\s*(\d{1,2}):(\d{2})/.exec(String(this.grid.startAt(this.refreshFrequencyPos)));
-    return m && +m[1] < 24 && +m[2] < 60 ? {hour: +m[1], minute: +m[2]} : null;
+    return this.grid ? this.grid.refreshTime() : null;
   }
 
   /** The last resort when the outcome cannot be shown in the message area. */
@@ -166,6 +166,10 @@ class SettingsSheet{
   setRefreshMessage(report){
     if(!this.grid) return;
     this.grid.writeRefreshMessage(report);
+    // the lines it may have added moved the rest down: read the sheet again
+    this.settings = this.grid.rows();
+    this.lastConfigSheetPos = 2; this.lastRefreshPos = null; this.refreshFrequencyPos = null; this.refreshTimePos = null;
+    this.sheetList = this.readSheetList();
   }
 
   createObjectFromList(itemsNames,list){

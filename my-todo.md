@@ -1,27 +1,8 @@
 # [DONE, not yet checked on a real spreadsheet] Auto refresh
 
-Implemented on branch better-auto-refresh: start time in F of the refreshFrequency line ("17:30", text; days -> atHour + nearMinute, hours -> nearMinute; the platform only promises "near"),
-message area B3:E3 (merged, green / red thick border), toast "BŁĄD! Zobacz Import z BC -> Ustawienia." when even the message cannot be written. The F label (F2) and format are added the first
-time a message is written. "Następne odświeżenie" is an estimate (triggers do not expose their next run). Not done: the sidebar tab below.
-
-Extended freq area should allow for:
-- setting time refresh should happen at (next refresh at?).
-
-Message area (a merged cell) will update after changing settings:
-edit in freq area -> setup / change / delete time-based trigger -> udate status message.
-
-On success (light green background; green bold border):
-> Dane będą odświeżane automatycznie co [1] [dzień/h].
-> Następne odświeżenie [2026-11-29 17:00:00 UTC+2"].
-> Odświeżanie zostało ustawione [2026-10-30 15:41:23 UTC+2].
-
-On fail (ligth red background; red bold border):
-> Ustawienia odświeżania nie zostały zaktualizowane!
-> Zmień ustawienia, żeby spróbować ponownie lub zobacz szczegóły w menu dodatku: <b> Import z BC -> Ustawienia </b>.
-> Próba zmiany ustawień została podjęta [2026-10-30 13:41:11 UTC+2].
-
-If script fails for whatever reason before fail message could be set (incl. a fail on setting the message itself), a toast should inform about it:
-> BŁĄD! Zobacz Import z BC -> Usatwienia.
+Implemented on branch better-auto-refresh: line "refreshTime" (D = time of day, "17:30" / "5:30 PM"; days -> atHour + nearMinute, hours -> nearMinute ONLY, the hour is ignored; the platform only promises "near"),
+line "refreshStatus" (C:E merged, green / red thick border), toast "BŁĄD! Zobacz Import z BC -> Ustawienia." when even the message cannot be written. New sheets get both lines;
+an older sheet gets them (after refreshFrequency) the first time a message is written. "Następne odświeżenie" is an estimate (triggers do not expose their next run). Not done: the sidebar tab below.
 
 # Ustawienia sidebar
 
