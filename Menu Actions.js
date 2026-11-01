@@ -38,19 +38,6 @@ const MenuActions = {
     updateAfterEdit(impWizData.configSheet);
   },
 
-  /** Developer tool: what the platform stored for the data validation of the active cell (service and API side by side), in a dialog. */
-  inspectCell(){
-    const text = CellInspector.text().replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-    const html = HtmlService.createHtmlOutput('<pre style="font-size:12px;white-space:pre-wrap">' + text + '</pre>').setWidth(720).setHeight(520);
-    SpreadsheetApp.getUi().showModalDialog(html,"Weryfikacja danych komórki");
-  },
-
-  /** Developer tool: the scratch sheet for comparing the ways of writing the operator dropdown (Validation Lab.js); says what it did when the run closes. */
-  buildValidationLab(){
-    const note = ValidationLab.build();
-    Controller.registerClosingOnce(()=>SpreadsheetApp.getUi().alert(note),"userAlertValidationLab");
-  },
-
   /** "Autoryzuj": the authorisation sidebar, or just a notice when the connection is active. */
   authorise(){
     if (BCAuth.authorise()) SpreadsheetApp.getUi().alert('Połączenie aktywne!');      // nothing else happens; the alert tells the user the function ran properly

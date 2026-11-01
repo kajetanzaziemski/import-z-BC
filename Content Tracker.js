@@ -166,7 +166,6 @@ class CoedContentTracker{
     this.fixRegister = new FixRegister();
     this.dValStore = null;
     this.insertRows = [];
-    this.dValChanges = [];
 
     this.beforeReading();
     this.setupDValStore();
@@ -235,42 +234,6 @@ class CoedContentTracker{
   runKeyFunction(fix){
     // dbgLog(`Running ${fix.key} with ${JSON.stringify(fix.params)}, line number: ${fix.rowNumber}`);
     return this[fix.key](...fix.params,fix.rowNumber);
-  }
-
-  // - - - - - - - - Verify data validations - - - - - - - -  
-  checkDisplayedDataValidations(displayedArray){
-    this.dValChanges = [];
-    let referenceArray = this.getDataValidationsArray();
-    let H = referenceArray.length;
-    let W = referenceArray[0].length;
-    for(let i = 0; i<H; ++i){
-      for(let j = 0; j<W; ++j){
-        
-        let rules = null;
-        
-        if(displayedArray[i][j]==null){ 
-          if(referenceArray[i][j]!=null) rules = referenceArray[i][j];
-          else ;
-        }
-        else if(referenceArray[i][j]==null){ 
-          if(displayedArray[i][j]!=null) rules = null;
-        }
-        else if(referenceArray[i][j].isSameAsSample(displayedArray[i][j])){
-          // dbgLog(`Match found at ${i},${j}`);
-        }
-        else{
-          rules = referenceArray[i][j];
-        }
-        
-        if(rules) this.dValChanges.push({
-          row: i,
-          col: j,
-          rules: rules
-        })
-        
-      }
-    }
-    return this.dValChanges;
   }
 
   // - - - - - - - - Debugging - - - - - - - -  

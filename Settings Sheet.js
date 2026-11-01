@@ -84,11 +84,6 @@ class SettingsSheet{
     return res;
   }
 
-  getConfigSheetForResultSheet(resultSheet){
-    for(o of this.getSheetList()) if(o.resultSheet == resultSheet) return o.configSheet;
-    return null;
-  }
-
   isConfigSheet(sheetName){
     return this.getSheetList().find(item => item.configSheet == sheetName)!=undefined;
   }

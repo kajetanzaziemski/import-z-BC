@@ -588,8 +588,6 @@ require('./query-lines.test.js')({ test });
 // ---- stale cells of a config line are greyed (conditional formatting) ------------------------------------------------------------
 require('./stale-grey.test.js')({ test });
 require('./operator-dropdown.test.js')({ test });
-require('./cell-inspector.test.js')({ test });
-require('./validation-lab.test.js')({ test });
 
 // ---- state layer: stores, settings, locks, agent detection state (fresh Apps Script executions on fake platform services) ----------
 require('./state.test.js')({ test });
