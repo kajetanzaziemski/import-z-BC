@@ -113,7 +113,7 @@ ends with `ConnectionError` is a `WARN` ("not authorised"), the parts that need 
 
 ## Found while building this
 
-Defects the checks reported on the code as it was when the helpers were written are logged in `docs/bugs-todo.md`
+Defects the checks reported on the code as it was when the helpers were written are logged in `docs/bugs-fixed.md`
 (settings writes lost in `sheetEdit`, nested `Controller.run`, `ConnectionError` while editing a config sheet offline, and
 smaller ones noticed on the way). They are not fixed on this branch.
 

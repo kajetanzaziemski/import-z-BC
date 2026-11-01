@@ -139,7 +139,7 @@ module.exports = function register(t) {
     assert.deepStrictEqual(a.state().project, []);
   });
 
-  test('agents: onOpen returns what the status check returned - true with active agents, nothing without them, nothing while the add-on is OFF (bugs-todo #8)', () => {
+  test('agents: onOpen returns what the status check returned - true with active agents, nothing without them, nothing while the add-on is OFF (bugs-fixed #8)', () => {
     const w = world(), a = w.doc('A');
     assert.strictEqual(a.run(`onOpen({ authMode: 'FULL' })`), null, 'OFF: the gate skips the run (null)');
     a.p.props.document.importSettingsArray = JSON.stringify({ addonStatus: true, importSheetName: 'Ustawienia' });

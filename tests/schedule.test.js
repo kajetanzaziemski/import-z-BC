@@ -159,7 +159,7 @@ module.exports = function register(t) {
     assert.deepStrictEqual(triggers(sc.p).map(x => x.id), ['other-doc-trigger']);
   });
 
-  test('schedule: the refresh triggers of OTHER documents are no longer removed (bugs-todo #5): only the one this document\'s permit names', () => {
+  test('schedule: the refresh triggers of OTHER documents are no longer removed (bugs-fixed #5): only the one this document\'s permit names', () => {
     const sc = scenario({ settings: PERMIT('mine') });
     sc.p.triggers.push(Object.assign({}, OTHER, { source: 'another-document' }), NAMED('mine'), NAMED('theirs-legacy', 'autoRefresh'));
     sc.settingsSheet({ freq: 1, unit: 'hrs' }).setRefreshTrigger();

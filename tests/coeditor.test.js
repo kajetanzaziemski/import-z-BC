@@ -180,7 +180,7 @@ module.exports = function register(t) {
   });
 
   // BC unreachable AND nothing cached: listTables falls back to the empty list, and so must the field / navigation property lists (before, they threw
-  // ConnectionError and the whole co-edit aborted half way: bugs-todo #3). The frozen class still throws, so these are not golden comparisons.
+  // ConnectionError and the whole co-edit aborted half way: bugs-fixed #3). The frozen class still throws, so these are not golden comparisons.
   ['api', 'service'].forEach(mode => {
     test('BC unreachable (tables, fields, navigation properties, data types): the co-edit completes, every BC-dependent dropdown is an empty list with the explaining note [' + mode + ']', () => {
       const s = scope(mode, { offline: true, offlineAll: true });

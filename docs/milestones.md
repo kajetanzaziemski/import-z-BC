@@ -20,7 +20,7 @@ Done
 - Use cases extracted from `Menu.js` / `Settings Sheet.js`: `RefreshSheet`, `EstimateSheet`, `RefreshAll`, `ScheduleRefresh`; `ResultSheet` seam
 - Router (`sheetEdit` / `sheetChange` -> named jobs), `AnalyseConfig`; the live check reports by job
 - `Controller` rules: every platform entry is a run, no nested runs, `onOpen` builds the menu first; closing phase drains late registrations
-- Live check helpers merged (the judge, pinned); fixed on the way: bugs-todo #1 (settings lost in `sheetEdit`), #2 (nested run lost log saves), #4, `UnknownError` unwrapping
+- Live check helpers merged (the judge, pinned); fixed on the way: bugs-fixed #1 (settings lost in `sheetEdit`), #2 (nested run lost log saves), #4, `UnknownError` unwrapping
 
 Still to do
 - (done after the tag: `SheetCoeditor` split, see `docs/testing.md` section 2b)
@@ -31,7 +31,7 @@ Still to do
 - (done on branch `refactor-login-and-rest`: login flow behind `BCAuth`, `docs/login-flow.md`; the status check was already thin forwarders to `Agents`)
 - (done on branch `refactor-login-and-rest`: BC layer reorganised and cleaned of test-only code, `docs/bc-layer.md`)
 - (done: the old-name forwarders and dead leftovers removed)
-- (done: bugs-todo #4/#6/#8/#10 closed - `ManagedSheets` cache; `BulkSheet` Sheets API path written and tested on the simulated spreadsheet only)
+- (done: bugs-fixed #4/#6/#8/#10 closed - `ManagedSheets` cache; `BulkSheet` Sheets API path written and tested on the simulated spreadsheet only)
 - (done: the time trigger as two live-check jobs `refresh.scheduled` / `refresh.retired`; the dead "Test item" menu entry and its verifier removed; live check helpers re-pinned)
 
 

@@ -1,5 +1,7 @@
 # Trigger / agent management – fixes to do (separate branch)
 
+> **Superseded.** Most of this list is fixed (see `agent-lifecycle.md` and `bugs-fixed.md`); what is still open is in `bugs-todo.md` (Agents section). Kept as the original review and the design note for eviction.
+
 Findings from the review of `Trigger Manager.js`, `Status Manager.js`, `Quick Start.js`. Not part of the single-edit detection change.
 
 ## Errors

@@ -16,10 +16,10 @@ calls the use cases. `refreshAllDataForConfigSheet` and `estimateResponseSize` s
 - The reading cell is lit by the `SheetCoeditor` constructor; refresh puts it idle *before* lighting writing; an error anywhere puts the lit cell back to idle and is rethrown.
 - A refresh without a table in the config sheet only puts reading to idle. The result sheet is only touched after the data was fetched successfully.
 - The data type of a column is looked up with the column's own table (`Sales.Since`) or else the main table.
-- **Quirk kept: `EstimateSheet` without a table returns early and leaves the reading cell lit** (the old code did; the live check's "activity indicators back to idle" will report it - see `docs/bugs-todo.md` style findings). It is pinned by a test so that fixing it is a conscious change.
+- **Quirk kept: `EstimateSheet` without a table returns early and leaves the reading cell lit** (the old code did; the live check's "activity indicators back to idle" will report it - see `docs/bugs-fixed.md` style findings). It is pinned by a test so that fixing it is a conscious change.
 
 ## The one intended change
-`estimateForCurrentSheet_script` assigned `configSheet = ...` without `let` and created an implicit global (`docs/bugs-todo.md` #4). It is a local now. Nothing else read that global.
+`estimateForCurrentSheet_script` assigned `configSheet = ...` without `let` and created an implicit global (`docs/bugs-fixed.md` #4). It is a local now. Nothing else read that global.
 
 ## How it is tested (`tests/refresh.test.js`)
 Real: `Menu.js`, the use cases, `DataType`, `Controller`/`Settings`/`Store`, and the result sheet on the simulated spreadsheet. Faked (recording every call): `SheetCoeditor`, `ODataConnection`,
@@ -52,7 +52,7 @@ Entry points stay where they are and keep their names, action names and live-che
 
 ## Behaviour kept on purpose (pinned by `tests/schedule.test.js`, written first against the old code)
 - The permit rules of CLAUDE.md: a trigger refreshes only if `permit.issuedFor === e.triggerUid`, otherwise it deletes itself (only itself); `touchRefreshPermit` re-reads the store, so a permit reissued by another run meanwhile is not overwritten.
-- Quirks, pinned so that fixing them is a conscious change: `setUp` replaces only the trigger this document's permit names (bugs-todo #5, fixed: it used to remove the refresh triggers of all documents of the user); without a refresh-frequency row (`null`) it removes them and then fails with a `TypeError`;
+- Quirks, pinned so that fixing them is a conscious change: `setUp` replaces only the trigger this document's permit names (bugs-fixed #5, fixed: it used to remove the refresh triggers of all documents of the user); without a refresh-frequency row (`null`) it removes them and then fails with a `TypeError`;
   the time is noted also when nothing was ticked and not when a refresh fails; the first legacy run records no `lastRun` (the permit it issued is not stored yet when it is touched); the first failing sheet stops the loop.
 
 ## The one difference

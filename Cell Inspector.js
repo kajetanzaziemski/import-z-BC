@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
 // CELL INSPECTOR (developer tool): what the platform stored for the data validation of the active cell, read back through the Spreadsheet service and through
-// the Sheets API, side by side. Made to compare the two representations of the same dropdown (docs/bugs-todo.md #18). Read-only; no project words.
+// the Sheets API, side by side. Made to compare the two representations of the same dropdown (docs/bugs-fixed.md #18). Read-only; no project words.
 // ---------------------------------------------------------------------------
 
 const CellInspector = {

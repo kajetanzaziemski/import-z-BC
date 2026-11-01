@@ -1,6 +1,6 @@
 // The developer tool "Test weryfikacji": builds a scratch sheet that writes the same operator dropdown and the same values in every combination (rule written by the
 // Spreadsheet service or by the Sheets API; value written by the service, by the API, or left empty to pick from the list) so that the red warnings on a real sheet
-// show which part matters (docs/bugs-todo.md #18). It exists only to be looked at; these tests pin the layout.
+// show which part matters (docs/bugs-fixed.md #18). It exists only to be looked at; these tests pin the layout.
 'use strict';
 const fs = require('fs');
 const path = require('path');

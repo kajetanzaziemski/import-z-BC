@@ -1,6 +1,6 @@
 // Tests of Controller.run's closing actions: what registered before a run, during it, and in nested runs does at the end. Registered by tests/run.js.
 //
-// Background (docs/bugs-todo.md #1): the installable edit trigger evaluates MainSettings.getAddonStatus() for its log line BEFORE Controller.run().
+// Background (docs/bugs-fixed.md #1): the installable edit trigger evaluates MainSettings.getAddonStatus() for its log line BEFORE Controller.run().
 // That builds the import settings StorageObject, which registers its save as a closing action; run() then threw the list away, so every setting changed in
 // that execution (the refresh permit of a new time trigger!) was never saved.
 'use strict';
@@ -22,7 +22,7 @@ module.exports = function register(t) {
   const stored = p => JSON.parse(p.props.document.importSettingsArray);
 
   // ---- the bug ------------------------------------------------------------------------------------------------------------
-  test('controller: a closing action registered BEFORE the run belongs to that run and is executed at its end (bugs-todo #1)', () => {
+  test('controller: a closing action registered BEFORE the run belongs to that run and is executed at its end (bugs-fixed #1)', () => {
     const { ex, log } = setup();
     ex.eval(`Controller.registerClosing(() => __log.push('closing'));
              Controller.run('requestA', () => { __log.push('action'); })`);
@@ -101,11 +101,11 @@ module.exports = function register(t) {
     assert.deepStrictEqual(plain(log), ['init:requestA', 'action', 'init:requestB', 'action'], 'a registered initial action runs before every action, with that run\'s context');
   });
 
-  // ---- no nested runs, nothing is lost in the closing phase (bugs-todo #2) ---------------------------------------------------------------
+  // ---- no nested runs, nothing is lost in the closing phase (bugs-fixed #2) ---------------------------------------------------------------
   const AGENT_FILES = ['Custom errors.js', 'Helper Data Store.js', 'Store.js', 'Settings.js', 'Main Settings.js', 'Controller.js', 'Trigger Manager.js',
     'Global Add-on Settings.js', 'Quick Start.js', 'functions.js', 'Track onEdit Triggers.js', 'Status Manager.js', 'Agent Reconciler.js', 'Agents.js', 'Verify Agent.js'];
 
-  test('controller: turning the add-on ON repairs the agents (edit + change trigger) and the logs and the agent pair are SAVED (bugs-todo #2: they were lost)', () => {
+  test('controller: turning the add-on ON repairs the agents (edit + change trigger) and the logs and the agent pair are SAVED (bugs-fixed #2: they were lost)', () => {
     const p = new FakePlatform();
     p.props.document.importSettingsArray = JSON.stringify({ addonStatus: false, importSheetName: 'Ustawienia' });
     const ex = p.execution(AGENT_FILES);

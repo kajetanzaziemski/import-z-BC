@@ -140,7 +140,7 @@ class SettingsSheet{
     const after = lastPos;
     lastPos = this.grid.addConfigRow(after,configSheetName,resultSheetName,refresh);
     this.lastConfigSheetPos = lastPos;
-    // the lines below the new one moved down: the rows remembered for them with it (they were left where they had been, bugs-todo #11)
+    // the lines below the new one moved down: the rows remembered for them with it (they were left where they had been, bugs-fixed #11)
     if(this.lastRefreshPos > after) this.lastRefreshPos++;
     if(this.refreshFrequencyPos > after) this.refreshFrequencyPos++;
     this.sheetList.push(this.createObjectFromList(["configSheet","resultSheet","refresh"],[configSheetName,resultSheetName,refresh]));

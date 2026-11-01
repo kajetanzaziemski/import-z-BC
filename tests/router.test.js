@@ -95,7 +95,7 @@ module.exports = function register(t) {
     assert.deepStrictEqual(sc.calls(), []);
   });
 
-  test('edit: in any other sheet -> nothing happens (the settings sheet object is built once to fill the cache of managed sheets, then not again: bugs-todo #10)', () => {
+  test('edit: in any other sheet -> nothing happens (the settings sheet object is built once to fill the cache of managed sheets, then not again: bugs-fixed #10)', () => {
     const sc = scenario({ active: 'Arkusz1' });
     sc.edit();
     assert.deepStrictEqual(sc.calls(), []);
@@ -184,7 +184,7 @@ module.exports = function register(t) {
     assert.ok(/function sheetEditAction\(e\)/.test(text) && /function sheetChangeAction\(e\)/.test(text));
   });
 
-  test('edit: a refresh frequency edit leaves the permit of the new time trigger in the store (bugs-todo #1: it used to be lost)', () => {
+  test('edit: a refresh frequency edit leaves the permit of the new time trigger in the store (bugs-fixed #1: it used to be lost)', () => {
     const sc = scenario({ active: 'Ustawienia', freqCell: true });
     sc.ex.eval(`getMainSettings = () => ({ getConfigSheetNames: () => [], isConfigSheet: () => false, isRefreshFrequencyCell: () => true,
       setRefreshTrigger: () => ScheduleRefresh.setUp({ freq: 6, unit: 'hrs' }) })`);

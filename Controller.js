@@ -64,7 +64,7 @@ const Controller = (function () {
    *
    * Closing actions registered BEFORE the run (an entry point may touch the settings in its own log line, which builds the settings object and registers
    * its save) belong to it, and so do those registered while the closing actions run (e.g. the saves of the trigger logs when the status check repairs the
-   * agents): the closing phase goes on until nothing is left (docs/bugs-todo.md #1, #2).
+   * agents): the closing phase goes on until nothing is left (docs/bugs-fixed.md #1, #2).
    */
   function run(actionName, actionFn, e) {
     if(depth > 0) {

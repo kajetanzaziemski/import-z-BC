@@ -1,4 +1,4 @@
-// The operator dropdown (docs/bugs-todo.md #18). A bare "=" cannot be a cell value or a list item (it starts a formula, picking it asks for formula text), and the
+// The operator dropdown (docs/bugs-fixed.md #18). A bare "=" cannot be a cell value or a list item (it starts a formula, picking it asks for formula text), and the
 // quote prefix ("'=") is read differently by the Spreadsheet service and the Sheets API. So the equality operator in the dropdown is " =" - with a leading space - and
 // every other operator is a plain item. The query builder accepts " =" like "=" (and the OData words, and the other symbols as before). Lists are written as they are
 // by both paths.

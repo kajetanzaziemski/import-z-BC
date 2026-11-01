@@ -15,7 +15,7 @@
 // routeEdit / routeChange only LOOK (they return a route: { intent, sheet, event }); perform() announces the intent to the live check
 // (Controller.intent) and runs the action. Nothing else decides what an edit means.
 // Quirk kept from before: the sheet is the ACTIVE sheet, not the sheet of the edited range. Which sheets are config sheets comes from the cache
-// (Managed Sheets.js); the settings sheet object is built only for an edit or a change in the settings sheet itself (bugs-todo #10, fixed).
+// (Managed Sheets.js); the settings sheet object is built only for an edit or a change in the settings sheet itself (bugs-fixed #10, fixed).
 // ---------------------------------------------------------------------------
 
 const ROUTE_ACTIONS_ = {

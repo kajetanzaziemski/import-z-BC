@@ -31,8 +31,8 @@ Name prefixes: `menu…` = the user chose something in the add-on menu (so the a
 ## Closing actions: where saves live
 `StorageObject` / `StorageArray` / the trigger logs register their save **when they are built**, with `registerClosingOnce(fn, flag)` (a flag registers once per execution). So an entry point that changes a setting must be inside a run, otherwise the save never happens
 (direct `Store.set` writes are immediate and need no closing action). Two consequences, both fixed:
-- Registered **before** the run (the edit trigger's log line builds the settings object first): kept for the run (bugs-todo #1).
-- Registered **during the closing phase** (the status check repairs the agents there and builds the trigger logs): run too, in order, with a safety cap of 200 (bugs-todo #2).
+- Registered **before** the run (the edit trigger's log line builds the settings object first): kept for the run (bugs-fixed #1).
+- Registered **during the closing phase** (the status check repairs the agents there and builds the trigger logs): run too, in order, with a safety cap of 200 (bugs-fixed #2).
 
 Also: user alerts are registered as closing actions, so they appear after the state is saved.
 

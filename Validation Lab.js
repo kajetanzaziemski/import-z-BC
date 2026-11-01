@@ -5,7 +5,7 @@
 //           7 rule written by the service, items without apostrophe (control)     8 the same written by the API
 //   columns B ">=" written by the service   C ">=" written by the API   D "=" written by the service ("'=": plain text)   E "=" written by the API   F empty: pick from the list
 // A red triangle in a cell is the warning "the value is not in the list". Which cells have it shows whether the rule, the way the value got into the cell, or the
-// apostrophe matters (docs/bugs-todo.md #18). The sheet is replaced every time. Nothing else is touched.
+// apostrophe matters (docs/bugs-fixed.md #18). The sheet is replaced every time. Nothing else is touched.
 // ---------------------------------------------------------------------------
 
 const ValidationLab = {

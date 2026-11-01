@@ -1,5 +1,5 @@
 // The developer tool "Pokaż weryfikację komórki": what the platform stored for the data validation of the active cell, read back two ways - through the Spreadsheet
-// service and through the Sheets API (spreadsheets.get) - so that the two representations can be compared (the operator dropdown, docs/bugs-todo.md #18).
+// service and through the Sheets API (spreadsheets.get) - so that the two representations can be compared (the operator dropdown, docs/bugs-fixed.md #18).
 // Read-only. Fakes for both services; the point is what is asked for and what is reported.
 'use strict';
 const fs = require('fs');

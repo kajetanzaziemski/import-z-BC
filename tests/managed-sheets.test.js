@@ -1,5 +1,5 @@
 // The cache of the sheets the add-on manages (Managed Sheets.js): which sheet is a config sheet, answered without building the settings sheet object
-// (bugs-todo #10). Filled when the document opens, refreshed whenever the settings sheet or its edits change the list, expires after an hour.
+// (bugs-fixed #10). Filled when the document opens, refreshed whenever the settings sheet or its edits change the list, expires after an hour.
 // Real: Router.js, Managed Sheets.js, Quick Start.js, Controller, Settings / Store. Faked (counting): the settings sheet object and the co-editor.
 'use strict';
 const fs = require('fs');

@@ -42,7 +42,7 @@ class ConfigDValStore{
     this.simple = {};
     this.simple["operators"] = new MyDataValidation(
       "VALUE_IN_LIST",
-      [ODataQuery.listComparisonOperators().map(op => op == "=" ? " =" : op)],      // a bare "=" is a formula start: equality is " =" with a leading space; the other operators are plain items (bugs-todo #18)
+      [ODataQuery.listComparisonOperators().map(op => op == "=" ? " =" : op)],      // a bare "=" is a formula start: equality is " =" with a leading space; the other operators are plain items (bugs-fixed #18)
       "operator selection"
     );
     this.simple["queryOptions"] = new MyDataValidation(

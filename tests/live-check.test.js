@@ -437,7 +437,7 @@ module.exports = function register(t) {
     assert.strictEqual(o.status('edit in the settings sheet outside the refresh frequency: nothing to do'), 'PASS');
   });
 
-  test('live check jobs: setting a new refresh frequency leaves a stored permit for the new trigger - the exact checks that failed in the live run now pass (bugs-todo #1)', () => {
+  test('live check jobs: setting a new refresh frequency leaves a stored permit for the new trigger - the exact checks that failed in the live run now pass (bugs-fixed #1)', () => {
     const r = agentRun({ entry: 'edit', active: 'Ustawienia', range: { sheet: 'Ustawienia', row: 4, col: 5 } });
     assert.strictEqual(r.entry.i, 'settings.refreshFrequency');
     assert.strictEqual(r.status("an autoRefreshHandler trigger exists for this document's permit"), 'PASS');
@@ -595,7 +595,7 @@ module.exports = function register(t) {
     assert.deepStrictEqual(r.p.consoleErrors.filter(m => /NESTED RUN/.test(m)), []);
   });
 
-  test('live check: switching the add-on ON installs the agents in the same run - one checked run, no "known issue" fallbacks needed (bugs-todo #2)', () => {
+  test('live check: switching the add-on ON installs the agents in the same run - one checked run, no "known issue" fallbacks needed (bugs-fixed #2)', () => {
     const r = repairRun('changeAddonStatus(true)', false);
     assert.deepStrictEqual(r.entries.map(e => [e.a, e.s]), [['requestChangeAddonStatus', 'PASS']]);
     assert.deepStrictEqual(r.notPassing, []);

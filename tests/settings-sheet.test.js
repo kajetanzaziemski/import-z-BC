@@ -140,7 +140,7 @@ module.exports = function register(t) {
   });
 
   // The row numbers SettingsSheet remembers (lastRefreshPos, refreshFrequencyPos) follow a line that addNewSheetInfo inserts above them (a new config line goes
-  // after row 2 while there are no config lines). Before, the later setLastRefresh of the same run wrote into the row where lastRefresh WAS (bugs-todo #11);
+  // after row 2 while there are no config lines). Before, the later setLastRefresh of the same run wrote into the row where lastRefresh WAS (bugs-fixed #11);
   // this is the one place where the new class intentionally differs from the frozen one.
   MODES.forEach(mode => test('after addNewSheetInfo the remembered lastRefresh and refreshFrequency rows follow the insert [' + mode + ']', () => {
     const s = scope(mode, sh => fillSettings(sh, {}));

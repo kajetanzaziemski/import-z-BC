@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
 // MANAGED SHEETS: which sheets of the document are config sheets - kept in the document cache, so that an edit or a structure change in an unrelated sheet is
-// recognised as such without building the settings sheet object (which reads the whole settings sheet; bugs-todo #10).
+// recognised as such without building the settings sheet object (which reads the whole settings sheet; bugs-fixed #10).
 //
 // The entry { settings: <name of the settings sheet>, configs: [<config sheet names>] } is
 //   - filled when the document opens (warmUp), where the add-on is ON and the script is authorised,

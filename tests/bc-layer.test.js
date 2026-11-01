@@ -65,7 +65,7 @@ module.exports = function register(t) {
     assert.strictEqual(ex.eval('__t.getResponseRowCount()'), 1);
   });
 
-  test('bc layer: readAllPages without a co-editor reads and returns the data, and a failing read gives the ORIGINAL error back (bugs-todo #6)', () => {
+  test('bc layer: readAllPages without a co-editor reads and returns the data, and a failing read gives the ORIGINAL error back (bugs-fixed #6)', () => {
     const a = scenario([page([{ No: 'C1' }])]);
     a.ex.eval(`globalThis.__c = new ODataConnection().setODataQuery('Customer', [['select', 'No']], {}).setupConnection(); __c.readAllPages();`);
     assert.deepStrictEqual(plain(a.ex.eval('__c.getDataArray()')), [['No'], ['C1']]);

@@ -8,7 +8,7 @@
 //
 // The refresh permit (Settings.js, CLAUDE.md) is what keeps old triggers from refreshing: a new permit makes every other trigger delete itself.
 // Time-based triggers are not returned by ScriptApp.getUserTriggers(ss): getProjectTriggers() is used.
-// setUp replaces only the trigger this document's permit names (bugs-todo #5, fixed); other triggers, legacy ones included, delete themselves when they fire.
+// setUp replaces only the trigger this document's permit names (bugs-fixed #5, fixed); other triggers, legacy ones included, delete themselves when they fire.
 // Known quirks kept: without a frequency (null) it removes that trigger and then fails with a TypeError; the first legacy run records no lastRun (the permit it just issued is not stored yet when it is touched).
 // ---------------------------------------------------------------------------
 

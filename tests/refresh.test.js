@@ -234,7 +234,7 @@ module.exports = function register(t) {
     assert.deepStrictEqual(b.calls(), []);
   });
 
-  test('menu: estimateForCurrentSheet does not leak a global variable "configSheet" any more (bugs-todo #4; the only intended change of the extraction)', () => {
+  test('menu: estimateForCurrentSheet does not leak a global variable "configSheet" any more (bugs-fixed #4; the only intended change of the extraction)', () => {
     const a = scenario({ activeSheet: 'Konfiguracja 1' });
     a.ex.eval(`estimateForCurrentSheet()`);
     assert.strictEqual(a.ex.eval(`typeof globalThis.configSheet`), 'undefined');

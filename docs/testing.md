@@ -29,7 +29,7 @@ Architecture rules are tests too (no project words in `Grid.js`, nothing used at
 - Old and new class run in fresh scopes on the same simulated book (new one through both Grid commit paths) for: a missing sheet (created with header, unit dropdown, date format), an existing sheet with three
   config lines, days / unknown unit, missing frequency and lastRefresh lines, gaps, `addNewSheetInfo` (default and given names, before and after existing lines), `setLastRefresh` (given time, fixed clock, row missing, repeated, after an
   insert), and the edit triggers being created only when missing. Sheets, every answer and the triggers created must be identical.
-- Pinned quirk: the remembered row numbers (`lastRefreshPos`, `refreshFrequencyPos`) are not moved when `addNewSheetInfo` inserts a line above them, so a `setLastRefresh` after it writes into the wrong row (bugs-todo #11).
+- Pinned quirk: the remembered row numbers (`lastRefreshPos`, `refreshFrequencyPos`) are not moved when `addNewSheetInfo` inserts a line above them, so a `setLastRefresh` after it writes into the wrong row (bugs-fixed #11).
 - API path: one read when the object is built, one `batchUpdate` per write, no read afterwards. A rule test keeps `Settings Sheet.js` free of range calls and `Settings Grid.js` on Grid + `SpreadsheetApp.flush` only.
 - Known difference, only on the API path (production uses the service path): a time written into a cell with no number format by the Sheets API shows as a number, the platform's service guesses a date format. It only matters for a
   `lastRefresh` line added after the header was made by hand (`noApiLook` in the test).
@@ -67,7 +67,7 @@ Executions can share one fake platform, which models concurrent or consecutive r
 names; part 2 tests `Store` / `Settings` and the moved callers. Mutation check: 13 deliberate breakages of the new code, all caught. See `docs/state.md`.
 
 ## 2c. The live check helpers as the judge (merged from `live-test-helpers`)
-`Live Check*.js` (+ `docs/live-check.md`, `docs/bugs-todo.md`) come from the branch `live-test-helpers`. They were written against the add-on **as it was before
+`Live Check*.js` (+ `docs/live-check.md`, `docs/bugs-fixed.md`) come from the branch `live-test-helpers`. They were written against the add-on **as it was before
 the refactor** and verify each entry point's outcome in a real spreadsheet. The arrangement on this branch:
 - **The refactor must satisfy the helpers, not the other way round.** The helper files are pinned by hash (`tests/golden/live-check.sha256.json`); a changed
   verifier fails `node tests/run.js` unless it is re-pinned on purpose (`UPDATE_GOLDEN=1`, only together with an intended change of behaviour).
@@ -89,7 +89,7 @@ the refactor** and verify each entry point's outcome in a real spreadsheet. The 
   2. *Sidebar details* (`Live Check Sidebar.html`): FAIL lines are red, WARN lines amber, PASS grey, SKIP grey italic; the head line has the colour of the run's status.
   `testConfigGridIndicators("Konfiguracja 1")` (Test Functions.js) prints the same reads on demand.
 - In a real spreadsheet: `liveCheckEnable()`, then use the add-on (menu, edits, triggers) and read the sidebar (add-on menu -> Narzędzia programisty -> Live check) or
-  `liveCheckReport(20, true)`. **Known findings in the old code show as `FAIL` / `WARN`** (see `docs/bugs-todo.md`: settings writes lost in `sheetEdit`, nested `Controller.run`,
+  `liveCheckReport(20, true)`. **Known findings in the old code show as `FAIL` / `WARN`** (see `docs/bugs-fixed.md`: settings writes lost in `sheetEdit`, nested `Controller.run`,
   offline `ConnectionError`); the refactor keeps them on purpose - a finding that disappears or a new `FAIL` is a behaviour change to look at.
   Run the same checks on a copy of the old script (branch `live-test-helpers`) and on this branch, and compare the two reports.
 
