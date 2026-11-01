@@ -200,6 +200,7 @@ class ODataQuery {
   }
   
   letterFormat(filterExpr){
+    if(typeof filterExpr === "string") filterExpr = filterExpr.trim();       // " =" (the dropdown's equality, a bare "=" being a formula start) and stray spaces
     switch(filterExpr){
       case "<": return "lt";
       case ">": return "gt";

@@ -991,24 +991,9 @@ function validationSpec_(dv) {
   throw new Error('Grid: unsupported data validation type ' + type + '.');
 }
 
-/**
- * The items of a list as the Sheets API has to get them. The API takes list items literally: an item written with the quote prefix ("'=" - the form that enters the
- * plain text "=", where a lone "=" cannot be typed) does not match the text it enters. The sheet accepts "'=" as input and checks it against "=", so the list carries
- * both. The Spreadsheet service reads "'=" itself as that text and needs no twin. (Found on a real sheet, docs/bugs-todo.md #18.)
- */
-function apiListItems_(list) {
-  const out = [];
-  list.forEach(x => {
-    if (out.indexOf(x) < 0) out.push(x);
-    const twin = String(x).charAt(0) === "'" && String(x).length > 1 ? String(x).slice(1) : null;
-    if (twin !== null && list.indexOf(twin) < 0 && out.indexOf(twin) < 0) out.push(twin);
-  });
-  return out;
-}
-
 function validationToApi_(spec) {
   if (spec.date) return { condition: { type: 'DATE_IS_VALID' }, strict: true };
-  return { condition: { type: 'ONE_OF_LIST', values: apiListItems_(spec.list).map(x => ({ userEnteredValue: x })) }, strict: spec.strict, showCustomUi: spec.dropdown };
+  return { condition: { type: 'ONE_OF_LIST', values: spec.list.map(x => ({ userEnteredValue: x })) }, strict: spec.strict, showCustomUi: spec.dropdown };
 }
 
 function validationToService_(spec) {
