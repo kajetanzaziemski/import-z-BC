@@ -43,6 +43,7 @@ const SETTINGS_LAYOUT = {
   lastRefreshFormat: "yyyy-mm-dd hh:mm",
   messageStyle: {
     ok:   { background: "#d9ead3", border: "#38761d" },     // light green, green thick border
+    off:  { background: "#fff2cc", border: "#f1c232" },     // light yellow, yellow thick border: the trigger is not there
     fail: { background: "#f4cccc", border: "#cc0000" }      // light red, red thick border
   },
   addedLastRefreshLabel: "Ostatnie odświeżone o:"    // the label of a lastRefresh line added later (differs from the header's, as it always did)
@@ -159,16 +160,17 @@ const SettingsGrid = {
         return row ? SettingsGrid.parseTime(grid.getRange(row, L.valueCol).getValue(), grid.getTimeZone()) : null;
       },
       writeRefreshMessage(report) {
-        const style = L.messageStyle[report.ok ? "ok" : "fail"];
+        const style = L.messageStyle[report.off ? "off" : report.ok ? "ok" : "fail"];
         const stamp = d => SettingsGrid.stamp(d, grid.getTimeZone());
-        const lines = report.ok
-          ? (report.frequency?.freq && report.next
-              ? [`Dane będą odświeżane automatycznie co ${report.frequency.freq} ${SettingsGrid.unitName(report.frequency)}.`,
-                 `Następne odświeżenie ${stamp(report.next)}.`]
-              : ["Odświeżanie automatyczne jest wyłączone."])
+        const lines = report.off
+          ? ["Odświeżanie automatyczne jest wyłączone.", `Odświeżanie zostało wyłączone ${stamp(report.when)}.`]
+          : report.ok
+          ? [`Dane będą odświeżane automatycznie co ${report.frequency.freq} ${SettingsGrid.unitName(report.frequency)}.`,
+             `Następne odświeżenie ${stamp(report.next)}.`,
+             `Odświeżanie zostało ustawione ${stamp(report.when)}.`]
           : ["Ustawienia odświeżania nie zostały zaktualizowane!",
              "Zmień ustawienia, żeby spróbować ponownie lub zobacz szczegóły w menu dodatku: Import z BC -> Ustawienia."];
-        lines.push(report.ok ? `Odświeżanie zostało ustawione ${stamp(report.when)}.` : `Próba zmiany ustawień została podjęta ${stamp(report.when)}.`);
+        if (!report.ok) lines.push(`Próba zmiany ustawień została podjęta ${stamp(report.when)}.`);
         let timeRow = keyRow("refreshTime");
         if (!timeRow) timeRow = addLine(keyRow("refreshFrequency"), L.timeLine);
         let row = keyRow("refreshStatus");

@@ -353,6 +353,15 @@ module.exports = function register(t) {
     assert.deepStrictEqual(plain(sc.ex.eval(`__toasts`)), []);
   });
 
+  test('schedule: apply -> no frequency: the trigger is removed and the message reports "off" (not a failure, no toast)', () => {
+    const sc = applyScenario({ settings: PERMIT('old'), freq: { freq: '', unit: 'hrs' } });
+    sc.p.triggers.push(NAMED('old'));
+    sc.ex.eval(`ScheduleRefresh.apply(__ss)`);
+    assert.deepStrictEqual(triggers(sc.p), []);
+    assert.deepStrictEqual(plain(sc.ex.eval(`__msgs.map(m => [m.ok, m.off, m.next])`)), [[true, true, null]]);
+    assert.deepStrictEqual(plain(sc.ex.eval(`__toasts`)), []);
+  });
+
   test('schedule: apply -> setting the trigger fails: the message reports the failure, a toast tells too, the error goes on', () => {
     const sc = applyScenario({ freq: { freq: 3, unit: null } });
     sc.ex.eval(`__ss.getRefreshFrequency = () => null`);

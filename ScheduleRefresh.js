@@ -88,7 +88,7 @@ const ScheduleRefresh = {
       ScheduleRefresh.report_(settings,{ok:false,when:new Date()});
       throw err;
     }
-    ScheduleRefresh.report_(settings,{ok:true,when:new Date(),frequency:settings.getRefreshFrequency(),next:result?.nextRefresh ?? null});
+    ScheduleRefresh.report_(settings,{ok:true,off:!result,when:new Date(),frequency:settings.getRefreshFrequency(),next:result?.nextRefresh ?? null});
   },
 
   /** Writes the message; if that fails, or the report is a failure, a toast tells about it (the toast is the last resort and must not throw). */

@@ -199,6 +199,21 @@ module.exports = function register(t) {
     assert.ok(s.book.sheets['Ustawienia'].snapshot().merges.includes('8,3,8,5'));
   }));
 
+  MODES.forEach(mode => test('message: the refresh switched off (no frequency) is yellow and says "wyłączone", not "ustawione" [' + mode + ']', () => {
+    const s = scope(mode);
+    s.run(`globalThis.__ss = new SettingsSheet(); Utilities.formatDate = (d, tz, p) => p === 'Z' ? '+0200' : 'x'`);
+    s.run(`__ss.setRefreshMessage({ ok: true, off: true, when: new Date(1750000000000), frequency: { freq: '', unit: 'hrs' }, next: null })`);
+    const msg = s.run(`__ss.grid.rows()[7][1]`);
+    assert.match(msg, /^Odświeżanie automatyczne jest wyłączone\.\nOdświeżanie zostało wyłączone /);
+    assert.ok(!/ustawione|Następne/.test(msg));
+    const bg = () => s.book.sheets['Ustawienia'].cells['8,3'].fmt.bg;
+    assert.strictEqual(bg(), '#fff2cc');
+    s.run(`__ss.setRefreshMessage({ ok: true, when: new Date(1750000000000), frequency: { freq: 6, unit: 'hrs' }, next: new Date(1750100000000) })`);
+    assert.strictEqual(bg(), '#d9ead3');
+    s.run(`__ss.setRefreshMessage({ ok: false, when: new Date(1750000000000) })`);
+    assert.strictEqual(bg(), '#f4cccc');
+  }));
+
   MODES.forEach(mode => test('a sheet made before the two lines: the first message adds them after the frequency line; the lines below and the remembered rows move [' + mode + ']', () => {
     const s = scope(mode, sh => fillSettings(sh, { configs: CONFIGS }));
     s.run(`globalThis.__ss = new SettingsSheet(); Utilities.formatDate = (d, tz, p) => p === 'Z' ? '+0200' : 'x'`);
