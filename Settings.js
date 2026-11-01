@@ -42,6 +42,7 @@ const Settings = {
     const current = Settings.store().getFreshProperty("refreshPermit");
     if (!current || current.issuedFor !== triggerUid) return false;
     current.lastRun = Date.now();
+    if (current.intervalHours) current.nextRefresh = current.lastRun + current.intervalHours * 3600000;
     Settings.updateRefreshPermit(current);
     return true;
   },

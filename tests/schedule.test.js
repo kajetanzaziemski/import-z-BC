@@ -370,6 +370,27 @@ module.exports = function register(t) {
     assert.deepStrictEqual(plain(sc.ex.eval(`__toasts`)), ['toast']);
   });
 
+  test('schedule: current -> what is really set: a trigger the permit names + its interval (days when a whole number of days) + the next run rolled forward; no trigger / no permit -> not active', () => {
+    const now = Date.UTC(2026, 10, 1, 12, 0, 0);
+    const cur = sc => plain(sc.ex.eval(`(() => { const c = ScheduleRefresh.current(new Date(${now})); return c && { active: c.active, frequency: c.frequency, next: c.next && c.next.getTime() }; })()`));
+    let sc = scenario({ settings: { refreshPermit: { issuedFor: 't1', lastRefresh: now - 5 * 3600000, intervalHours: 24 } } });
+    sc.p.triggers.push(NAMED('t1'));
+    assert.deepStrictEqual(cur(sc), { active: true, frequency: { freq: 1, unit: 'days' }, next: now - 5 * 3600000 + 24 * 3600000 });
+    sc = scenario({ settings: { refreshPermit: { issuedFor: 't1', lastRefresh: 0, lastRun: now - 7 * 3600000, intervalHours: 3 } } });
+    sc.p.triggers.push(NAMED('t1'));
+    assert.deepStrictEqual(cur(sc), { active: true, frequency: { freq: 3, unit: 'hrs' }, next: now - 7 * 3600000 + 9 * 3600000 });     // 3 h steps: +3, +6 passed, +9 ahead
+    sc = scenario({ settings: { refreshPermit: { issuedFor: 't1', lastRefresh: 0, intervalHours: 3 } } });                                // the trigger is gone
+    assert.deepStrictEqual(cur(sc), { active: false });
+    assert.deepStrictEqual(cur(scenario()), { active: false });
+  });
+
+  test('schedule: apply -> a failure reports the state that is really there (current)', () => {
+    const sc = applyScenario({ settings: PERMIT('old') });
+    sc.ex.eval(`__ss.getRefreshFrequency = () => null`);
+    assert.throws(() => sc.ex.eval(`ScheduleRefresh.apply(__ss)`));
+    assert.deepStrictEqual(plain(sc.ex.eval(`__msgs[0].current`)), { active: false });
+  });
+
   test('schedule: apply -> the message cannot be written: a toast is the only report; a toast that fails too is swallowed', () => {
     const sc = applyScenario(null, { message: true });
     sc.ex.eval(`ScheduleRefresh.apply(__ss)`);

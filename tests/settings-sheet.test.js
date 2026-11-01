@@ -194,7 +194,7 @@ module.exports = function register(t) {
     s.run(`__ss.setRefreshMessage({ ok: true, when: new Date(1750000000000), frequency: { freq: 2, unit: 'days' }, next: new Date(1750100000000) })`);
     assert.match(msg(), /^Dane będą odświeżane automatycznie co 2 dni\.\nNastępne odświeżenie \d{4}-\d\d-\d\d \d\d:\d\d:\d\d UTC\+2\.\nOdświeżanie zostało ustawione /);
     s.run(`__ss.setRefreshMessage({ ok: false, when: new Date(1750000000000) })`);
-    assert.match(msg(), /^Ustawienia odświeżania nie zostały zaktualizowane!\n.*Import z BC -> Ustawienia\.\nPróba zmiany ustawień została podjęta /);
+    assert.match(msg(), /^Ustawienia odświeżania nie zostały zaktualizowane!\nZmień ustawienia, żeby spróbować ponownie lub zobacz szczegóły w menu dodatku:\nImport z BC -> Ustawienia\.\nPróba zmiany ustawień została podjęta /);
     assert.deepStrictEqual(plain(s.run(`__ss.grid.rows()[7].slice(2)`)), ['', '']);     // merged: D and E are empty
     assert.ok(s.book.sheets['Ustawienia'].snapshot().merges.includes('8,3,8,5'));
   }));
@@ -212,6 +212,24 @@ module.exports = function register(t) {
     assert.strictEqual(bg(), '#d9ead3');
     s.run(`__ss.setRefreshMessage({ ok: false, when: new Date(1750000000000) })`);
     assert.strictEqual(bg(), '#f4cccc');
+  }));
+
+  MODES.forEach(mode => test('failure message: the current state after the headline (on / off), the place "Import z BC -> Ustawienia" on its own line and in bold; a later message has no bold left [' + mode + ']', () => {
+    const s = scope(mode);
+    s.run(`globalThis.__ss = new SettingsSheet(); Utilities.formatDate = (d, tz, p) => p === 'Z' ? '+0100' : p === 'z' ? 'CET' : d.toISOString().slice(0, 19).replace('T', ' ')`);
+    const cell = () => s.book.sheets['Ustawienia'].cells['8,3'];
+    const msg = () => s.run(`__ss.grid.rows()[7][1]`);
+    s.run(`__ss.setRefreshMessage({ ok: false, when: new Date(1750000000000), current: { active: true, frequency: { freq: 1, unit: 'days' }, next: new Date(1750100000000) } })`);
+    assert.match(msg(), /^Ustawienia odświeżania nie zostały zaktualizowane!\nDane będą odświeżane automatycznie co 1 dzień\.\nNastępne odświeżenie 2025-06-16 \d\d:\d\d:\d\d UTC\+1\.\nZmień ustawienia/);
+    const at = msg().indexOf('Import z BC -> Ustawienia');
+    assert.deepStrictEqual(plain(cell().fmt.boldRuns), [[at, at + 'Import z BC -> Ustawienia'.length]]);
+    assert.ok(msg().slice(at - 1, at + 26).startsWith('\nImport z BC -> Ustawienia'.slice(0, 27)));
+    s.run(`__ss.setRefreshMessage({ ok: false, when: new Date(1750000000000), current: { active: false } })`);
+    assert.match(msg(), /^Ustawienia odświeżania nie zostały zaktualizowane!\nOdświeżanie automatyczne jest wyłączone\.\nZmień/);
+    s.run(`__ss.setRefreshMessage({ ok: false, when: new Date(1750000000000) })`);                 // the state could not be read: no status lines
+    assert.match(msg(), /^Ustawienia odświeżania nie zostały zaktualizowane!\nZmień/);
+    s.run(`__ss.setRefreshMessage({ ok: true, when: new Date(1750000000000), frequency: { freq: 6, unit: 'hrs' }, next: new Date(1750100000000) })`);
+    assert.strictEqual(cell().fmt.boldRuns, undefined);
   }));
 
   MODES.forEach(mode => test('a sheet made before the two lines: the first message adds them after the frequency line; the lines below and the remembered rows move [' + mode + ']', () => {

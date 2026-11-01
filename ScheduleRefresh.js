@@ -50,7 +50,10 @@ const ScheduleRefresh = {
     let newTrigger = trigger.create();
     // Issue a permit for this trigger. This will override any other permits, so all old triggers will automatically uninstall.
     MainSettings.setRefreshPermit(newTrigger.getUniqueId(),intervalHrs);
-    return {nextRefresh: ScheduleRefresh.nextRefresh(new Date(), frequency.unit, interval, startAt), intervalHrs};
+    const nextRefresh = ScheduleRefresh.nextRefresh(new Date(), frequency.unit, interval, startAt);
+    const issued = MainSettings.getRefreshPermit();
+    MainSettings.updateRefreshPermit(Object.assign({}, issued, {nextRefresh: nextRefresh.getTime()}));
+    return {nextRefresh, intervalHrs};
   },
 
   /**
@@ -85,10 +88,32 @@ const ScheduleRefresh = {
     try{
       result = ScheduleRefresh.setUp(settings.getRefreshFrequency(), settings.getRefreshStartAt());
     }catch(err){
-      ScheduleRefresh.report_(settings,{ok:false,when:new Date()});
+      ScheduleRefresh.report_(settings,{ok:false,when:new Date(),current:ScheduleRefresh.current()});
       throw err;
     }
     ScheduleRefresh.report_(settings,{ok:true,off:!result,when:new Date(),frequency:settings.getRefreshFrequency(),next:result?.nextRefresh ?? null});
+  },
+
+  /**
+   * What is actually set now, as far as the add-on can tell: the permit of this document names a refresh trigger that exists.
+   * `next` is an estimate (the next run the permit remembers, rolled forward by the interval until it is ahead); null when it cannot be told.
+   * @returns {{active: boolean, frequency?: {freq: number, unit: "hrs"|"days"}, next?: Date}|null} null when even this could not be read.
+   */
+  current(now = new Date()){
+    try{
+      const permit = MainSettings.getRefreshPermit();
+      if(!permit?.issuedFor || !permit.intervalHours) return {active:false};
+      const exists = ScriptApp.getProjectTriggers().some(t => t.getUniqueId() === permit.issuedFor && ["autoRefresh","autoRefreshHandler"].includes(t.getHandlerFunction()));
+      if(!exists) return {active:false};
+      const hours = permit.intervalHours, days = hours % 24 === 0;
+      const step = hours * 3600000;
+      let next = permit.nextRefresh ?? ((permit.lastRun ?? permit.lastRefresh ?? now.getTime()) + step);
+      if(next <= now.getTime()) next += Math.ceil((now.getTime() - next + 1) / step) * step;
+      return {active:true, frequency:{freq: days ? hours / 24 : hours, unit: days ? "days" : "hrs"}, next: new Date(next)};
+    }catch(err){
+      dbgLog(`Current refresh state not read: ${err}`);
+      return null;
+    }
   },
 
   /** Writes the message; if that fails, or the report is a failure, a toast tells about it (the toast is the last resort and must not throw). */

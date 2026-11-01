@@ -66,6 +66,7 @@ class Grid {
     this.ops = [];                               // structural changes, in order
     this.dirty = {};                             // 'row,col' -> true: cells written by the operation
     this.notes = {};                             // 'row,col' -> text: cell notes set by the operation ('' = remove the note)
+    this.rich = {};                              // 'row,col' -> { text, bold: [[start, end), ...] }: a cell text with parts in bold (setBoldRuns)
     this.checks = {};                            // 'row,col' -> true (a checkbox) / false (no checkbox any more): set by the operation
     this.aligns = [];                            // [{ a, r1, c1, r2, c2 }]
     this.rowSizes = {};                          // row -> pixels: heights set by the operation
@@ -178,6 +179,7 @@ class Grid {
     };
     this.dirty = dropCols(this.dirty);
     this.notes = dropCols(this.notes);
+    this.rich = dropCols(this.rich);
     this.checks = dropCols(this.checks);
     this.validations = dropCols(this.validations);
 
@@ -217,6 +219,7 @@ class Grid {
     };
     this.dirty = moveKeys(this.dirty);
     this.notes = moveKeys(this.notes);
+    this.rich = moveKeys(this.rich);
     this.checks = moveKeys(this.checks);
     this.validations = moveKeys(this.validations);
     if (axis === 'c') this.colFits = this.colFits.map(x => (x.first > after ? { first: x.first + n, count: x.count } : x));
@@ -333,7 +336,7 @@ class Grid {
     const S = this.source;
     if (S.kind === 'api') { S.rowCount = this.maxRows; S.columnCount = this.maxCols; S.tpl = null; S.rowGroups = []; }
     if (this._frozen && this._frozen.rows !== null && this._frozen.rows !== undefined) this.frozenRows = this._frozen.rows;
-    this.ops = []; this.dirty = {}; this.notes = {}; this.checks = {}; this.validations = {};
+    this.ops = []; this.dirty = {}; this.notes = {}; this.rich = {}; this.checks = {}; this.validations = {};
     this.aligns = []; this.fills = []; this.borders = []; this.formats = []; this.rowFormats = []; this.afterOps = [];
     this.rowSizes = {}; this.fitRows = []; this.colFits = []; this.active = null; this.condSets = [];
     this.anchorRow0 = this.anchorRow;
@@ -463,6 +466,17 @@ class Grid {
         rows: [{ values: run.cells.map(cellData) }],
         start: { sheetId: sid, rowIndex: run.row - 1, columnIndex: run.col - 1 },
         fields: 'userEnteredValue'
+      } });
+    });
+
+    Object.keys(this.rich).forEach(k => {         // bold parts of a text: the runs are always written (no run = all normal), so older ones do not stay
+      const p = k.split(',').map(Number), x = this.rich[k];
+      const runs = [{ startIndex: 0, format: { bold: false } }];
+      x.bold.forEach(b => { runs.push({ startIndex: b[0], format: { bold: true } }); if (b[1] < x.text.length) runs.push({ startIndex: b[1], format: { bold: false } }); });
+      req.push({ updateCells: {
+        rows: [{ values: [{ textFormatRuns: runs }] }],
+        start: { sheetId: sid, rowIndex: p[0] - 1, columnIndex: p[1] - 1 },
+        fields: 'textFormatRuns'
       } });
     });
 
@@ -700,6 +714,14 @@ class Grid {
       }
     });
 
+    Object.keys(this.rich).forEach(k => {
+      const p = k.split(',').map(Number), x = this.rich[k];
+      if (!this._inWindow(p[0], p[1])) return;
+      const b = SpreadsheetApp.newRichTextValue().setText(x.text);
+      x.bold.forEach(r => b.setTextStyle(r[0], r[1], SpreadsheetApp.newTextStyle().setBold(true).build()));
+      sheet.getRange(p[0], p[1]).setRichTextValue(b.build());
+    });
+
     Object.keys(this.notes).forEach(k => {
       const p = k.split(',').map(Number);
       if (this._inWindow(p[0], p[1])) sheet.getRange(p[0], p[1]).setNote(this.notes[k]);
@@ -827,6 +849,19 @@ class GridRange {
   _assign(r, c, x) {                              // a string starting with '=' is a formula, like in setValues
     if (typeof x === 'string' && x.charAt(0) === '=') this.m._set(r, c, '', x);
     else this.m._set(r, c, x === null || x === undefined ? '' : x, '');
+  }
+
+  /**
+   * One cell: the text with some parts in bold. `bold` = [[start, end), ...] character positions in the text. Written with the commit; the cell has
+   * no other formatting runs afterwards (a later plain setValue is not enough to clear them: call this again, with no runs).
+   */
+  setBoldRuns(text, bold) {
+    if (this.nr !== 1 || this.nc !== 1) throw new Error('Grid: setBoldRuns is for one cell.');
+    text = String(text);
+    if (text.charAt(0) === '=') throw new Error('Grid: setBoldRuns: a text that starts with = would be a formula.');
+    this._assign(this.r, this.c, text);
+    this.m.rich[this.r + ',' + this.c] = { text: text, bold: bold || [] };
+    return this;
   }
 
   setNotes(a) { this._reach(); this._each((r, c, i, j) => { this.m.notes[r + ',' + c] = a[i][j] === null || a[i][j] === undefined ? '' : String(a[i][j]); }); return this; }

@@ -183,6 +183,8 @@ class SimBook {
     } };
     this.SpreadsheetApp = {
       WrapStrategy: { WRAP: 'WRAP', OVERFLOW: 'OVERFLOW', CLIP: 'CLIP' },
+      newTextStyle: () => { const t = { bold: false }; const b = { setBold: v => { t.bold = v; return b; }, build: () => t }; return b; },
+      newRichTextValue: () => { const v = { __text: '', __bold: [] }; const b = { setText: x => { v.__text = x; return b; }, setTextStyle: (a, e, st) => { if (st.bold) v.__bold.push([a, e]); return b; }, build: () => v }; return b; },
       BorderStyle: { SOLID: 'SOLID', SOLID_MEDIUM: 'SOLID_MEDIUM', SOLID_THICK: 'SOLID_THICK' },
       DataValidationCriteria: { VALUE_IN_LIST: 'VALUE_IN_LIST', DATE_IS_VALID_DATE: 'DATE_IS_VALID_DATE' },
       BooleanCriteria: { CUSTOM_FORMULA: 'CUSTOM_FORMULA' },
@@ -349,6 +351,7 @@ class SimBook {
       setWrapStrategy: w => fmtSet('wrap', w),
       setNumberFormat: p => fmtSet('numFmt', p),
       setValue: v => { call(); put(r, c, v); return self; },
+      setRichTextValue: rtv => { call(); put(r, c, rtv.__text); const x = s.cell(r, c, true); if (rtv.__bold.length) x.fmt.boldRuns = rtv.__bold.map(b => b.slice()); else delete x.fmt.boldRuns; return self; },
       // the array forms (legacy code uses them): a[i][j] goes to cell (i, j)
       setFontWeights: a => { call(); each((rr, cc, i, j) => rangeAt(rr, cc).setFontWeight(a[i][j])); return self; },
       setBackgrounds: a => { call(); each((rr, cc, i, j) => rangeAt(rr, cc).setBackground(a[i][j])); return self; },
@@ -498,6 +501,10 @@ class SimBook {
               const u = cell.userEnteredValue;
               if (!u) s.setValue(r, c, '', ''); else if (u.formulaValue !== undefined) s.setValue(r, c, 'formula-result', u.formulaValue);
               else s.setValue(r, c, u.numberValue !== undefined ? u.numberValue : u.boolValue !== undefined ? u.boolValue : u.stringValue, '');
+            } else if (f === 'textFormatRuns') {
+              const y = s.cell(r, c, true), runs = cell.textFormatRuns || [], len = String(y.v).length, bold = [];
+              runs.forEach((q, i) => { if (q.format && q.format.bold) bold.push([q.startIndex, i + 1 < runs.length ? runs[i + 1].startIndex : len]); });
+              if (bold.length) y.fmt.boldRuns = bold; else delete y.fmt.boldRuns;
             } else if (f === 'note') {
               const t = cell.note === undefined ? '' : cell.note; const y = s.cell(r, c, true); y.note = t; s.prune(r, c);
             } else if (f === 'dataValidation') {

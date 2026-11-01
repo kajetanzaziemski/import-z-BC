@@ -162,6 +162,10 @@ const SettingsGrid = {
       writeRefreshMessage(report) {
         const style = L.messageStyle[report.off ? "off" : report.ok ? "ok" : "fail"];
         const stamp = d => SettingsGrid.stamp(d, grid.getTimeZone());
+        const status = c => c && c.active
+          ? [`Dane będą odświeżane automatycznie co ${c.frequency.freq} ${SettingsGrid.unitName(c.frequency)}.`, `Następne odświeżenie ${stamp(c.next)}.`]
+          : ["Odświeżanie automatyczne jest wyłączone."];
+        const where = "Import z BC -> Ustawienia";
         const lines = report.off
           ? ["Odświeżanie automatyczne jest wyłączone.", `Odświeżanie zostało wyłączone ${stamp(report.when)}.`]
           : report.ok
@@ -169,15 +173,20 @@ const SettingsGrid = {
              `Następne odświeżenie ${stamp(report.next)}.`,
              `Odświeżanie zostało ustawione ${stamp(report.when)}.`]
           : ["Ustawienia odświeżania nie zostały zaktualizowane!",
-             "Zmień ustawienia, żeby spróbować ponownie lub zobacz szczegóły w menu dodatku: Import z BC -> Ustawienia."];
-        if (!report.ok) lines.push(`Próba zmiany ustawień została podjęta ${stamp(report.when)}.`);
+             ...(report.current ? status(report.current) : []),
+             "Zmień ustawienia, żeby spróbować ponownie lub zobacz szczegóły w menu dodatku:",
+             where + ".",
+             `Próba zmiany ustawień została podjęta ${stamp(report.when)}.`];
+        const text = lines.join("\n");
+        const at = text.indexOf(where);
+        const bold = !report.ok && at >= 0 ? [[at, at + where.length]] : [];
         let timeRow = keyRow("refreshTime");
         if (!timeRow) timeRow = addLine(keyRow("refreshFrequency"), L.timeLine);
         let row = keyRow("refreshStatus");
         if (!row) row = addLine(timeRow, L.statusLine);
         const area = grid.getRange(row, L.firstCol + 1, 1, L.cols - 1);
         area.merge();
-        grid.getRange(row, L.firstCol + 1).setValue(lines.join("\n"));
+        grid.getRange(row, L.firstCol + 1).setBoldRuns(text, bold);
         area.setBackground(style.background);
         area.setWrapStrategy("WRAP");
         area.setBorder(true, true, true, true, null, null, style.border, "SOLID_THICK");
