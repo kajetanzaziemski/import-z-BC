@@ -87,7 +87,8 @@ function liveCheckIntent(name,data){
     const frame = lcStack[lcStack.length-1];
     frame.intent = String(name);
     frame.intentData = data ?? {};
-    lcStoreRunning_(frame);          // the sidebar shows the job while it is still running
+    if(LIVE_CHECK_QUIET_JOBS.includes(frame.intent)) lcForget_(frame);       // nothing to show unless it turns out not to pass (lcRecord_)
+    else lcStoreRunning_(frame);          // the sidebar shows the job while it is still running
   } catch(err) {}
 }
 
@@ -381,6 +382,10 @@ function lcFormat_(entry){
 }
 
 function lcRecord_(c){
+  if(c.intent && LIVE_CHECK_QUIET_JOBS.includes(c.intent) && (c.status == "PASS" || c.status == "SKIP")){
+    lcForget_(c);      // a quiet job that passed: no log line, no stored result, no toast
+    return;
+  }
   const entry = {
     t: c.startedIso,
     a: c.actionName,
@@ -436,6 +441,19 @@ function lcStoredResults_(){
   return props.getKeys().filter(k => k.indexOf(LIVE_CHECK_RESULT_PREFIX) == 0).sort().reverse().map(k => {
     try{ const entry = JSON.parse(props.getProperty(k)); entry.k = k; return entry; } catch(err) { return null; }
   }).filter(x => x);
+}
+
+/**
+ * Jobs that only look at an event and decide there is nothing to do. They are most of the runs (every edit anywhere in the document), so while they pass they are
+ * not shown or stored at all; one that fails or warns (it was wrongly ignored) is reported like any other.
+ */
+const LIVE_CHECK_QUIET_JOBS = ["sheet.ignored","change.ignored"];
+
+/** Removes the "running" placeholder of a run (it has the key of the frame / context). */
+function lcForget_(frameOrContext){
+  try{
+    PropertiesService.getDocumentProperties().deleteProperty(frameOrContext.key);
+  } catch(err) {}
 }
 
 /** A run is on the list from its start, so that the sidebar can show it while it is still going. */

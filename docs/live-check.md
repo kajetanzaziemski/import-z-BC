@@ -135,3 +135,7 @@ Every platform entry goes through `Controller.run` now (`docs/controller.md`): `
 - **`<sheet>_coedit` flags** (`simpleOnEdit`, `change.ignored`, and the old combined judgement): the lock helper's flag of a co-edit that runs at the same time is no longer reported as a change **when another checked run overlapped
   this one** (still running, or ended after this one started; `lcParallelCoeditFlags_`). On a quiet document it still is one. Trade-off: a run that wrongly started a co-edit while another one was going is not caught by this check
   (the sheet and indicator checks still see its effects).
+
+## Quiet jobs
+`sheet.ignored` and `change.ignored` (`LIVE_CHECK_QUIET_JOBS`, `Live Check.js`) only look at an event and do nothing; they were most of the report. While they **pass** (or skip) nothing is logged, stored or shown, and their "running" placeholder
+is removed at once. One that fails or warns (an edit in a config sheet wrongly ignored) is recorded and shown like any other run. `settings.edit` and `agent.skipped` also do nothing but are still reported.

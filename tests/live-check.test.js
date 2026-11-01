@@ -406,6 +406,7 @@ module.exports = function register(t) {
     if (o.entry === 'timer') ex.ctx.__e = { triggerUid: o.uid };
     ex.eval(o.entry === 'timer' ? `autoRefreshHandler(__e)` : o.entry === 'change' ? `sheetChange(__e)` : `sheetEdit(__e)`);
     const entries = Object.keys(p.props.document).filter(k => /^liveCheck:\d/.test(k)).sort().map(k => JSON.parse(p.props.document[k]));
+    if (o.expectNone) { assert.deepStrictEqual(entries, [], 'a quiet job leaves nothing behind (no result, no "running" placeholder)'); return { entries, ex }; }
     assert.strictEqual(entries.length, 1, 'one recorded run: ' + entries.map(e => e.a + '/' + e.i).join(','));
     const entry = entries[0];
     return { entry, ex, names: entry.c.map(x => x[1]), status: name => (entry.c.find(x => x[1] === name || x[1].indexOf(name) >= 0) || [])[0], head: ex.eval(`lcFormat_(${JSON.stringify(entry)})`).split('\n')[0] };
@@ -462,17 +463,27 @@ module.exports = function register(t) {
   });
 
   test('live check jobs: an edit elsewhere is sheet.ignored, an EDIT/FORMAT change is change.ignored, a powered-off trigger is agent.skipped', () => {
-    const a = agentRun({ entry: 'edit', active: 'Arkusz1', range: { sheet: 'Arkusz1', row: 1, col: 1 } });
-    assert.strictEqual(a.entry.i, 'sheet.ignored');
-    assert.strictEqual(a.status('not a config sheet: nothing to do'), 'PASS');
-    const c = agentRun({ entry: 'change', changeType: 'FORMAT' });
-    assert.strictEqual(c.entry.i, 'change.ignored');
-    assert.strictEqual(c.status('only EDIT and FORMAT changes are ignored'), 'PASS');
+    // sheet.ignored and change.ignored are QUIET when they pass: nothing is recorded or shown (they were most of the report); see the next test for when they speak
+    agentRun({ entry: 'edit', active: 'Arkusz1', range: { sheet: 'Arkusz1', row: 1, col: 1 }, expectNone: true });
+    agentRun({ entry: 'change', changeType: 'FORMAT', expectNone: true });
     const s = agentRun({ entry: 'edit', power: false });
     assert.deepStrictEqual([s.entry.i, s.entry.d], ['agent.skipped', undefined]);
     assert.ok(/agent\.skipped \(via sheetEditAction\)/.test(s.head), s.head);
     assert.strictEqual(s.status('the trigger is powered off or not logged'), 'PASS');
     assert.strictEqual(s.status('power OFF or trigger not logged: edit action skipped, sheets untouched'), 'PASS', 'the trigger side stays');
+  });
+
+  test('live check jobs: the quiet jobs (sheet.ignored, change.ignored) are recorded again when they do NOT pass - a wrongly ignored edit is a FAIL and is shown with its checks', () => {
+    const wrong = agentRun({ entry: 'edit', breakIt: `Router.routeEdit = e => ({ intent: 'sheet.ignored', sheet: 'Konfiguracja 1', event: e })` });
+    assert.strictEqual(wrong.entry.i, 'sheet.ignored');
+    assert.strictEqual(wrong.entry.s, 'FAIL');
+    const wrongChange = agentRun({ entry: 'change', changeType: 'INSERT_ROW', breakIt: `Router.routeChange = e => ({ intent: 'change.ignored', changeType: e.changeType })` });
+    assert.strictEqual(wrongChange.entry.s, 'FAIL');
+  });
+
+  test('live check jobs: the other jobs that do nothing (settings.edit, agent.skipped) are still reported', () => {
+    assert.strictEqual(agentRun({ entry: 'edit', active: 'Ustawienia', range: { sheet: 'Ustawienia', row: 3, col: 3 } }).entry.i, 'settings.edit');
+    assert.strictEqual(agentRun({ entry: 'edit', power: false }).entry.i, 'agent.skipped');
   });
 
   test('live check jobs: a powered-off CHANGE trigger skips the change and announces agent.skipped, like an edit (was: it still co-edited and the job was not asserted)', () => {
