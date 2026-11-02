@@ -25,7 +25,8 @@ module.exports = function register(t) {
     const ctx = vm.createContext({ console: { log() {}, error() {} }, __created: created });
     book.install(ctx);
     const simUtilities = ctx.Utilities;
-    ctx.Utilities = { formatDate: (d, tz, p) => (p === 'z' ? 'CEST' : simUtilities.formatDate(d, tz, p)) };
+    // the frozen class asks for the zone's short name ("z"): the test gives it the notation the new code writes (UTC+9), so the sheets can be compared
+    ctx.Utilities = { formatDate: (d, tz, p) => { if (p !== 'z') return simUtilities.formatDate(d, tz, p); const o = simUtilities.formatDate(d, tz, 'Z'); return 'UTC' + o[0] + parseInt(o.slice(1, 3), 10) + (o.slice(3) == '00' ? '' : ':' + o.slice(3)); } };
     FILES.filter(f => fs.existsSync(path.join(ROOT, f))).forEach(f => new vm.Script(fs.readFileSync(path.join(ROOT, f), 'utf8'), { filename: f }).runInContext(ctx));
     new vm.Script(fs.readFileSync(path.join(ROOT, LEGACY), 'utf8'), { filename: LEGACY }).runInContext(ctx);
     vm.runInContext(`
@@ -165,13 +166,33 @@ module.exports = function register(t) {
     const sh = s.book.sheets['Ustawienia'];
     s.run(`{ const f = Utilities.formatDate; const wall = (d, tz) => { const z = f(d, tz, 'Z'); return new Date(d.getTime() + (z[0] === '-' ? -1 : 1) * (+z.slice(1, 3) * 60 + +z.slice(3)) * 60000).toISOString(); };
       Utilities.formatDate = (d, tz, p) => p === 'yyyy-MM-dd' ? wall(d, tz).slice(0, 10) : p === 'HH:mm' ? wall(d, tz).slice(11, 16) : f(d, tz, p); }`);
-    const at = v => { sh.cells['7,4'].v = v; s.run(`globalThis.__ss = new SettingsSheet()`); return plain(s.run(`__ss.getRefreshStartAt()`)); };
+    const at = v => { sh.cells['7,4'].v = v; s.run(`globalThis.__ss = new SettingsSheet()`); const r = plain(s.run(`__ss.getRefreshStartAt()`)); if (r) { assert.strictEqual(r.timeZone, 'Asia/Tokyo', 'the time is in the spreadsheet time zone'); delete r.timeZone; } return r; };
     assert.deepStrictEqual(at('17'), { hour: 17, minute: 0 });
     assert.deepStrictEqual(at('5 PM'), { hour: 17, minute: 0 });
     assert.deepStrictEqual(at(17), { hour: 17, minute: 0 });        // the sheet's number 17 (days) is read back as a Date by a time format, see the next line
     assert.deepStrictEqual(at(0.75), { hour: 18, minute: 0 });
     assert.strictEqual(at(24), null);
     assert.strictEqual(at(17.5), null);
+  }));
+
+  MODES.forEach(mode => test('time zones are written as UTC+N: E of refreshTime (the zone the time is in), E of lastRefresh; the inserted refreshTime line has no godzin / dni list from the line above [' + mode + ']', () => {
+    const s = scope(mode, sh => fillSettings(sh, { configs: CONFIGS }));
+    s.run(`globalThis.__ss = new SettingsSheet()`);
+    const sh = s.book.sheets['Ustawienia'];
+    const f = plain(s.run(`__ss.refreshFrequencyPos`));
+    sh.cells[f + ',5'].dv = 'list:godzin|dni:loose:dropdown';                       // as the sheet has it
+    s.run(`globalThis.__ss = new SettingsSheet(); { const u = Utilities.formatDate; Utilities.formatDate = (d, tz, p) => p === 'yyyy-MM-dd HH:mm:ss' ? 'x' : u(d, tz, p); }`);
+    s.run(`__ss.setRefreshMessage({ ok: true, when: new Date(1750000000000), frequency: { freq: 6, unit: 'hrs' }, next: new Date(1750100000000) })`);
+    const row = f + 1;
+    assert.strictEqual(sh.cells[row + ',5'].v, 'UTC+9');
+    assert.ok(!sh.cells[row + ',5'].dv && !(sh.cells[row + ',4'] && sh.cells[row + ',4'].dv), 'no data validation on the new line');
+    assert.ok(sh.cells[f + ',5'].dv, 'the list of the frequency unit is still there');
+    assert.ok(!(sh.cells[(row + 1) + ',5'] && sh.cells[(row + 1) + ',5'].dv), 'no data validation on the status line');
+    s.run(`__ss.setLastRefresh(new Date(1750000000000))`);
+    assert.strictEqual(plain(s.run(`__ss.grid.rows()[${plain(s.run('__ss.lastRefreshPos'))} - 1][3]`)), 'UTC+9');
+    const fresh = scope(mode);
+    fresh.run(`globalThis.__ss = new SettingsSheet()`);
+    assert.strictEqual(fresh.book.sheets['Ustawienia'].cells['7,5'].v, 'UTC+9', 'a new sheet names the zone from the start');
   }));
 
   MODES.forEach(mode => test('row 3 is where the config list starts: the first config line takes it and the general settings lines (and the message) move down, found by key [' + mode + ']', () => {
@@ -249,7 +270,7 @@ module.exports = function register(t) {
     const s = scope(mode);
     s.run(`globalThis.__ss = new SettingsSheet()`);
     const sh = s.book.sheets['Ustawienia'];
-    const at = v => { sh.setValue(7, 4, v, ''); s.run(`globalThis.__ss = new SettingsSheet()`); return plain(s.run(`__ss.getRefreshStartAt()`)); };
+    const at = v => { sh.setValue(7, 4, v, ''); s.run(`globalThis.__ss = new SettingsSheet()`); const r = plain(s.run(`__ss.getRefreshStartAt()`)); if (r) { assert.strictEqual(r.timeZone, 'Asia/Tokyo', 'the time is in the spreadsheet time zone'); delete r.timeZone; } return r; };
     assert.deepStrictEqual(at('17:30'), { hour: 17, minute: 30 });
     assert.deepStrictEqual(at('5:30 PM'), { hour: 17, minute: 30 });
     assert.deepStrictEqual(at('3:45 pm'), { hour: 15, minute: 45 });

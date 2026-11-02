@@ -16,7 +16,7 @@ const ScheduleRefresh = {
   /**
    * @param frequency {{freq: number, unit: "hrs"|"days"|null}} As SettingsSheet.getRefreshFrequency() returns it.
    *   Empty freq or unknown unit: the old triggers are removed and no new one is created.
-   * @param startAt {{hour: number, minute: number}|null} The time of day the refresh should happen at (days: atHour + nearMinute; hours: nearMinute only).
+   * @param startAt {{hour: number, minute: number, timeZone?: string}|null} The time of day the refresh should happen at (days: atHour + nearMinute; hours: nearMinute only).
    *   The platform only promises "near" this time (within about 15 minutes).
    * @returns {{nextRefresh: Date, intervalHrs: number}|null} null when the refresh was switched off.
    */
@@ -46,6 +46,7 @@ const ScheduleRefresh = {
       trigger.everyHours(interval);
     }
     if(startAt && startAt.minute != null) trigger.nearMinute(startAt.minute);
+    if(startAt?.timeZone) trigger.inTimezone(startAt.timeZone);      // else the time zone of the script
 
     let newTrigger = trigger.create();
     // Issue a permit for this trigger. This will override any other permits, so all old triggers will automatically uninstall.
@@ -65,6 +66,7 @@ const ScheduleRefresh = {
     const next = new Date(now.getTime());
     if(unit == "days"){
       if(!startAt) { next.setDate(next.getDate() + interval); return next; }
+      if(startAt.timeZone) return ScheduleRefresh.nextDailyIn_(now, startAt);
       next.setHours(startAt.hour, startAt.minute ?? 0, 0, 0);
       if(next <= now) next.setDate(next.getDate() + 1);
       return next;
@@ -73,6 +75,23 @@ const ScheduleRefresh = {
     if(startAt && startAt.minute != null){
       next.setMinutes(startAt.minute, 0, 0);
       if(next <= now) next.setHours(next.getHours() + 1);
+    }
+    return next;
+  },
+
+  /** The next HH:mm ahead in the time zone of startAt (today or tomorrow), as a moment. */
+  nextDailyIn_(now, startAt){
+    const tz = startAt.timeZone;
+    const [y, m, d] = Utilities.formatDate(now, tz, "yyyy-MM-dd").split("-").map(Number);
+    const momentAt = (yy, mm, dd) => {              // the wall time hh:mm of that day in tz: its UTC reading minus the offset of tz at that moment (twice: the offset may change on the day)
+      const wall = Date.UTC(yy, mm - 1, dd, startAt.hour, startAt.minute ?? 0);
+      const offset = t => { const z = Utilities.formatDate(new Date(t), tz, "Z"); return (z[0] == "-" ? -1 : 1) * (+z.slice(1,3) * 60 + +z.slice(3)) * 60000; };
+      return new Date(wall - offset(wall - offset(wall)));
+    };
+    let next = momentAt(y, m, d);
+    if(next <= now){
+      const tomorrow = new Date(Date.UTC(y, m - 1, d + 1));
+      next = momentAt(tomorrow.getUTCFullYear(), tomorrow.getUTCMonth() + 1, tomorrow.getUTCDate());
     }
     return next;
   },

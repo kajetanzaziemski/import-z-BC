@@ -1,6 +1,7 @@
 # [DONE, not yet checked on a real spreadsheet] Auto refresh
 
 Implemented on branch better-auto-refresh: line "refreshTime" (D = time of day, formatted HH:mm and right aligned once, when the line is made - a legacy sheet gets it directly below refreshFrequency, refreshStatus directly below it; "17:30", "17", "5:30 PM" are understood; days -> atHour + nearMinute, hours -> nearMinute ONLY, the hour is ignored; the platform only promises "near"),
+E of "refreshTime" names the time zone the time is in (the spreadsheet's; the trigger is created with inTimezone), every zone in the sheet is written as UTC+N (also E of lastRefresh, which used to hold CEST etc.),
 line "refreshStatus" (C:E merged, green / red thick border), toast "BŁĄD! Zobacz Import z BC -> Ustawienia." when even the message cannot be written. New sheets get both lines;
 an older sheet gets them (after refreshFrequency) the first time a message is written. "Następne odświeżenie" is an estimate (triggers do not expose their next run). Not done: the sidebar tab below.
 

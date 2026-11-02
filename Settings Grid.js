@@ -9,7 +9,7 @@
 //              headerGeneralSettings
 //              lastRefresh: D = time of the last refresh (date format), E = the time zone's name
 //              refreshFrequency: D = number, E = unit (godzin / dni, a dropdown)
-//              refreshTime: D = the time of day to refresh at ("17:30" / "5:30 PM"), E empty
+//              refreshTime: D = the time of day to refresh at ("17:30" / "5:30 PM"), E = the time zone it is in (the spreadsheet's, as UTC+2)
 //              refreshStatus: C:E merged = the message about the last change of the refresh settings (green / red)
 //
 // Rows are NEVER addressed by number outside a fresh sheet: every line is found by the key in column B (SettingsSheet.readSheetList, keyRow below).
@@ -56,11 +56,16 @@ const SettingsGrid = {
     range.setHorizontalAlignment("right");
   },
 
-  /** "2026-11-29 17:00:00 UTC+2" (the zone as an offset: +2, -5, +5:30). */
-  stamp(date, timeZone) {
+  /** A time zone as it is shown everywhere in the settings sheet: UTC+2, UTC-5, UTC+5:30, UTC+0 (the offset at that moment). */
+  offsetName(date, timeZone) {
     const off = Utilities.formatDate(date, timeZone, "Z");                         // +0200
     const h = parseInt(off.slice(1, 3), 10), m = off.slice(3);
-    return `${Utilities.formatDate(date, timeZone, "yyyy-MM-dd HH:mm:ss")} UTC${off[0]}${h}${m == "00" ? "" : ":" + m}`;
+    return `UTC${off[0]}${h}${m == "00" ? "" : ":" + m}`;
+  },
+
+  /** "2026-11-29 17:00:00 UTC+2" */
+  stamp(date, timeZone) {
+    return `${Utilities.formatDate(date, timeZone, "yyyy-MM-dd HH:mm:ss")} ${SettingsGrid.offsetName(date, timeZone)}`;
   },
 
   /**
@@ -103,6 +108,7 @@ const SettingsGrid = {
     grid.getRange(L.frequencyRow, L.unitCol).setDataValidation({ list: L.units, strict: false, dropdown: true });
     grid.getRange(L.lastRefreshRow, L.valueCol).setNumberFormat(L.lastRefreshFormat);
     SettingsGrid.styleTime(grid.getRange(L.timeRow, L.valueCol));
+    grid.getRange(L.timeRow, L.unitCol).setValue(SettingsGrid.offsetName(new Date(), grid.getTimeZone()));
     grid.autoResizeColumns(L.firstCol, L.cols + 1);
     grid.commit();
   },
@@ -115,7 +121,7 @@ const SettingsGrid = {
    *   lastRefresh(row)              the time (D) of the lastRefresh line at `row`
    *   addLastRefreshRow()           a lastRefresh line after the last row; returns its row number
    *   writeLastRefresh(row, time)   time into D, the time zone's name into E
-   *   refreshTime()                 {hour, minute} from the refreshTime line (D): "17:30", "5:30 PM", a time value; null when empty, not a time or no such line
+   *   refreshTime()                 {hour, minute, timeZone} from the refreshTime line (D): "17:30", "5:30 PM", a time value; null when empty, not a time or no such line
    *   writeRefreshMessage(report)   the refreshStatus line (C:E merged): green when the refresh was set up, red when not (see ScheduleRefresh.apply);
    *                                 the refreshTime and refreshStatus lines are added after the refreshFrequency line when the sheet has none
    *   addConfigRow(after, config, result, refresh)   a configSheet line after row `after`, E a checkbox; returns its row number
@@ -140,7 +146,7 @@ const SettingsGrid = {
     /** A line (4 cells, B..E) after `after`; returns its row. */
     const addLine = (after, line) => {
       if (!after) throw new Error("Settings sheet: no line to put the new one under");
-      grid.insertRowsAfter(after, 1);
+      grid.insertRowsAfter(after, 1, { plain: true });         // no data validation from the line above (the godzin / dni list of refreshFrequency)
       grid.getRange(after + 1, L.firstCol, 1, L.cols).setValues([line]);
       if (line[0] === "refreshTime") SettingsGrid.styleTime(grid.getRange(after + 1, L.valueCol));     // once, when the line is made; never touched again
       return after + 1;
@@ -157,7 +163,8 @@ const SettingsGrid = {
       },
       refreshTime() {
         const row = keyRow("refreshTime");
-        return row ? SettingsGrid.parseTime(grid.getRange(row, L.valueCol).getValue(), grid.getTimeZone()) : null;
+        const at = row ? SettingsGrid.parseTime(grid.getRange(row, L.valueCol).getValue(), grid.getTimeZone()) : null;
+        return at && { hour: at.hour, minute: at.minute, timeZone: grid.getTimeZone() };      // the time is in the spreadsheet's time zone
       },
       writeRefreshMessage(report) {
         const style = L.messageStyle[report.off ? "off" : report.ok ? "ok" : "fail"];
@@ -184,6 +191,7 @@ const SettingsGrid = {
         if (!timeRow) timeRow = addLine(keyRow("refreshFrequency"), L.timeLine);
         let row = keyRow("refreshStatus");
         if (!row) row = addLine(timeRow, L.statusLine);
+        grid.getRange(timeRow, L.unitCol).setValue(SettingsGrid.offsetName(report.when, grid.getTimeZone()));     // the zone the time is in (E of refreshTime)
         const area = grid.getRange(row, L.firstCol + 1, 1, L.cols - 1);
         area.merge();
         grid.getRange(row, L.firstCol + 1).setBoldRuns(text, bold);
@@ -200,7 +208,7 @@ const SettingsGrid = {
         return row;
       },
       writeLastRefresh(row, time) {
-        const zone = Utilities.formatDate(time, grid.getTimeZone(), "z");
+        const zone = SettingsGrid.offsetName(time, grid.getTimeZone());
         grid.getRange(row, L.valueCol, 1, 2).setValues([[time, zone]]);
         save();
       },

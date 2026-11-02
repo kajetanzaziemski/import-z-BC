@@ -79,6 +79,7 @@ class FakePlatform {
         everyDays: n => { t.params.everyDays = n; return b; },
         atHour: n => { t.params.atHour = n; return b; },
         nearMinute: n => { t.params.nearMinute = n; return b; },
+        inTimezone: z => { t.params.inTimezone = z; return b; },
         forSpreadsheet: ss => { t.source = typeof ss === 'string' ? ss : ss.getId(); return b; },
         onEdit: () => { t.type = 'ON_EDIT'; return b; },
         onChange: () => { t.type = 'ON_CHANGE'; return b; },

@@ -334,6 +334,18 @@ module.exports = function register(t) {
     assert.strictEqual(next(t(2026, 10, 1, 10, 40), 'hrs', 2, { hour: 0, minute: 15 }), t(2026, 10, 1, 12, 15));
   });
 
+  test('schedule: a start time with a time zone -> inTimezone on the trigger; the next daily refresh is worked out in THAT zone', () => {
+    const sc = scenario();
+    // a fixed zone UTC+9 for the test
+    sc.ex.eval(`Utilities.formatDate = (d, tz, p) => { const w = new Date(d.getTime() + 9 * 3600000).toISOString(); return p === 'Z' ? '+0900' : p === 'yyyy-MM-dd' ? w.slice(0, 10) : w.slice(0, 16).replace('T', ' ') }`);
+    sc.ex.eval(`ScheduleRefresh.setUp({ freq: 1, unit: 'days' }, { hour: 17, minute: 30, timeZone: 'Asia/Tokyo' })`);
+    assert.deepStrictEqual(triggers(sc.p).map(x => x.params), [{ everyDays: 1, atHour: 17, nearMinute: 30, inTimezone: 'Asia/Tokyo' }]);
+    const next = now => sc.ex.eval(`ScheduleRefresh.nextRefresh(new Date(${now}), 'days', 1, { hour: 17, minute: 30, timeZone: 'Asia/Tokyo' }).toISOString()`);
+    assert.strictEqual(next(Date.UTC(2026, 10, 1, 3, 0)), '2026-11-01T08:30:00.000Z', '12:00 in Tokyo: 17:30 is still ahead today');
+    assert.strictEqual(next(Date.UTC(2026, 10, 1, 9, 0)), '2026-11-02T08:30:00.000Z', '18:00 in Tokyo: tomorrow');
+    assert.strictEqual(next(Date.UTC(2026, 10, 1, 20, 0)), '2026-11-02T08:30:00.000Z', '05:00 the next day in Tokyo: today there');
+  });
+
   /** apply() on a settings object that records the message (the real one writes it through SettingsGrid) */
   function applyScenario(over, fail) {
     const sc = scenario(over);
