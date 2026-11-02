@@ -60,7 +60,7 @@ const ScheduleRefresh = {
   /**
    * When the first refresh of a new trigger will happen (an estimate: the platform decides the exact minute).
    * days: the next HH:mm that is still ahead (today or tomorrow), no time given: now + the interval.
-   * hours: now + the interval, moved to the minute asked for (the next one ahead of that moment).
+   * hours: with a minute asked for, the next time the clock shows it (the hour of the start time cannot be set for hourly triggers); without, now + the interval.
    */
   nextRefresh(now, unit, interval, startAt){
     const next = new Date(now.getTime());
@@ -71,11 +71,12 @@ const ScheduleRefresh = {
       if(next <= now) next.setDate(next.getDate() + 1);
       return next;
     }
-    next.setTime(now.getTime() + interval * 3600000);
-    if(startAt && startAt.minute != null){
+    if(startAt && startAt.minute != null){      // the earliest run that fits: the next time the clock shows that minute
       next.setMinutes(startAt.minute, 0, 0);
       if(next <= now) next.setHours(next.getHours() + 1);
+      return next;
     }
+    next.setTime(now.getTime() + interval * 3600000);
     return next;
   },
 

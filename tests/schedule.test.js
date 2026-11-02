@@ -323,7 +323,7 @@ module.exports = function register(t) {
     assert.deepStrictEqual(triggers(sc.p).map(x => x.params), [{ everyDays: 2, atHour: 17, nearMinute: 30 }]);
   });
 
-  test('schedule: the next refresh is an estimate: days -> the next HH:mm ahead (today or tomorrow); hours -> now + interval, on the asked minute', () => {
+  test('schedule: the next refresh is an estimate: days -> the next HH:mm ahead (today or tomorrow); hours -> the next time the clock shows the asked minute, else now + interval', () => {
     const sc = scenario();
     const next = (now, unit, n, at) => sc.ex.eval(`ScheduleRefresh.nextRefresh(new Date(${now}), '${unit}', ${n}, ${JSON.stringify(at)}).getTime()`);
     const t = (y, mo, d, h, mi) => new Date(y, mo, d, h, mi).getTime();
@@ -331,7 +331,9 @@ module.exports = function register(t) {
     assert.strictEqual(next(t(2026, 10, 1, 18, 0), 'days', 1, { hour: 17, minute: 0 }), t(2026, 10, 2, 17, 0));
     assert.strictEqual(next(t(2026, 10, 1, 10, 0), 'days', 3, null), t(2026, 10, 4, 10, 0));
     assert.strictEqual(next(t(2026, 10, 1, 10, 10), 'hrs', 2, null), t(2026, 10, 1, 12, 10));
-    assert.strictEqual(next(t(2026, 10, 1, 10, 40), 'hrs', 2, { hour: 0, minute: 15 }), t(2026, 10, 1, 12, 15));
+    assert.strictEqual(next(t(2026, 10, 1, 10, 40), 'hrs', 2, { hour: 0, minute: 15 }), t(2026, 10, 1, 11, 15));
+    assert.strictEqual(next(t(2026, 10, 2, 10, 38), 'hrs', 1, { hour: 10, minute: 45 }), t(2026, 10, 2, 10, 45), 'every hour at :45, set at 10:38 -> 10:45');
+    assert.strictEqual(next(t(2026, 10, 2, 10, 50), 'hrs', 1, { hour: 10, minute: 45 }), t(2026, 10, 2, 11, 45));
   });
 
   test('schedule: a start time with a time zone -> inTimezone on the trigger; the next daily refresh is worked out in THAT zone', () => {
