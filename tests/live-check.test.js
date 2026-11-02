@@ -353,6 +353,19 @@ module.exports = function register(t) {
     assert.strictEqual(touched(7, 4, 1, 1) && touched(6, 2, 2, 3), true, 'a range covering both lines');
   });
 
+  test('live check: the duration limit is 25 s for simple triggers, 5 min for most entry points and 25 min for the scheduled refresh', () => {
+    const p = new FakePlatform();
+    const ex = p.execution(FILES);
+    const verdict = (action, ms) => ex.eval(`(() => { const c = { actionName: '${action}', durationMs: ${ms}, error: null, settings: () => ({ addonStatus: true }), res: [],
+      expectSoft(name, ok, d) { this.res.push([name, ok, d]); }, expect() {}, pass() {}, warn() {}, fail() {} }; lcCommonChecks_(c); return c.res[0][1]; })()`);
+    assert.strictEqual(verdict('onOpen', 24000), true);
+    assert.strictEqual(verdict('onOpen', 26000), false);
+    assert.strictEqual(verdict('requestRefreshSheet', 299000), true);
+    assert.strictEqual(verdict('menuRefreshAll', 301000), false);
+    assert.strictEqual(verdict('requestAutoRefesh', 464000), true, 'the 7.5 minute run that was reported');
+    assert.strictEqual(verdict('requestAutoRefesh', 1501000), false);
+  });
+
   const THREE_ROWS = `ODataConnection.prototype.getDataArray = () => [['No'], ['C1'], ['C2']];`;
   const FMT = /number format uniform in every column/;
   test('live check, end to end: a result column whose number format differs between data rows -> FAIL naming the column and the actual formats (header shown, not judged)', () => {

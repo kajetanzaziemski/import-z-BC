@@ -79,7 +79,7 @@ Co-edit result of a config sheet: header intact, activity indicators (B2:D2) bac
 extend is chosen), dropdowns where the row type needs them (query options, operators, `AND`/`OR`, `asc`/`desc`; lists
 that come from BC metadata only have to be dropdowns, with the explanatory note when empty), none elsewhere.
 
-All run types also get: duration within limits (`WARN`), and for `menu*` actions the add-on is ON afterwards. A run that
+All run types also get: duration within limits (`WARN`; 25 s for simple triggers, 5 min for the rest, 25 min for the scheduled refresh `requestAutoRefesh` - a Workspace domain allows a time trigger 30 min and a real run of several sheets took 7.5 min), and for `menu*` actions the add-on is ON afterwards. A run that
 ends with `ConnectionError` is a `WARN` ("not authorised"), the parts that need BC are `SKIP`ped.
 
 ## Hooks in the add-on code
