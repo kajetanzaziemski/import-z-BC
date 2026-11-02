@@ -1,6 +1,11 @@
 const OData_Page_Length = 20000;
 
 class ODataConnection{
+  /** Debug log of a query's pages (always on, GAS Logger). Never allowed to break a run. */
+  static queryLog(buildText){
+    try{ Logger.log("[BC-QUERY] " + buildText()); } catch(e){}
+  }
+
   constructor(){
     this.query = new ODataQuery();
     this.queryTable = null;
@@ -57,12 +62,18 @@ class ODataConnection{
   readAllPages(shCoed){
     this.nextPage = this.queryURL;
     let i = 1;
+    const queryStarted = Date.now();
     try{
       while(this.nextPage){
         // dbgLog(`Reading page ${i++} of ${this.totalPages ?? "unknown"}...`);
         if(shCoed) shCoed.switchConnectionControl(true);
+        const pageStarted = Date.now();
+        const rowsBefore = this.dataArray ? this.dataArray.length : 0;
         this.fetchHttpResponse(this.nextPage);
+        const fetchedMs = Date.now() - pageStarted;
         this.readPage();
+        const rowsNow = this.dataArray ? this.dataArray.length : 0;
+        ODataConnection.queryLog(() => `page ${i} of ${this.totalPages ?? "?"}: fetch ${fetchedMs} ms, fetch+parse ${Date.now() - pageStarted} ms, ${this.error ? "BC ERROR " + JSON.stringify(this.error) : (rowsNow - rowsBefore - (rowsBefore ? 0 : 1)) + " rows"}, next page: ${this.nextPage ? "yes" : "no"}`);
         i++;
         if(i==2 && shCoed) shCoed.setTotRowsInfo(this.getTotalRows());
         if(this.error){
@@ -76,6 +87,7 @@ class ODataConnection{
       throw e;  
     }
     if(shCoed) shCoed.switchConnectionControl(false);
+    ODataConnection.queryLog(() => `done: ${i - 1} page(s), ${this.dataArray ? Math.max(this.dataArray.length - 1, 0) : 0} data rows (BC reported total: ${this.totalRows ?? "?"}), ${Date.now() - queryStarted} ms in all`);
     if(this.dataArray == null || this.dataArray.length == 0 || this.totalRows == 0) this.dataArray = [["Brak danych spełniających zadane kryteria."]]
     return this;
   }
