@@ -185,46 +185,28 @@
         document.querySelectorAll('.tab-btn').forEach(function (btn) {
           btn.classList.toggle('active', btn.dataset.tab === tabId);
         });
-        if (tabId === 'refresh') startRefreshPolling(); else stopRefreshPolling();
+        if (tabId === 'refresh') loadRefreshInfo();
       }
 
       /* =========================================================
-         Auto-refresh tab (polls the server while the tab is open)
+         Auto-refresh tab (read when the tab is opened, by the refresh button and after the settings are applied; no polling)
       ========================================================= */
-      var refreshPollTimer = null;
-      var refreshPollOn = false;
-      var refreshPollGen = 0;          // a new start (or a stop) makes the answers of calls made before it count for nothing
-      var REFRESH_POLL_MS = 2000;
+      var refreshLoadId = 0;          // only the answer to the latest call is shown
 
-      function startRefreshPolling() {
-        if (refreshPollOn) return;
-        refreshPollOn = true;
-        refreshPollGen++;
-        pollRefreshInfo(refreshPollGen);
-      }
-
-      function stopRefreshPolling() {
-        refreshPollOn = false;
-        refreshPollGen++;
-        if (refreshPollTimer) clearTimeout(refreshPollTimer);
-        refreshPollTimer = null;
-      }
-
-      // the next call is made when the answer to this one is in, so calls never pile up
-      function pollRefreshInfo(gen) {
-        if (!refreshPollOn || gen !== refreshPollGen) return;
+      function loadRefreshInfo() {
+        var id = ++refreshLoadId;
+        var btn = document.getElementById('reloadRefreshBtn');
+        if (btn) { btn.disabled = true; btn.innerHTML = 'Odświeżanie…'; }
         google.script.run
-          .withSuccessHandler(function (info) { if (gen !== refreshPollGen) return; showRefreshInfo(info); scheduleRefreshPoll(gen); })
-          .withFailureHandler(function (error) { if (gen !== refreshPollGen) return; showRefreshInfoError(error); scheduleRefreshPoll(gen); })
+          .withSuccessHandler(function (info) { if (id === refreshLoadId) showRefreshInfo(info); })
+          .withFailureHandler(function (error) { if (id === refreshLoadId) showRefreshInfoError(error); })
           .getAutoRefreshInfo();
-      }
-
-      function scheduleRefreshPoll(gen) {
-        if (refreshPollOn && gen === refreshPollGen) refreshPollTimer = setTimeout(function () { pollRefreshInfo(gen); }, REFRESH_POLL_MS);
       }
 
       function showRefreshInfo(info) {
         var html = '';
+        var btn = document.getElementById('reloadRefreshBtn');
+        if (btn) { btn.disabled = false; btn.innerHTML = 'Odśwież'; }
         if (info.current && info.current.foreign) {
           html += '<p class="warn">Odświeżanie ustawione przez innego użytkownika - poniższe informacje mogą zawierać błędy.</p>';
         }
@@ -265,6 +247,8 @@
       }
 
       function showRefreshInfoError(error) {
+        var btn = document.getElementById('reloadRefreshBtn');
+        if (btn) { btn.disabled = false; btn.innerHTML = 'Odśwież'; }
         document.getElementById('refreshInfo-panel').innerHTML =
           '<p id="status">Błąd pobierania danych: ' + escapeHtml(error.message) + '</p>';
       }
@@ -273,10 +257,9 @@
         var btn = document.getElementById('applyRefreshBtn');
         if (btn) { btn.disabled = true; btn.innerHTML = 'Ustawianie...'; }
         google.script.run
-          .withSuccessHandler(function () { stopRefreshPolling(); startRefreshPolling(); })
+          .withSuccessHandler(function () { loadRefreshInfo(); })
           .withFailureHandler(function (error) {
-            stopRefreshPolling();
-            startRefreshPolling();
+            loadRefreshInfo();
             var box = document.getElementById('applyRefreshError');
             if (box) box.innerHTML = "<font color='red'>Błąd: " + escapeHtml(error.message) + "</font>";
           })
@@ -540,8 +523,9 @@
       </form>
     </div>
 
-    <!-- ============ TAB 3: auto-refresh (polled while open) ============ -->
+    <!-- ============ TAB 3: auto-refresh (read on opening, by the button, after applying) ============ -->
     <div id="tab-refresh" class="tab-panel">
+      <button id="reloadRefreshBtn" onclick="loadRefreshInfo()"> Odśwież </button>
       <div id="refreshInfo-panel"><p id="status">Pobieranie danych…</p></div>
     </div>
 

@@ -11,7 +11,7 @@ memoised settings / trigger-log singletons start empty every time. So: **one run
    another is in progress the work is still done inline, but `console.error("NESTED RUN ...")` says so - nothing may do that (tests assert no such line in the flows they run).
 3. **The one exception is `onOpen`: the menu is built first, outside the Controller**, in every auth mode (fast, needs no services, must appear whether the add-on is ON or not). Where the script is authorised (`authMode != NONE`) the rest
    (the status check that warns when the agents are not active) is an ordinary run `"onOpen"`.
-4. The three functions the live check sidebar polls every few seconds (`liveCheckSidebarData`, `...Detail`, `...SetEnabled`) are not wrapped on purpose (they would fill their own list). The same goes for `getAutoRefreshInfo`, which the "Auto-odświeżanie" tab of the configuration sidebar polls every 2 s: it only reads (a test checks the code between `info(` and `apply(` writes nothing). The tab's button, `applyRefreshSettings`, is an ordinary run.
+4. The three functions the live check sidebar polls every few seconds (`liveCheckSidebarData`, `...Detail`, `...SetEnabled`) are not wrapped on purpose (they would fill their own list).
 
 ## What one run does
 ```

@@ -136,16 +136,6 @@ module.exports = function register(t) {
     assert.strictEqual(sc.stored().refreshPermit.intervalHours, 48);
   });
 
-  test('panel: the settings sheet is read at most once in 5 seconds (a Sheets API request per poll would use up the per-minute quota); the button forgets the reading', () => {
-    const sc = scenario({ sheet: { freq: { freq: 1, unit: 'days' } } });
-    sc.ex.eval(`globalThis.__reads = 0; { const g = getMainSettings; getMainSettings = () => { __reads++; return g(); }; }`);
-    sc.info(); sc.info(); sc.info();
-    assert.strictEqual(sc.ex.eval(`__reads`), 1);
-    sc.ex.eval(`applyRefreshSettings()`);
-    sc.info();
-    assert.strictEqual(sc.ex.eval(`__reads`), 3, 'the button reads once to set up, the panel once more after it');
-  });
-
   test('panel: reading it never writes (no permit saved, no trigger changed)', () => {
     const sc = scenario({ permit: permit(), triggers: ['t1'], sheet: { freq: { freq: 2, unit: 'days' } } });
     const before = JSON.stringify([sc.p.props.document, sc.p.triggers]);
@@ -154,13 +144,14 @@ module.exports = function register(t) {
     assert.strictEqual(JSON.stringify([sc.p.props.document, sc.p.triggers]), before);
   });
 
-  test('page: the tab "Auto-odświeżanie" polls getAutoRefreshInfo only while it is open, one call at a time, and the button is disabled when nothing differs', () => {
+  test('page: the tab "Auto-odświeżanie" reads when it is opened, on the refresh button and after applying; no polling; only the latest answer is shown; the apply button is disabled when nothing differs', () => {
     const html = fs.readFileSync(path.join(ROOT, 'New Status Sidebar.html'), 'utf8');
     assert.ok(/data-tab="refresh" onclick="selectTab\('refresh'\)">Auto-odświeżanie</.test(html));
-    assert.ok(/if \(tabId === 'refresh'\) startRefreshPolling\(\); else stopRefreshPolling\(\);/.test(html));
-    assert.ok(/withSuccessHandler\(function \(info\) \{ if \(gen !== refreshPollGen\) return; showRefreshInfo\(info\); scheduleRefreshPoll\(gen\); \}\)/.test(html), 'the next call waits for the answer; an answer to a call made before a restart is dropped (no second chain of calls)');
-    assert.ok(/function stopRefreshPolling\(\) \{\s*refreshPollOn = false;\s*refreshPollGen\+\+;/.test(html) && /refreshPollOn = true;\s*refreshPollGen\+\+;/.test(html));
-    assert.ok(/REFRESH_POLL_MS = 2000/.test(html));
+    assert.ok(/if \(tabId === 'refresh'\) loadRefreshInfo\(\);/.test(html), 'on opening the tab');
+    assert.ok(/id="reloadRefreshBtn" onclick="loadRefreshInfo\(\)"/.test(html), 'the refresh button');
+    assert.ok(/withSuccessHandler\(function \(\) \{ loadRefreshInfo\(\); \}\)/.test(html), 'after applying');
+    assert.ok(/var id = \+\+refreshLoadId;/.test(html) && /if \(id === refreshLoadId\) showRefreshInfo\(info\)/.test(html), 'an older answer is dropped');
+    assert.ok(!/setInterval|REFRESH_POLL|refreshPoll/.test(html), 'no polling');
     assert.ok(/\(sh\.differs \? '' : ' disabled'\)/.test(html));
     assert.ok(/Odświeżanie ustawione przez innego użytkownika - poniższe informacje mogą zawierać błędy\./.test(html));
     assert.ok(!/escapeHtml\(info\.last\.sheets/.test(html) && /escapeHtml\(n\)/.test(html), 'sheet names are escaped');
