@@ -327,6 +327,32 @@ module.exports = function register(t) {
     assert.strictEqual(flags([e('mine', '2026-10-25T10:00:10.000Z', 'RUN', 0)]), 0, 'this run itself does not count');
   });
 
+  test('live check: the import settings (permit) written by a refresh-frequency edit are no change for a change.ignored run that overlapped it - only that job counts', () => {
+    const p = new FakePlatform();
+    const ex = p.execution(FILES);
+    const startedAt = Date.parse('2026-10-25T10:00:10.000Z');
+    ex.eval(`globalThis.__c = { key: 'mine', startedAt: ${startedAt} }; lcStoredResults_ = () => JSON.parse(globalThis.__stored); Date.now = () => ${startedAt + 5000}`);
+    const allowed = stored => { ex.ctx.__stored = JSON.stringify(stored); return ex.eval(`lcParallelSettingsWrites_(__c).join()`); };
+    const e = (i, s, ms) => ({ k: 'o', t: '2026-10-25T10:00:05.000Z', s, ms, i, a: 'sheetEditAction', c: [] });
+    assert.strictEqual(allowed([]), '', 'quiet document');
+    assert.strictEqual(allowed([e('settings.refreshFrequency', 'RUN', 0)]), 'importSettingsArray', 'the frequency edit is still going');
+    assert.strictEqual(allowed([e('settings.refreshFrequency', 'PASS', 8000)]), 'importSettingsArray', 'it ended after this run started');
+    assert.strictEqual(allowed([e('settings.refreshFrequency', 'PASS', 1000)]), '', 'it ended before this run started');
+    assert.strictEqual(allowed([e('config.coedit', 'RUN', 0)]), '', 'another job does not excuse a settings change');
+  });
+
+  test('live check: an edit of the refreshTime cell (D) counts as an edit of the refresh settings; other cells of that line do not', () => {
+    const p = new FakePlatform();
+    const ex = p.execution(FILES);
+    const touched = (row, col, rows = 1, cols = 1) => ex.eval(`lcRefreshFrequencyTouched_({input: {e: {range: {getRow: () => ${row}, getLastRow: () => ${row + rows - 1}, getColumn: () => ${col}, getLastColumn: () => ${col + cols - 1}}}}}, {freqRow: 6, timeRow: 7})`);
+    assert.strictEqual(touched(6, 4), true, 'frequency number');
+    assert.strictEqual(touched(6, 5), true, 'frequency unit');
+    assert.strictEqual(touched(7, 4), true, 'refresh time');
+    assert.strictEqual(touched(7, 3), false, 'the label side of the refreshTime line');
+    assert.strictEqual(touched(8, 4), false, 'the status line');
+    assert.strictEqual(touched(7, 4, 1, 1) && touched(6, 2, 2, 3), true, 'a range covering both lines');
+  });
+
   const THREE_ROWS = `ODataConnection.prototype.getDataArray = () => [['No'], ['C1'], ['C2']];`;
   const FMT = /number format uniform in every column/;
   test('live check, end to end: a result column whose number format differs between data rows -> FAIL naming the column and the actual formats (header shown, not judged)', () => {

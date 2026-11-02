@@ -74,7 +74,7 @@ function lcDocTriggers_(){
 
 /** The settings sheet as the add-on lays it out: B..E of every row, labels in column B. */
 function lcReadSettingsSheet_(){
-  const out = {name: null, exists: false, b2: null, configs: [], lastRefreshRow: null, lastRefresh: null, lastRefreshTz: null, freqRow: null, freq: null, unit: null};
+  const out = {name: null, exists: false, b2: null, configs: [], lastRefreshRow: null, lastRefresh: null, lastRefreshTz: null, freqRow: null, freq: null, unit: null, timeRow: null};
   out.name = lcImportSettings_().importSheetName ?? null;
   if(!out.name) return out;
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(out.name);
@@ -90,6 +90,7 @@ function lcReadSettingsSheet_(){
       case "configSheet": out.configs.push({row: r, config: row[1], result: row[2], refresh: row[3]}); break;
       case "lastRefresh": out.lastRefreshRow = r; out.lastRefresh = row[2]; out.lastRefreshTz = row[3]; break;
       case "refreshFrequency": out.freqRow = r; out.freq = row[2]; out.unit = row[3]; break;
+      case "refreshTime": out.timeRow = r; break;
     }
   });
   return out;
@@ -219,6 +220,23 @@ function lcParallelCoeditFlags_(c){
     const overlapping = lcStoredResults_().some(e => e.k !== c.key && mine.indexOf(e.k) < 0 && Date.parse(e.t) <= to &&
       (e.s == "RUN" || Date.parse(e.t) + (e.ms || 0) >= from));
     return overlapping ? [/_coedit$/] : [];
+  } catch(err) {
+    return [];
+  }
+}
+
+/**
+ * The import settings (document property importSettingsArray: the refresh permit) that a refresh-frequency edit writes while a change event of the same
+ * edit is being judged. Allowed only when another checked run overlapped this one and was a settings.refreshFrequency job: that run sets the time trigger
+ * up and the permit with it, and now also writes the message into the settings sheet, so the change run is likely to be still going.
+ */
+function lcParallelSettingsWrites_(c){
+  try{
+    const mine = lcStack.map(f => f.key);
+    const from = c.startedAt, to = Date.now();
+    const overlapping = lcStoredResults_().some(e => e.i == "settings.refreshFrequency" && e.k !== c.key && mine.indexOf(e.k) < 0 && Date.parse(e.t) <= to &&
+      (e.s == "RUN" || Date.parse(e.t) + (e.ms || 0) >= from));
+    return overlapping ? ["importSettingsArray"] : [];
   } catch(err) {
     return [];
   }
@@ -873,10 +891,13 @@ function lcAgentSheet_(c,kind){
   return kind == "edit" ? (e.range ? e.range.getSheet().getName() : null) : c.now("activeSheet");
 }
 
-/** Did the edit touch the refresh frequency (column D or E of its row in the settings sheet)? */
+/** Did the edit touch the refresh settings: the frequency (D or E of its row) or the time of day (D of the refreshTime row) in the settings sheet? */
 function lcRefreshFrequencyTouched_(c,settings){
-  const e = c.input.e, row = settings.freqRow;
-  return !!(e && e.range) && !!row && row >= e.range.getRow() && row <= e.range.getLastRow() && [4,5].some(col => col >= e.range.getColumn() && col <= e.range.getLastColumn());
+  const e = c.input.e;
+  if(!e || !e.range) return false;
+  const inRows = row => !!row && row >= e.range.getRow() && row <= e.range.getLastRow();
+  const inCols = cols => cols.some(col => col >= e.range.getColumn() && col <= e.range.getLastColumn());
+  return (inRows(settings.freqRow) && inCols([4,5])) || (inRows(settings.timeRow) && inCols([4]));
 }
 
 /** The old, complete judgement of what an edit / change led to - used only when no job was announced. */
@@ -886,7 +907,7 @@ function lcVerifyAgentContent_(c,kind,settings){
     const type = String(e.changeType);
     if(type == "EDIT" || type == "FORMAT"){
       c.unchanged("sheets",`${type} change is ignored`);
-      c.unchanged("docProps",`${type} change is ignored`,["docTriggerArray","agentSuspect"].concat(lcParallelCoeditFlags_(c)));
+      c.unchanged("docProps",`${type} change is ignored`,["docTriggerArray","agentSuspect"].concat(lcParallelCoeditFlags_(c),lcParallelSettingsWrites_(c)));
       return;
     }
   }
@@ -972,7 +993,7 @@ function lcJobVerifiers_(){
         const type = String(c.input.e && c.input.e.changeType);
         if(!c.expect("only EDIT and FORMAT changes are ignored",type == "EDIT" || type == "FORMAT",type)) return;
         c.unchanged("sheets",`${type} change is ignored`);
-        c.unchanged("docProps",`${type} change is ignored`,["docTriggerArray","agentSuspect"].concat(lcParallelCoeditFlags_(c)));
+        c.unchanged("docProps",`${type} change is ignored`,["docTriggerArray","agentSuspect"].concat(lcParallelCoeditFlags_(c),lcParallelSettingsWrites_(c)));
       }
     },
 

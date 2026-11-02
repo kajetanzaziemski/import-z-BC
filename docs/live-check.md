@@ -136,6 +136,12 @@ Every platform entry goes through `Controller.run` now (`docs/controller.md`): `
   this one** (still running, or ended after this one started; `lcParallelCoeditFlags_`). On a quiet document it still is one. Trade-off: a run that wrongly started a co-edit while another one was going is not caught by this check
   (the sheet and indicator checks still see its effects).
 
+## Verifier changes for the refreshTime / refreshStatus lines (intended, hash of `Live Check Verifiers.js` re-pinned)
+- **`change.ignored`** (and the old combined judgement): `importSettingsArray` (the refresh permit) is no longer reported as a change when another checked run that overlapped this one was a `settings.refreshFrequency` job
+  (`lcParallelSettingsWrites_`). A frequency edit now also writes the status message into the settings sheet, so it runs for seconds and the change event of the same edit is still being judged while the permit is written.
+  Only that job excuses it; on a quiet document, or beside another job, a changed permit is still a failure.
+- **`settings.refreshFrequency` / `settings.edit`**: the edit counts as "touching the refresh settings" also when it covers column D of the `refreshTime` line (`lcReadSettingsSheet_` reads `timeRow`).
+
 ## Quiet jobs
 `sheet.ignored`, `change.ignored` and `change.own` (`LIVE_CHECK_QUIET_JOBS`, `Live Check.js`) only look at an event and do nothing; they were most of the report. While they **pass** (or skip) nothing is logged, stored or shown, and their "running" placeholder
 is removed at once. One that fails or warns (an edit in a config sheet wrongly ignored) is recorded and shown like any other run. `settings.edit` and `agent.skipped` also do nothing but are still reported.
