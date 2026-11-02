@@ -193,31 +193,34 @@
       ========================================================= */
       var refreshPollTimer = null;
       var refreshPollOn = false;
+      var refreshPollGen = 0;          // a new start (or a stop) makes the answers of calls made before it count for nothing
       var REFRESH_POLL_MS = 2000;
 
       function startRefreshPolling() {
         if (refreshPollOn) return;
         refreshPollOn = true;
-        pollRefreshInfo();
+        refreshPollGen++;
+        pollRefreshInfo(refreshPollGen);
       }
 
       function stopRefreshPolling() {
         refreshPollOn = false;
+        refreshPollGen++;
         if (refreshPollTimer) clearTimeout(refreshPollTimer);
         refreshPollTimer = null;
       }
 
       // the next call is made when the answer to this one is in, so calls never pile up
-      function pollRefreshInfo() {
-        if (!refreshPollOn) return;
+      function pollRefreshInfo(gen) {
+        if (!refreshPollOn || gen !== refreshPollGen) return;
         google.script.run
-          .withSuccessHandler(function (info) { showRefreshInfo(info); scheduleRefreshPoll(); })
-          .withFailureHandler(function (error) { showRefreshInfoError(error); scheduleRefreshPoll(); })
+          .withSuccessHandler(function (info) { if (gen !== refreshPollGen) return; showRefreshInfo(info); scheduleRefreshPoll(gen); })
+          .withFailureHandler(function (error) { if (gen !== refreshPollGen) return; showRefreshInfoError(error); scheduleRefreshPoll(gen); })
           .getAutoRefreshInfo();
       }
 
-      function scheduleRefreshPoll() {
-        if (refreshPollOn) refreshPollTimer = setTimeout(pollRefreshInfo, REFRESH_POLL_MS);
+      function scheduleRefreshPoll(gen) {
+        if (refreshPollOn && gen === refreshPollGen) refreshPollTimer = setTimeout(function () { pollRefreshInfo(gen); }, REFRESH_POLL_MS);
       }
 
       function showRefreshInfo(info) {
@@ -257,6 +260,7 @@
           if (!sh.differs) html += '<p class="gray">Ustawienia w arkuszu są takie same jak aktualne.</p>';
         }
         html += '<p class="gray">Strefa czasowa: ' + escapeHtml(info.zone) + '</p><div id="applyRefreshError"></div>';
+        html += '<details><summary class="gray">Szczegóły techniczne</summary><pre style="white-space:pre-wrap;font-size:11px">' + escapeHtml(JSON.stringify(info.diag, null, 1)) + '</pre></details>';
         document.getElementById('refreshInfo-panel').innerHTML = html;
       }
 

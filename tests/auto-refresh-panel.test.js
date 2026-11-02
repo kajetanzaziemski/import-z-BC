@@ -123,6 +123,19 @@ module.exports = function register(t) {
     assert.deepStrictEqual(plain(sc.ex.eval(`__jobs`)), ['settings.refreshApply']);
   });
 
+  test('panel: info carries what current() looked at (permit, triggers, token) for the "Szczegóły techniczne" fold', () => {
+    const d = scenario({ permit: permit({ issuedBy: 'me' }), triggers: ['t1', 'other'] }).info().diag;
+    assert.deepStrictEqual([d.permitFor, d.named, d.off, d.hasToken, d.issuedByMe, d.triggers], ['t1', true, false, true, false, ['t1', 'other']]);
+    assert.strictEqual(scenario().info().diag.permitFor, null);
+  });
+
+  test('schedule: the permit is saved by the set-up itself (the status message takes seconds; the sidebar polls the permit meanwhile)', () => {
+    const sc = scenario({ permit: permit(), triggers: ['t1'], sheet: null });
+    sc.ex.eval(`ScheduleRefresh.setUp({ freq: 2, unit: 'days' })`);
+    assert.ok(sc.stored().refreshPermit.issuedFor !== 't1', 'stored without waiting for the closing actions');
+    assert.strictEqual(sc.stored().refreshPermit.intervalHours, 48);
+  });
+
   test('panel: reading it never writes (no permit saved, no trigger changed)', () => {
     const sc = scenario({ permit: permit(), triggers: ['t1'], sheet: { freq: { freq: 2, unit: 'days' } } });
     const before = JSON.stringify([sc.p.props.document, sc.p.triggers]);
@@ -135,7 +148,8 @@ module.exports = function register(t) {
     const html = fs.readFileSync(path.join(ROOT, 'New Status Sidebar.html'), 'utf8');
     assert.ok(/data-tab="refresh" onclick="selectTab\('refresh'\)">Auto-odświeżanie</.test(html));
     assert.ok(/if \(tabId === 'refresh'\) startRefreshPolling\(\); else stopRefreshPolling\(\);/.test(html));
-    assert.ok(/withSuccessHandler\(function \(info\) \{ showRefreshInfo\(info\); scheduleRefreshPoll\(\); \}\)/.test(html), 'the next call waits for the answer');
+    assert.ok(/withSuccessHandler\(function \(info\) \{ if \(gen !== refreshPollGen\) return; showRefreshInfo\(info\); scheduleRefreshPoll\(gen\); \}\)/.test(html), 'the next call waits for the answer; an answer to a call made before a restart is dropped (no second chain of calls)');
+    assert.ok(/function stopRefreshPolling\(\) \{\s*refreshPollOn = false;\s*refreshPollGen\+\+;/.test(html) && /refreshPollOn = true;\s*refreshPollGen\+\+;/.test(html));
     assert.ok(/REFRESH_POLL_MS = 2000/.test(html));
     assert.ok(/\(sh\.differs \? '' : ' disabled'\)/.test(html));
     assert.ok(/Odświeżanie ustawione przez innego użytkownika - poniższe informacje mogą zawierać błędy\./.test(html));

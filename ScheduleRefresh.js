@@ -61,6 +61,9 @@ const ScheduleRefresh = {
     const nextRefresh = ScheduleRefresh.nextRefresh(new Date(), frequency.unit, interval, startAt);
     const issued = MainSettings.getRefreshPermit();
     MainSettings.updateRefreshPermit(Object.assign({}, issued, {issuedBy: ScheduleRefresh.ownerToken_(true), nextRefresh: nextRefresh.getTime(), startAt: startAt ? `${startAt.hour}:${String(startAt.minute ?? 0).padStart(2,"0")}` : null}));
+    // Save the permit now, not when the run closes: writing the status message takes seconds and the sidebar polls the permit meanwhile
+    // (a permit that still names the removed trigger reads as "nothing is set").
+    Settings.store().saveArray();
     return {nextRefresh, intervalHrs};
   },
 
@@ -119,6 +122,19 @@ const ScheduleRefresh = {
       throw err;
     }
     ScheduleRefresh.report_(settings,{ok:true,off:!result,when:new Date(),frequency:settings.getRefreshFrequency(),next:result?.nextRefresh ?? null});
+  },
+
+  /** What current() looked at, as plain data (the sidebar shows it under "Szczegóły techniczne": a state that flips between two polls can be told apart there). */
+  explain(now = new Date()){
+    try{
+      const permit = MainSettings.getRefreshPermit();
+      const triggers = ScriptApp.getProjectTriggers().filter(t => ["autoRefresh","autoRefreshHandler"].includes(t.getHandlerFunction())).map(t => t.getUniqueId());
+      return {permitFor: permit?.issuedFor ?? null, off: !!permit?.off, issuedByMe: !!permit?.issuedBy && permit.issuedBy === ScheduleRefresh.ownerToken_(false),
+              hasToken: !!permit?.issuedBy, intervalHours: permit?.intervalHours ?? null, lastRun: permit?.lastRun ?? null, triggers: triggers,
+              named: !!permit?.issuedFor && triggers.includes(permit.issuedFor), at: now.toISOString()};
+    }catch(err){
+      return {error: String(err && err.message || err)};
+    }
   },
 
   /** A token that tells this user from the others in the permit (user properties: not shared). Created only when asked to. */

@@ -19,7 +19,7 @@ const AutoRefreshPanel = {
     const permit = MainSettings.getRefreshPermit();
     const current = ScheduleRefresh.current(now);
 
-    const out = {zone: SettingsGrid.offsetName(now, tz), current: null, last: null, sheet: null, error: current === null};
+    const out = {zone: SettingsGrid.offsetName(now, tz), current: null, last: null, sheet: null, error: current === null, diag: ScheduleRefresh.explain(now)};
     if(current?.active){
       out.current = {
         foreign: current.foreign,
