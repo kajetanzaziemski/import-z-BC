@@ -9,7 +9,7 @@
 // The refresh permit (Settings.js, CLAUDE.md) is what keeps old triggers from refreshing: a new permit makes every other trigger delete itself.
 // Time-based triggers are not returned by ScriptApp.getUserTriggers(ss): getProjectTriggers() is used.
 // setUp replaces only the trigger this document's permit names (bugs-fixed #5, fixed); other triggers, legacy ones included, delete themselves when they fire.
-// Known quirks kept: without a frequency (null) it removes that trigger and then fails with a TypeError; the first legacy run records no lastRun (the permit it just issued is not stored yet when it is touched).
+// Known quirks kept: without a frequency line (null) it fails with a TypeError (nothing was changed before it, since the set-up checks first); the first legacy run records no lastRun (the permit it just issued is not stored yet when it is touched).
 // ---------------------------------------------------------------------------
 
 const ScheduleRefresh = {
@@ -26,17 +26,23 @@ const ScheduleRefresh = {
     // triggers of other documents stay). Triggers of this document that the permit does not name - older ones, legacy `autoRefresh` ones - cannot be
     // recognised here; they delete themselves the next time they fire, because the permit is not issued for them.
     const permit = MainSettings.getRefreshPermit();
-    ScheduleRefresh.removeRefreshTrigger_(permit?.issuedFor);
 
-    let interval = frequency.freq;
-    let intervalHrs = interval;
-
+    // Nothing is touched before the settings are known to be usable (a missing frequency line is a TypeError here, an invalid number an Error): a failed
+    // set-up leaves the trigger and the permit that were there, and the new trigger is created BEFORE the old one is removed for the same reason.
     if(!frequency.freq || (frequency.unit != "days" && frequency.unit != "hrs")){
       // Refresh switched off here. A document that never had a permit gets one for nobody: an old trigger of this document that has not claimed
       // one yet would otherwise claim it when it fires (the legacy handler does) and go on refreshing; with a permit for nobody it deletes itself.
+      // A permit that was there is kept (it still makes every other trigger delete itself) and marked off: its trigger is gone on purpose.
+      ScheduleRefresh.removeRefreshTrigger_(permit?.issuedFor);
       if(!permit) MainSettings.setRefreshPermit(null,0);
+      else MainSettings.updateRefreshPermit(Object.assign({}, permit, {off: true}));
       return null;
     }
+    const interval = typeof frequency.freq == "string" && frequency.freq.trim() !== "" ? Number(frequency.freq) : frequency.freq;
+    if(typeof interval != "number" || !Number.isInteger(interval) || interval < 1){
+      throw new Error(`Nieprawidłowa częstotliwość odświeżania: "${frequency.freq}" (potrzebna liczba całkowita większa od zera).`);
+    }
+    let intervalHrs = interval;
     let trigger = ScriptApp.newTrigger('autoRefreshHandler').timeBased();
     if(frequency.unit=="days"){
       trigger.everyDays(interval);
@@ -49,11 +55,12 @@ const ScheduleRefresh = {
     if(startAt?.timeZone) trigger.inTimezone(startAt.timeZone);      // else the time zone of the script
 
     let newTrigger = trigger.create();
+    ScheduleRefresh.removeRefreshTrigger_(permit?.issuedFor);
     // Issue a permit for this trigger. This will override any other permits, so all old triggers will automatically uninstall.
     MainSettings.setRefreshPermit(newTrigger.getUniqueId(),intervalHrs);
     const nextRefresh = ScheduleRefresh.nextRefresh(new Date(), frequency.unit, interval, startAt);
     const issued = MainSettings.getRefreshPermit();
-    MainSettings.updateRefreshPermit(Object.assign({}, issued, {nextRefresh: nextRefresh.getTime(), startAt: startAt ? `${startAt.hour}:${String(startAt.minute ?? 0).padStart(2,"0")}` : null}));
+    MainSettings.updateRefreshPermit(Object.assign({}, issued, {issuedBy: ScheduleRefresh.ownerToken_(true), nextRefresh: nextRefresh.getTime(), startAt: startAt ? `${startAt.hour}:${String(startAt.minute ?? 0).padStart(2,"0")}` : null}));
     return {nextRefresh, intervalHrs};
   },
 
@@ -114,6 +121,13 @@ const ScheduleRefresh = {
     ScheduleRefresh.report_(settings,{ok:true,off:!result,when:new Date(),frequency:settings.getRefreshFrequency(),next:result?.nextRefresh ?? null});
   },
 
+  /** A token that tells this user from the others in the permit (user properties: not shared). Created only when asked to. */
+  ownerToken_(create){
+    let token = Store.get("user","refreshOwnerToken");
+    if(!token && create){ token = Date.now().toString(36) + Math.random().toString(36).slice(2,10); Store.set("user","refreshOwnerToken",token); }
+    return token || null;
+  },
+
   /**
    * What is actually set now, as far as the add-on can tell: the permit of this document names a refresh trigger that exists.
    * `next` is an estimate (the next run the permit remembers, rolled forward by the interval until it is ahead); null when it cannot be told.
@@ -125,7 +139,10 @@ const ScheduleRefresh = {
       if(!permit?.issuedFor || !permit.intervalHours) return {active:false};
       const hours = permit.intervalHours, days = hours % 24 === 0;
       const step = hours * 3600000;
+      if(permit.off) return {active:false};
       const exists = ScriptApp.getProjectTriggers().some(t => t.getUniqueId() === permit.issuedFor && ["autoRefresh","autoRefreshHandler"].includes(t.getHandlerFunction()));
+      // The trigger is not among this user's. If this user issued the permit, it was deleted (by hand, in the trigger editor): nothing is set.
+      if(!exists && permit.issuedBy && permit.issuedBy === ScheduleRefresh.ownerToken_(false)) return {active:false};
       // getProjectTriggers() lists the triggers of the current user only. A permit that names a trigger which is not there but was used lately (within
       // two and a half intervals) points to a trigger set by another user: it is shown, marked, with what the permit remembers.
       const lately = (permit.lastRun ?? permit.lastRefresh ?? 0) + 2.5 * step > now.getTime();

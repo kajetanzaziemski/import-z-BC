@@ -152,11 +152,68 @@ module.exports = function register(t) {
     assert.deepStrictEqual(triggers(again.p).map(x => [x.id, x.fn]), [['trig-1', 'autoRefreshHandler']]);
   });
 
-  test('schedule: KNOWN QUIRK pinned - without a refresh frequency row (null) the permitted trigger is removed first and then it fails with a TypeError', () => {
+  test('schedule: without a refresh frequency row (null) it fails with a TypeError and changes NOTHING (before: the permitted trigger was removed first)', () => {
     const sc = scenario({ settings: PERMIT('old') });
     sc.p.triggers.push(Object.assign({}, OTHER), NAMED('old'));
     assert.throws(() => sc.settingsSheet(null).setRefreshTrigger(), /Cannot read properties of null/);
-    assert.deepStrictEqual(triggers(sc.p).map(x => x.id), ['other-doc-trigger']);
+    assert.deepStrictEqual(triggers(sc.p).map(x => x.id), ['other-doc-trigger', 'old']);
+    assert.strictEqual(permit(sc).issuedFor, 'old');
+  });
+
+  test('schedule: an invalid number ("x", 1.5, -2; 0 and empty mean OFF) is an error and changes NOTHING: the old trigger and permit stay; "2" typed as text is accepted', () => {
+    ['x', 1.5, -2, ' '].forEach(bad => {
+      const sc = scenario({ settings: PERMIT('old') });
+      sc.p.triggers.push(NAMED('old'));
+      assert.throws(() => sc.settingsSheet({ freq: bad, unit: 'days' }).setRefreshTrigger(), /Nieprawidłowa częstotliwość|Error/, String(bad));
+      sc.save();
+      assert.deepStrictEqual(triggers(sc.p).map(x => x.id), ['old'], String(bad));
+      assert.strictEqual(permit(sc).issuedFor, 'old', String(bad));
+    });
+    const ok = scenario();
+    ok.settingsSheet({ freq: '2', unit: 'days' }).setRefreshTrigger();
+    assert.deepStrictEqual(triggers(ok.p).map(x => x.params), [{ everyDays: 2 }]);
+  });
+
+  test('schedule: a trigger that fails to be created leaves the old one in place (the new one is created before the old is removed)', () => {
+    const sc = scenario({ settings: PERMIT('old') });
+    sc.p.triggers.push(NAMED('old'));
+    sc.ex.eval(`{ const n = ScriptApp.newTrigger; ScriptApp.newTrigger = fn => { const b = n(fn); b.create = () => { throw new Error('quota'); }; return b; }; }`);
+    assert.throws(() => sc.settingsSheet({ freq: 3, unit: 'hrs' }).setRefreshTrigger(), /quota/);
+    assert.deepStrictEqual(triggers(sc.p).map(x => x.id), ['old']);
+  });
+
+  test('schedule: switching off marks the kept permit "off": current() says nothing is set, not "another user\'s trigger"', () => {
+    const sc = scenario({ settings: { refreshPermit: { issuedFor: 'old', lastRefresh: Date.now(), lastRun: Date.now(), intervalHours: 24 } } });
+    sc.p.triggers.push(NAMED('old'));
+    sc.settingsSheet({ freq: '', unit: 'days' }).setRefreshTrigger();
+    sc.save();
+    assert.strictEqual(permit(sc).off, true);
+    assert.strictEqual(permit(sc).issuedFor, 'old');
+    assert.deepStrictEqual(plain(sc.ex.eval(`ScheduleRefresh.current()`)), { active: false });
+  });
+
+  test('schedule: current() - a permit issued by THIS user whose trigger is gone (deleted by hand) is not set; one issued by another user (other token) or by an old version (no token) and used lately is "foreign"', () => {
+    const lately = Date.now();
+    const base = { issuedFor: 'gone', lastRefresh: lately, lastRun: lately, intervalHours: 24 };
+    const mine = scenario({ settings: { refreshPermit: Object.assign({ issuedBy: 'me' }, base) } });
+    mine.p.props.user.refreshOwnerToken = 'me';
+    assert.deepStrictEqual(plain(mine.ex.eval(`ScheduleRefresh.current()`)), { active: false });
+    const other = scenario({ settings: { refreshPermit: Object.assign({ issuedBy: 'someone-else' }, base) } });
+    other.p.props.user.refreshOwnerToken = 'me';
+    assert.strictEqual(other.ex.eval(`ScheduleRefresh.current().foreign`), true);
+    const legacy = scenario({ settings: { refreshPermit: base } });
+    assert.strictEqual(legacy.ex.eval(`ScheduleRefresh.current().foreign`), true);
+  });
+
+  test('schedule: a set-up stores who issued the permit (a token kept in the user properties); a second set-up by the same user keeps the token', () => {
+    const sc = scenario();
+    sc.settingsSheet({ freq: 2, unit: 'days' }).setRefreshTrigger();
+    sc.save();
+    const token = sc.p.props.user.refreshOwnerToken;
+    assert.ok(token);
+    assert.strictEqual(permit(sc).issuedBy, token);
+    sc.settingsSheet({ freq: 3, unit: 'days' }).setRefreshTrigger();
+    assert.strictEqual(sc.p.props.user.refreshOwnerToken, token);
   });
 
   test('schedule: the refresh triggers of OTHER documents are no longer removed (bugs-fixed #5): only the one this document\'s permit names', () => {
