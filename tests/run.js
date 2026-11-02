@@ -603,6 +603,7 @@ require('./bc-layer.test.js')({ test });
 
 // ---- automatic refresh: time trigger, permit, handlers, refresh loops (fake ScriptApp with real trigger bookkeeping) -------------
 require('./schedule.test.js')({ test });
+require('./auto-refresh-panel.test.js')({ test });
 
 // ---- what the installable triggers make of an edit / change (which action fires) ---------------------------------------------
 require('./router.test.js')({ test });

@@ -685,6 +685,11 @@ function buildLiveCheckVerifiers_(){
       }
     },
 
+    requestApplyRefreshSettings: {
+      needs: ["docProps","settingsSheet"],
+      verify(c){ /* the job (settings.refreshApply) says what it did */ }
+    },
+
     requestSetSettingsSheetName: {
       needs: ["sheets"],
       verify(c){
@@ -968,6 +973,12 @@ function lcJobVerifiers_(){
         const settings = c.now("settingsSheet");
         if(!c.expect("the edit touched the refresh frequency (number or unit)",lcRefreshFrequencyTouched_(c,settings),"the edited range does not cover the refresh frequency cells")) return;
         lcVerifyRefreshTrigger_(c,settings);
+      }
+    },
+
+    "settings.refreshApply": {
+      verify(c){
+        lcVerifyRefreshTrigger_(c,c.now("settingsSheet"));
       }
     },
 

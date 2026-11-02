@@ -25,6 +25,11 @@
       tr:nth-child(even) {
         background-color: #fafafa;
       }
+      .warn {
+        background: #fff2cc;
+        border-left: 4px solid #f1c232;
+        padding: 6px 8px;
+      }
       #status {
         color: #888;
         font-style: italic;
@@ -180,6 +185,98 @@
         document.querySelectorAll('.tab-btn').forEach(function (btn) {
           btn.classList.toggle('active', btn.dataset.tab === tabId);
         });
+        if (tabId === 'refresh') startRefreshPolling(); else stopRefreshPolling();
+      }
+
+      /* =========================================================
+         Auto-refresh tab (polls the server while the tab is open)
+      ========================================================= */
+      var refreshPollTimer = null;
+      var refreshPollOn = false;
+      var REFRESH_POLL_MS = 2000;
+
+      function startRefreshPolling() {
+        if (refreshPollOn) return;
+        refreshPollOn = true;
+        pollRefreshInfo();
+      }
+
+      function stopRefreshPolling() {
+        refreshPollOn = false;
+        if (refreshPollTimer) clearTimeout(refreshPollTimer);
+        refreshPollTimer = null;
+      }
+
+      // the next call is made when the answer to this one is in, so calls never pile up
+      function pollRefreshInfo() {
+        if (!refreshPollOn) return;
+        google.script.run
+          .withSuccessHandler(function (info) { showRefreshInfo(info); scheduleRefreshPoll(); })
+          .withFailureHandler(function (error) { showRefreshInfoError(error); scheduleRefreshPoll(); })
+          .getAutoRefreshInfo();
+      }
+
+      function scheduleRefreshPoll() {
+        if (refreshPollOn) refreshPollTimer = setTimeout(pollRefreshInfo, REFRESH_POLL_MS);
+      }
+
+      function showRefreshInfo(info) {
+        var html = '';
+        if (info.current && info.current.foreign) {
+          html += '<p class="warn">Odświeżanie ustawione przez innego użytkownika - poniższe informacje mogą zawierać błędy.</p>';
+        }
+        html += '<h1> Aktualne ustawienia: </h1>';
+        if (info.error) {
+          html += '<p class="gray">Nie udało się odczytać aktualnych ustawień.</p>';
+        } else if (info.current) {
+          html += '<p>Odświeżanie co: <b>' + escapeHtml(info.current.every) + '</b>' +
+            (info.current.startAt ? ' (o ' + escapeHtml(info.current.startAt) + ')' : '') + '<br />' +
+            'Następne odświeżenie: <b>' + escapeHtml(info.current.next) + '</b></p>';
+        } else {
+          html += '<p>Odświeżanie automatyczne jest wyłączone.</p>';
+        }
+
+        if (info.last) {
+          html += '<h1> Ostatnio odświeżone: </h1><p>' + escapeHtml(info.last.at) +
+            (info.last.duration ? '. Czas odświeżania: ' + escapeHtml(info.last.duration) : '') + '.</p>';
+          if (info.last.sheets && info.last.sheets.length) {
+            html += '<p>Odświeżone arkusze:</p><ul>' +
+              info.last.sheets.map(function (n) { return '<li>' + escapeHtml(n) + '</li>'; }).join('') + '</ul>';
+          }
+        }
+
+        html += '<hr /><h1> Zmień ustawienia: </h1>';
+        var sh = info.sheet;
+        if (!sh || !sh.available) {
+          html += '<p class="gray">' + (sh && sh.error ? 'Nie udało się odczytać arkusza ustawień.' : 'Arkusz ustawień jeszcze nie istnieje.') + '</p>';
+        } else {
+          html += '<button class="action" id="applyRefreshBtn" onclick="applyRefreshSettings()"' + (sh.differs ? '' : ' disabled') + '> Ustaw wg. danych w arkuszu </button>';
+          html += '<p class="gray">' + (sh.off
+            ? '(odświeżanie wyłączone)'
+            : '(odświeżanie co ' + escapeHtml(sh.every) + (sh.startAt ? ' o ' + escapeHtml(sh.startAt) : '') + '; nast. odśw. ' + escapeHtml(sh.next) + ')') + '</p>';
+          if (!sh.differs) html += '<p class="gray">Ustawienia w arkuszu są takie same jak aktualne.</p>';
+        }
+        html += '<p class="gray">Strefa czasowa: ' + escapeHtml(info.zone) + '</p><div id="applyRefreshError"></div>';
+        document.getElementById('refreshInfo-panel').innerHTML = html;
+      }
+
+      function showRefreshInfoError(error) {
+        document.getElementById('refreshInfo-panel').innerHTML =
+          '<p id="status">Błąd pobierania danych: ' + escapeHtml(error.message) + '</p>';
+      }
+
+      function applyRefreshSettings() {
+        var btn = document.getElementById('applyRefreshBtn');
+        if (btn) { btn.disabled = true; btn.innerHTML = 'Ustawianie...'; }
+        google.script.run
+          .withSuccessHandler(function () { stopRefreshPolling(); startRefreshPolling(); })
+          .withFailureHandler(function (error) {
+            stopRefreshPolling();
+            startRefreshPolling();
+            var box = document.getElementById('applyRefreshError');
+            if (box) box.innerHTML = "<font color='red'>Błąd: " + escapeHtml(error.message) + "</font>";
+          })
+          .applyRefreshSettings();
       }
 
       /* =========================================================
@@ -345,7 +442,7 @@
     <div class="tab-bar">
       <button class="tab-btn active" data-tab="status" onclick="selectTab('status')">Ogólne</button>
       <button class="tab-btn" data-tab="help" onclick="selectTab('help')">Połączenie z BC</button>
-      <button class="tab-btn" data-tab="future" onclick="selectTab('future')">Autoryzacja</button>
+      <button class="tab-btn" data-tab="refresh" onclick="selectTab('refresh')">Auto-odświeżanie</button>
     </div>
 
     <!-- ============ TAB 1: current sidebar content ============ -->
@@ -439,9 +536,9 @@
       </form>
     </div>
 
-    <!-- ============ TAB 3: placeholder for future content ============ -->
-    <div id="tab-future" class="tab-panel">
-      <p><span class="gray">Ta zakładka jest zarezerwowana na przyszłą zawartość.</span></p>
+    <!-- ============ TAB 3: auto-refresh (polled while open) ============ -->
+    <div id="tab-refresh" class="tab-panel">
+      <div id="refreshInfo-panel"><p id="status">Pobieranie danych…</p></div>
     </div>
 
    </div>

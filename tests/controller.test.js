@@ -183,6 +183,9 @@ module.exports = function register(t) {
     return null;
   }
 
+  // read-only functions a sidebar polls every couple of seconds: outside the Controller on purpose (a run each would fill the live check list and do the gate / closing work for nothing)
+  const POLLED_READ_ONLY = ['getAutoRefreshInfo'];
+
   /** What the platform calls: triggers, menu items, sidebar server calls, the OAuth callback. */
   function platformEntries() {
     const names = new Set(['onOpen', 'onEdit', 'sheetEdit', 'sheetChange', 'autoRefreshHandler', 'autoRefresh', 'authCallback']);
@@ -195,7 +198,7 @@ module.exports = function register(t) {
       if (!/google\.script\.run/.test(text)) return;
       (text.match(/\.(\w+)\s*\(/g) || []).forEach(m => { const n = m.match(/\.(\w+)/)[1]; if (defined.has(n)) names.add(n); });
     });
-    return [...names].filter(n => !/^with/.test(n)).sort();
+    return [...names].filter(n => !/^with/.test(n) && !POLLED_READ_ONLY.includes(n)).sort();
   }
 
   test('rule: every function the platform calls (triggers, menu items, sidebar calls, the OAuth callback) goes through Controller.run', () => {
@@ -233,6 +236,16 @@ module.exports = function register(t) {
     assert.deepStrictEqual(offenders, [], 'Controller.run inside a function that is not an entry point');
     assert.ok(!/function checked\(/.test(read('Controller.js')) && !/\bchecked\b[,\s}]/.test(read('Controller.js').match(/return \{[^}]*\}/)[0]));
     SOURCES.forEach(f => assert.ok(!/Controller\.checked/.test(strip(read(f))), f));
+  });
+
+  test('rule: getAutoRefreshInfo (polled by the configuration sidebar) is outside the Controller, reads only, and is really called by the page', () => {
+    const f = functionBody('getAutoRefreshInfo');
+    assert.ok(f && !/Controller\./.test(f.body) && /AutoRefreshPanel\.info\(\)/.test(f.body));
+    assert.ok(/\.getAutoRefreshInfo\s*\(/.test(read('New Status Sidebar.html')));
+    assert.ok(/Controller\.run\("requestApplyRefreshSettings"/.test(functionBody('applyRefreshSettings').body), 'the button is an ordinary run');
+    const panel = strip(read('Auto Refresh Panel.js'));
+    const info = panel.slice(panel.indexOf('info(now'), panel.indexOf('apply(){'));
+    assert.ok(!/\.set(Value|Values|Property)\(|Store\.set|\.saveArray|newTrigger|deleteTrigger|Settings\.set/.test(info), 'the polled part does not write anything');
   });
 
   test('rule: the only server functions outside the Controller are the three the live check sidebar polls every few seconds (they would fill their own list)', () => {

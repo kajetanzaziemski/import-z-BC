@@ -53,7 +53,7 @@ const ScheduleRefresh = {
     MainSettings.setRefreshPermit(newTrigger.getUniqueId(),intervalHrs);
     const nextRefresh = ScheduleRefresh.nextRefresh(new Date(), frequency.unit, interval, startAt);
     const issued = MainSettings.getRefreshPermit();
-    MainSettings.updateRefreshPermit(Object.assign({}, issued, {nextRefresh: nextRefresh.getTime()}));
+    MainSettings.updateRefreshPermit(Object.assign({}, issued, {nextRefresh: nextRefresh.getTime(), startAt: startAt ? `${startAt.hour}:${String(startAt.minute ?? 0).padStart(2,"0")}` : null}));
     return {nextRefresh, intervalHrs};
   },
 
@@ -123,13 +123,17 @@ const ScheduleRefresh = {
     try{
       const permit = MainSettings.getRefreshPermit();
       if(!permit?.issuedFor || !permit.intervalHours) return {active:false};
-      const exists = ScriptApp.getProjectTriggers().some(t => t.getUniqueId() === permit.issuedFor && ["autoRefresh","autoRefreshHandler"].includes(t.getHandlerFunction()));
-      if(!exists) return {active:false};
       const hours = permit.intervalHours, days = hours % 24 === 0;
       const step = hours * 3600000;
+      const exists = ScriptApp.getProjectTriggers().some(t => t.getUniqueId() === permit.issuedFor && ["autoRefresh","autoRefreshHandler"].includes(t.getHandlerFunction()));
+      // getProjectTriggers() lists the triggers of the current user only. A permit that names a trigger which is not there but was used lately (within
+      // two and a half intervals) points to a trigger set by another user: it is shown, marked, with what the permit remembers.
+      const lately = (permit.lastRun ?? permit.lastRefresh ?? 0) + 2.5 * step > now.getTime();
+      if(!exists && !lately) return {active:false};
       let next = permit.nextRefresh ?? ((permit.lastRun ?? permit.lastRefresh ?? now.getTime()) + step);
       if(next <= now.getTime()) next += Math.ceil((now.getTime() - next + 1) / step) * step;
-      return {active:true, frequency:{freq: days ? hours / 24 : hours, unit: days ? "days" : "hrs"}, next: new Date(next)};
+      return {active:true, foreign:!exists, intervalHours:hours, startAt:permit.startAt ?? null,
+              frequency:{freq: days ? hours / 24 : hours, unit: days ? "days" : "hrs"}, next: new Date(next)};
     }catch(err){
       dbgLog(`Current refresh state not read: ${err}`);
       return null;
@@ -163,9 +167,16 @@ const ScheduleRefresh = {
     }
 
     Controller.intent("refresh.scheduled",{sheet: null, changeType: null});
+    const sheets = ScheduleRefresh.tickedResultSheets_();
+    const started = Date.now();
     RefreshAll.scheduled();
     
-    MainSettings.touchRefreshPermit(e.triggerUid);
+    MainSettings.touchRefreshPermit(e.triggerUid,{lastDurationMs: Date.now() - started, lastSheets: sheets});
+  },
+
+  /** The result sheets of the pairs ticked for automatic refresh (what a scheduled run refreshes), for the record on the permit. */
+  tickedResultSheets_(){
+    try{ return getMainSettings().getSheetListWithRefreshTrue().map(x => x.resultSheet); }catch(err){ return []; }
   },
 
   /** This only serves the legacy version: older triggers run autoRefresh() rather than autoRefreshHandler(e). */
@@ -187,9 +198,11 @@ const ScheduleRefresh = {
     }
 
     Controller.intent("refresh.scheduled",{sheet: null, changeType: null});
+    const sheets = ScheduleRefresh.tickedResultSheets_();
+    const started = Date.now();
     RefreshAll.scheduled();
     
-    MainSettings.touchRefreshPermit(e.triggerUid);
+    MainSettings.touchRefreshPermit(e.triggerUid,{lastDurationMs: Date.now() - started, lastSheets: sheets});
   },
 
   /** Deletes the refresh trigger (current or legacy handler) with this id, if there is one. Any other trigger with that id (an agent) is left alone. */

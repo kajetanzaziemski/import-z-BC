@@ -7,7 +7,7 @@ an older sheet gets them (after refreshFrequency) the first time a message is wr
 
 # Ustawienia sidebar
 
-## Time triggers in the 3rd tab
+## [DONE, not yet checked on a real spreadsheet] Time triggers in the 3rd tab (Auto Refresh Panel.js; the last run's duration and result sheets are recorded on the permit by the scheduled run)
 
 Third tab (that now holds nothing) should say "Auto-odświeżanie".
 

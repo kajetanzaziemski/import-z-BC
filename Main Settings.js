@@ -52,8 +52,8 @@ class MainSettings{
     return this;
   }
 
-  static touchRefreshPermit(triggerUid){
-    return Settings.touchRefreshPermit(triggerUid);
+  static touchRefreshPermit(triggerUid,extra){
+    return Settings.touchRefreshPermit(triggerUid,extra);
   }
 
   static getRefreshPermit() {
