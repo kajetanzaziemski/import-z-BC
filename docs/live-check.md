@@ -146,6 +146,10 @@ Every platform entry goes through `Controller.run` now (`docs/controller.md`): `
 `applyRefreshSettings()` (action `requestApplyRefreshSettings`) sets the time trigger up from the settings sheet, like editing the frequency; the job `settings.refreshApply` is judged by the same check as `settings.refreshFrequency`
 (`lcVerifyRefreshTrigger_`: the trigger of the previous permit is gone, a new `autoRefreshHandler` trigger exists for the new permit, the interval matches the sheet). `getAutoRefreshInfo()` (the 2 s poll) is not a checked entry point.
 
+## Trigger lists (hash of `Live Check Verifiers.js` re-pinned)
+In a sidebar call `ScriptApp.getProjectTriggers()` was seen to return 8 triggers and, two seconds later, 2 of them. The refresh-trigger checks (`lcVerifyRefreshTrigger_`, scheduled / retired refresh) therefore take the union of three looks
+(`lcTriggersSeen_`): a deleted trigger shows in none, so "is gone" is as safe as before, and "stays installed" no longer fails on one incomplete list. The agent checks (`lcProjectIds`-style comparisons) are unchanged.
+
 ## Quiet jobs
 `sheet.ignored`, `change.ignored` and `change.own` (`LIVE_CHECK_QUIET_JOBS`, `Live Check.js`) only look at an event and do nothing; they were most of the report. While they **pass** (or skip) nothing is logged, stored or shown, and their "running" placeholder
 is removed at once. One that fails or warns (an edit in a config sheet wrongly ignored) is recorded and shown like any other run. `settings.edit` and `agent.skipped` also do nothing but are still reported.

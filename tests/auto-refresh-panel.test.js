@@ -136,6 +136,16 @@ module.exports = function register(t) {
     assert.strictEqual(sc.stored().refreshPermit.intervalHours, 48);
   });
 
+  test('panel: the settings sheet is read at most once in 5 seconds (a Sheets API request per poll would use up the per-minute quota); the button forgets the reading', () => {
+    const sc = scenario({ sheet: { freq: { freq: 1, unit: 'days' } } });
+    sc.ex.eval(`globalThis.__reads = 0; { const g = getMainSettings; getMainSettings = () => { __reads++; return g(); }; }`);
+    sc.info(); sc.info(); sc.info();
+    assert.strictEqual(sc.ex.eval(`__reads`), 1);
+    sc.ex.eval(`applyRefreshSettings()`);
+    sc.info();
+    assert.strictEqual(sc.ex.eval(`__reads`), 3, 'the button reads once to set up, the panel once more after it');
+  });
+
   test('panel: reading it never writes (no permit saved, no trigger changed)', () => {
     const sc = scenario({ permit: permit(), triggers: ['t1'], sheet: { freq: { freq: 2, unit: 'days' } } });
     const before = JSON.stringify([sc.p.props.document, sc.p.triggers]);

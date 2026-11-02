@@ -175,7 +175,7 @@ class SimBook {
       if (pattern !== 'Z') throw new Error('SimBook: formatDate supports only "Z"');
       const m = offsetMinutes(date, tz);
       return (m < 0 ? '-' : '+') + ('0' + Math.floor(Math.abs(m) / 60)).slice(-2) + ('0' + Math.abs(m) % 60).slice(-2);
-    } };
+    }, sleep: () => {} };
     this.Sheets = { Spreadsheets: {
       get: (id, o) => book.apiGet(o),
       batchUpdate: (b, id) => { book.requests.push(b.requests); book.apply(b.requests); },

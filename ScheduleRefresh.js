@@ -263,14 +263,24 @@ const ScheduleRefresh = {
   removeRefreshTrigger_(triggerUid){
     if(!triggerUid) return;
     try{ if(Store.cache.get("document","refreshTriggerSeen") === triggerUid) Store.cache.remove("document","refreshTriggerSeen"); }catch(err){}
-    ScriptApp.getProjectTriggers()
+    ScheduleRefresh.triggersSeen_()
       .filter(t => t.getUniqueId() === triggerUid && ["autoRefresh","autoRefreshHandler"].includes(t.getHandlerFunction()))
       .forEach(t => ScriptApp.deleteTrigger(t));
   },
 
+  /** The project triggers as seen in up to three looks (union by id): one list may be incomplete (see isInstalled_), a trigger that is gone shows in none. */
+  triggersSeen_(){
+    const seen = new Map();
+    for(let i = 0; i < 3; i++){
+      if(i) Utilities.sleep(200);
+      ScriptApp.getProjectTriggers().forEach(t => seen.set(t.getUniqueId(),t));
+    }
+    return [...seen.values()];
+  },
+
   /** Deletes the project trigger with this id (a time trigger removes itself this way). */
   removeTrigger(triggerUid){
-    ScriptApp.getProjectTriggers()
+    ScheduleRefresh.triggersSeen_()
       .filter(t => t.getUniqueId() === triggerUid)
       .forEach(t => ScriptApp.deleteTrigger(t));
   }

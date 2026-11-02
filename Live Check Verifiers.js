@@ -408,12 +408,25 @@ function lcPreviousPermit_(c){
 }
 
 /**
+ * The project triggers, as seen in up to three looks (the union by id). In a sidebar call the list was seen to be incomplete from one look to the next (8 triggers,
+ * then 2 of them), so one look cannot prove that a trigger is gone; a trigger that was deleted shows in no look, so the union is safe for "is it gone" as well.
+ */
+function lcTriggersSeen_(){
+  const seen = new Map();
+  for(let i = 0; i < 3; i++){
+    if(i) Utilities.sleep(200);
+    ScriptApp.getProjectTriggers().forEach(t => seen.set(t.getUniqueId(),t));
+  }
+  return [...seen.values()];
+}
+
+/**
  * The time trigger after the refresh frequency was edited. A time trigger is not bound to a document, so only the trigger THIS document's permit names
  * is replaced; other refresh triggers (other documents', or this document's old / legacy ones, which delete themselves when they fire) may be around.
  */
 function lcVerifyRefreshTrigger_(c,settings){
   c.attempt("refresh trigger matches the settings sheet",() => {
-    const timers = ScriptApp.getProjectTriggers().filter(t => ["autoRefresh","autoRefreshHandler"].includes(t.getHandlerFunction()));
+    const timers = lcTriggersSeen_().filter(t => ["autoRefresh","autoRefreshHandler"].includes(t.getHandlerFunction()));
     const permit = c.settings().refreshPermit;
     const previous = lcPreviousPermit_(c);
     if(previous && previous.issuedFor) c.expect("the trigger the previous permit named is gone",!timers.some(t => t.getUniqueId() === previous.issuedFor),`${previous.issuedFor} is still installed`);
@@ -1047,7 +1060,7 @@ function lcRefreshTriggerHoldsPermit_(c){
 /** A time trigger with the permit: it stays, the permit records the run, the settings sheet shows the time and the ticked sheets were refreshed. */
 function lcVerifyScheduledRefresh_(c){
   const uid = c.input.e.triggerUid;
-  const triggerStillThere = ScriptApp.getProjectTriggers().some(t => t.getUniqueId() === uid);
+  const triggerStillThere = lcTriggersSeen_().some(t => t.getUniqueId() === uid);
   const settings = c.now("settingsSheet");
   c.expect("permitted trigger stays installed",triggerStillThere,"trigger removed itself");
   if(c.error) return;
@@ -1068,7 +1081,7 @@ function lcVerifyScheduledRefresh_(c){
 /** A time trigger without the permit: it deleted itself and left everything else as it was. */
 function lcVerifyRetiredRefresh_(c){
   const uid = c.input.e.triggerUid;
-  const triggerStillThere = ScriptApp.getProjectTriggers().some(t => t.getUniqueId() === uid);
+  const triggerStillThere = lcTriggersSeen_().some(t => t.getUniqueId() === uid);
   const settings = c.now("settingsSheet");
   c.expect("trigger without a permit removed itself",!triggerStillThere,"trigger is still installed");
   c.unchanged("sheets","nothing refreshed");

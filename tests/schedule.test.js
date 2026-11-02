@@ -484,6 +484,14 @@ module.exports = function register(t) {
     assert.strictEqual(active(sc), false);
   });
 
+  test('schedule: replacing the old trigger finds it even when one look at the trigger list does not show it', () => {
+    const sc = scenario({ settings: PERMIT('old') });
+    sc.p.triggers.push(NAMED('old'));
+    sc.ex.eval(`{ const real = ScriptApp.getProjectTriggers; let i = 0; ScriptApp.getProjectTriggers = () => (i++ == 0 ? [] : real()); }`);
+    sc.settingsSheet({ freq: 2, unit: 'days' }).setRefreshTrigger();
+    assert.deepStrictEqual(triggers(sc.p).map(x => x.id), ['trig-1']);
+  });
+
   test('schedule: apply -> a failure reports the state that is really there (current)', () => {
     const sc = applyScenario({ settings: PERMIT('old') });
     sc.ex.eval(`__ss.getRefreshFrequency = () => null`);

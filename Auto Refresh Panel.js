@@ -12,6 +12,8 @@
 // docs/controller.md). The button calls applyRefreshSettings(), which is an ordinary run.
 // ---------------------------------------------------------------------------
 
+const SHEET_READING_SECONDS = 5;
+
 const AutoRefreshPanel = {
   info(now = new Date()){
     const tz = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone();
@@ -52,9 +54,7 @@ const AutoRefreshPanel = {
     try{
       const name = MainSettings.getSettingsSheetName();
       if(!name || !SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name)) return {available: false};
-      const settings = getMainSettings();
-      const frequency = settings.getRefreshFrequency();
-      const at = settings.getRefreshStartAt();
+      const {frequency, at} = AutoRefreshPanel.sheetReading_();
       const atText = at ? `${at.hour}:${String(at.minute).padStart(2,"0")}` : null;
       if(!frequency?.freq || (frequency.unit != "days" && frequency.unit != "hrs")){
         return {available: true, off: true, differs: !!current?.active};
@@ -74,8 +74,24 @@ const AutoRefreshPanel = {
     }
   },
 
+  /**
+   * The frequency and the time of day as the settings sheet has them now. Reading the sheet is a Sheets API request; polled every 2 s that would be 30 a minute
+   * per open sidebar against a quota of 60 reads a minute per user, so the reading is kept for 5 seconds (the cache) and the button forgets it.
+   */
+  sheetReading_(){
+    try{
+      const cached = Store.cache.get("document","refreshPanelSheet");
+      if(cached) return JSON.parse(cached);
+    }catch(err){}
+    const settings = getMainSettings();
+    const reading = {frequency: settings.getRefreshFrequency(), at: settings.getRefreshStartAt()};
+    try{ Store.cache.set("document","refreshPanelSheet",JSON.stringify(reading),SHEET_READING_SECONDS); }catch(err){}
+    return reading;
+  },
+
   /** The button: the same as editing the frequency in the settings sheet (job settings.refreshApply for the live check). */
   apply(){
+    try{ Store.cache.remove("document","refreshPanelSheet"); }catch(err){}
     Controller.intent("settings.refreshApply",{sheet: null, changeType: null});
     getMainSettings().setRefreshTrigger();
   }
