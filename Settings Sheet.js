@@ -1,5 +1,9 @@
 // The settings sheet of the add-on: which config sheets exist (and which refresh automatically), when the last refresh was and how often
 // to refresh. It does not touch the spreadsheet itself: the cells are read and written through SettingsGrid (Settings Grid.js).
+const TIME_ZONE_EDIT_MESSAGE = "Godzina odświeżania jest ustawiana wg. strefy czasowej dokumentu, więc tej wartości nie można zmienić tutaj (przywrócono poprzednią).\n\n" +
+  "Aby zmienić strefę czasową dokumentu wejdź w: Plik -> Ustawienia -> Ogólne -> Strefa czasowa.\n" +
+  "Potem zapisz ponownie godzinę lub częstotliwość odświeżania, żeby nowa strefa zaczęła obowiązywać.";
+
 class SettingsSheet{
   constructor(){
     if(!MainSettings.getSettingsSheetName()) MainSettings.setSettingsSheetName();
@@ -29,6 +33,20 @@ class SettingsSheet{
   /** Is the edited range (part of) the refresh frequency: its number (column D) or its unit (column E)? */
   isRefreshFrequencyCell(range){
     return isInRange(this.refreshFrequencyPos,4,range) || isInRange(this.refreshFrequencyPos,5,range) || isInRange(this.refreshTimePos,4,range);
+  }
+
+  /** Is the edited range (part of) the time zone label: column E of the refreshTime line? */
+  isRefreshTimeZoneCell(range){
+    return isInRange(this.refreshTimePos,5,range);
+  }
+
+  /**
+   * The label is information only: the time of day is set in the time zone of the document, whatever stands there. An edit is undone (to what the cell held,
+   * else to the zone as it is now) and one dialog tells where the zone is changed.
+   */
+  rejectTimeZoneEdit(previous){
+    this.grid.restoreTimeZoneLabel(typeof previous == "string" && previous != "" ? previous : null);
+    Controller.registerClosingOnce(() => alertMessage(TIME_ZONE_EDIT_MESSAGE),"userAlertTimeZone");
   }
 
   sheetEdit(e){

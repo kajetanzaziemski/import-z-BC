@@ -27,7 +27,7 @@ module.exports = function register(t) {
       return {
         getConfigSheetNames: () => __cfg.configSheets.slice(),
         isConfigSheet: name => __cfg.configSheets.includes(name),
-        isRefreshFrequencyCell: () => !!__cfg.freqCell,
+        isRefreshFrequencyCell: () => !!__cfg.freqCell, isRefreshTimeZoneCell: () => false,
         setRefreshTrigger: () => __log.push(['setRefreshTrigger'])
       };
     };`;

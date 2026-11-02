@@ -122,6 +122,7 @@ const SettingsGrid = {
    *   addLastRefreshRow()           a lastRefresh line after the last row; returns its row number
    *   writeLastRefresh(row, time)   time into D, the time zone's name into E
    *   refreshTime()                 {hour, minute, timeZone} from the refreshTime line (D): "17:30", "5:30 PM", a time value; null when empty, not a time or no such line
+   *   restoreTimeZoneLabel(previous)  the zone label (E of refreshTime) back to `previous`, or to the zone as it is now when that is null
    *   writeRefreshMessage(report)   the refreshStatus line (C:E merged): green when the refresh was set up, red when not (see ScheduleRefresh.apply);
    *                                 the refreshTime and refreshStatus lines are added after the refreshFrequency line when the sheet has none
    *   addConfigRow(after, config, result, refresh)   a configSheet line after row `after`, E a checkbox; returns its row number
@@ -165,6 +166,12 @@ const SettingsGrid = {
         const row = keyRow("refreshTime");
         const at = row ? SettingsGrid.parseTime(grid.getRange(row, L.valueCol).getValue(), grid.getTimeZone()) : null;
         return at && { hour: at.hour, minute: at.minute, timeZone: grid.getTimeZone() };      // the time is in the spreadsheet's time zone
+      },
+      restoreTimeZoneLabel(previous) {
+        const row = keyRow("refreshTime");
+        if (!row) return;
+        grid.getRange(row, L.unitCol).setValue(previous ?? SettingsGrid.offsetName(new Date(), grid.getTimeZone()));
+        save();
       },
       writeRefreshMessage(report) {
         const style = L.messageStyle[report.off ? "off" : report.ok ? "ok" : "fail"];

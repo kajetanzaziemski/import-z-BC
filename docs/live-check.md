@@ -150,6 +150,9 @@ Every platform entry goes through `Controller.run` now (`docs/controller.md`): `
 In a sidebar call `ScriptApp.getProjectTriggers()` was seen to return 8 triggers and, two seconds later, 2 of them. The refresh-trigger checks (`lcVerifyRefreshTrigger_`, scheduled / retired refresh) therefore take the union of three looks
 (`lcTriggersSeen_`): a deleted trigger shows in none, so "is gone" is as safe as before, and "stays installed" no longer fails on one incomplete list. The agent checks (`lcProjectIds`-style comparisons) are unchanged.
 
+## Job `settings.timeZoneCell` (hashes re-pinned)
+An edit of the zone label (E of the `refreshTime` line) is undone and answered with a dialog. The verifier reads the label back (`lcReadSettingsSheet_` gives `timeZoneLabel`): it has to be a `UTC+N` label again, and the permit / triggers are untouched.
+
 ## Quiet jobs
 `sheet.ignored`, `change.ignored` and `change.own` (`LIVE_CHECK_QUIET_JOBS`, `Live Check.js`) only look at an event and do nothing; they were most of the report. While they **pass** (or skip) nothing is logged, stored or shown, and their "running" placeholder
 is removed at once. One that fails or warns (an edit in a config sheet wrongly ignored) is recorded and shown like any other run. `settings.edit` and `agent.skipped` also do nothing but are still reported.

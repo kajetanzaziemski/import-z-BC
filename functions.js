@@ -1,3 +1,8 @@
+/** A dialog with a message in the active spreadsheet. */
+function alertMessage(message){
+  SpreadsheetApp.getUi().alert(message);
+}
+
 /** A toast in the active spreadsheet (10 s). */
 function toastMessage(message,title){
   SpreadsheetApp.getActiveSpreadsheet().toast(message,title ?? "Import z BC",10);

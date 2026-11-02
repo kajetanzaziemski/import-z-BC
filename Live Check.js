@@ -512,6 +512,7 @@ const LIVE_CHECK_INTENTS = [
   {intent: "config.coedit",              text: "a config sheet was edited or changed: its query lines and dropdowns (with notes) are completed"},
   {intent: "settings.refreshFrequency",  text: "the refresh frequency in the settings sheet was edited: the time trigger and its permit are set up"},
   {intent: "settings.refreshApply",      text: "the sidebar button set the time trigger up from the refresh settings in the settings sheet: the trigger and its permit are set up"},
+  {intent: "settings.timeZoneCell",      text: "the time zone label of the refresh time was edited: the edit is undone and a dialog says the zone is the document's"},
   {intent: "settings.edit",              text: "another edit in the settings sheet: nothing to do"},
   {intent: "sheet.ignored",              text: "an edit or change in a sheet the add-on does not manage: nothing to do"},
   {intent: "change.ignored",             text: "a change of type EDIT or FORMAT (the cells are handled by the edit trigger): nothing to do"},

@@ -74,7 +74,7 @@ function lcDocTriggers_(){
 
 /** The settings sheet as the add-on lays it out: B..E of every row, labels in column B. */
 function lcReadSettingsSheet_(){
-  const out = {name: null, exists: false, b2: null, configs: [], lastRefreshRow: null, lastRefresh: null, lastRefreshTz: null, freqRow: null, freq: null, unit: null, timeRow: null};
+  const out = {name: null, exists: false, b2: null, configs: [], lastRefreshRow: null, lastRefresh: null, lastRefreshTz: null, freqRow: null, freq: null, unit: null, timeRow: null, timeZoneLabel: null};
   out.name = lcImportSettings_().importSheetName ?? null;
   if(!out.name) return out;
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(out.name);
@@ -90,7 +90,7 @@ function lcReadSettingsSheet_(){
       case "configSheet": out.configs.push({row: r, config: row[1], result: row[2], refresh: row[3]}); break;
       case "lastRefresh": out.lastRefreshRow = r; out.lastRefresh = row[2]; out.lastRefreshTz = row[3]; break;
       case "refreshFrequency": out.freqRow = r; out.freq = row[2]; out.unit = row[3]; break;
-      case "refreshTime": out.timeRow = r; break;
+      case "refreshTime": out.timeRow = r; out.timeZoneLabel = row[3]; break;
     }
   });
   return out;
@@ -997,6 +997,15 @@ function lcJobVerifiers_(){
     "settings.refreshApply": {
       verify(c){
         lcVerifyRefreshTrigger_(c,c.now("settingsSheet"));
+      }
+    },
+
+    "settings.timeZoneCell": {
+      verify(c){
+        if(lcSkipUnpoweredChange_(c)) return;
+        const settings = c.now("settingsSheet");
+        c.expect("the time zone label is back to a UTC label",/^UTC[+-]\d/.test(String(settings.timeZoneLabel)),`the cell holds ${JSON.stringify(settings.timeZoneLabel)}`);
+        c.unchanged("docProps","the permit and the trigger are untouched",["docTriggerArray","agentSuspect"].concat(lcParallelCoeditFlags_(c)));
       }
     },
 

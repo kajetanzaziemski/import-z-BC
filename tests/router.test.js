@@ -32,7 +32,7 @@ const FAKES = `
     return {
       getConfigSheetNames: () => __cfg.configSheets.slice(),
       isConfigSheet: name => __cfg.configSheets.includes(name),
-      isRefreshFrequencyCell: range => !!__cfg.freqCell,
+      isRefreshFrequencyCell: range => !!__cfg.freqCell, isRefreshTimeZoneCell: range => !!__cfg.tzCell, rejectTimeZoneEdit: old => __log.push(['rejectTimeZoneEdit', old]),
       sheetEdit: e => { if (__cfg.freqCell) __log.push(['setRefreshTrigger']); },
       setRefreshTrigger: () => __log.push(['setRefreshTrigger'])
     };
@@ -87,6 +87,16 @@ module.exports = function register(t) {
     const sc = scenario({ active: 'Ustawienia', freqCell: true });
     sc.edit();
     assert.deepStrictEqual(sc.calls(), [['setRefreshTrigger']]);
+  });
+
+  test('edit: in the settings sheet on the time zone label -> the job settings.timeZoneCell hands the old value to the settings sheet; a frequency edit wins over it', () => {
+    const sc = scenario({ active: 'Ustawienia', tzCell: true });
+    sc.event.oldValue = 'UTC+1';
+    sc.edit();
+    assert.deepStrictEqual(sc.calls(), [['rejectTimeZoneEdit', 'UTC+1']]);
+    const both = scenario({ active: 'Ustawienia', tzCell: true, freqCell: true });
+    both.edit();
+    assert.deepStrictEqual(both.calls(), [['setRefreshTrigger']]);
   });
 
   test('edit: in the settings sheet anywhere else -> nothing happens', () => {
@@ -186,7 +196,7 @@ module.exports = function register(t) {
 
   test('edit: a refresh frequency edit leaves the permit of the new time trigger in the store (bugs-fixed #1: it used to be lost)', () => {
     const sc = scenario({ active: 'Ustawienia', freqCell: true });
-    sc.ex.eval(`getMainSettings = () => ({ getConfigSheetNames: () => [], isConfigSheet: () => false, isRefreshFrequencyCell: () => true,
+    sc.ex.eval(`getMainSettings = () => ({ getConfigSheetNames: () => [], isConfigSheet: () => false, isRefreshFrequencyCell: () => true, isRefreshTimeZoneCell: () => false,
       setRefreshTrigger: () => ScheduleRefresh.setUp({ freq: 6, unit: 'hrs' }) })`);
     sc.edit();
     const stored = JSON.parse(sc.p.props.document.importSettingsArray);

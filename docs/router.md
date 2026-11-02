@@ -18,6 +18,7 @@ sheet it does nothing. The live check used to report all of these as `sheetEditA
 |---|---|---|
 | `config.coedit` | an edit, or a structure change (row/column/sheet added or removed ...), while a **config sheet** is the active sheet | `AnalyseConfig.run`: query lines and dropdowns completed, notes set, reading cell lit meanwhile |
 | `settings.refreshFrequency` | an edit of the refresh frequency (number or unit) in the settings sheet | `getMainSettings().setRefreshTrigger()` -> `ScheduleRefresh.setUp`: time trigger + permit |
+| `settings.timeZoneCell` | an edit of E of the `refreshTime` line (the zone label; the zone is the document's) | `getMainSettings().rejectTimeZoneEdit(old value)`: the cell is put back, one dialog (closing action) says where the zone is changed |
 | `settings.edit` | any other edit in the settings sheet | nothing |
 | `sheet.ignored` | an edit / change while any other sheet is active | nothing |
 | `change.ignored` | a change of type `EDIT` or `FORMAT` (the cells are handled by the edit trigger) | nothing |

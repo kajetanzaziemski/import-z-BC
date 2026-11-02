@@ -195,6 +195,26 @@ module.exports = function register(t) {
     assert.strictEqual(fresh.book.sheets['Ustawienia'].cells['7,5'].v, 'UTC+9', 'a new sheet names the zone from the start');
   }));
 
+  MODES.forEach(mode => test('an edit of the time zone label (E of refreshTime) is undone - to the old value, else to the zone as it is now - and one dialog tells where the zone is changed [' + mode + ']', () => {
+    const s = scope(mode);
+    s.run(`globalThis.__ss = new SettingsSheet(); globalThis.__closing = []; Controller = { registerClosingOnce: (fn, flag) => __closing.push(flag), intent() {} }; globalThis.alertMessage = m => __alerts.push(m); globalThis.__alerts = [];`);
+    const sh = s.book.sheets['Ustawienia'];
+    const label = () => sh.cells['7,5'].v;
+    assert.strictEqual(label(), 'UTC+9');
+    assert.strictEqual(s.run(`__ss.isRefreshTimeZoneCell({ getRow: () => 7, getLastRow: () => 7, getColumn: () => 5, getLastColumn: () => 5 })`), true);
+    assert.strictEqual(s.run(`__ss.isRefreshTimeZoneCell({ getRow: () => 7, getLastRow: () => 7, getColumn: () => 4, getLastColumn: () => 4 })`), false, 'D is the time of day');
+    sh.cells['7,5'].v = 'UTC+5';
+    s.run(`__ss.rejectTimeZoneEdit('UTC+9')`);
+    assert.strictEqual(label(), 'UTC+9', 'the old value');
+    sh.cells['7,5'].v = '';
+    s.run(`__ss.rejectTimeZoneEdit(undefined)`);
+    assert.strictEqual(label(), 'UTC+9', 'the zone as it is now when nothing is known');
+    assert.deepStrictEqual(plain(s.run(`__closing`)), ['userAlertTimeZone', 'userAlertTimeZone']);
+    s.run(`alertMessage(TIME_ZONE_EDIT_MESSAGE)`);
+    const text = plain(s.run(`__alerts[0]`));
+    assert.ok(/strefy czasowej dokumentu/.test(text) && /Plik -> Ustawienia -> Ogólne -> Strefa czasowa/.test(text), text);
+  }));
+
   MODES.forEach(mode => test('row 3 is where the config list starts: the first config line takes it and the general settings lines (and the message) move down, found by key [' + mode + ']', () => {
     const s = scope(mode);
     s.run(`globalThis.__ss = new SettingsSheet(); __ss.addNewSheetInfo('N', 'Dane N', true)`);

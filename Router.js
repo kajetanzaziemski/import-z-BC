@@ -7,6 +7,7 @@
 //   intent                        when                                                       does
 //   config.coedit                 an edit / structure change while a config sheet is active  AnalyseConfig: lines and dropdowns completed
 //   settings.refreshFrequency     an edit of the refresh frequency in the settings sheet     ScheduleRefresh: the time trigger is set
+//   settings.timeZoneCell         an edit of the time zone label (E of the refreshTime line)  SettingsSheet: the edit is undone, a dialog explains (the zone is the document's)
 //   settings.edit                 any other edit in the settings sheet                       nothing
 //   sheet.ignored                 an edit / change in any other sheet                        nothing
 //   change.ignored                a change of type EDIT or FORMAT                            nothing
@@ -25,6 +26,7 @@ const ROUTE_ACTIONS_ = {
     dbgLog("refreshFreqency data editted. Setting new time trigger.");
     getMainSettings().setRefreshTrigger();
   },
+  "settings.timeZoneCell": route => getMainSettings().rejectTimeZoneEdit(route.event.oldValue),
   "settings.edit": () => {},
   "sheet.ignored": () => {},
   "change.ignored": () => {},
@@ -38,7 +40,9 @@ const Router = {
     if(sheet == MainSettings.getSettingsSheetName()){
       const settings = getMainSettings();      // the list of config sheets may have changed with this edit: the cache is replaced
       ManagedSheets.store(settings);
-      return {intent: settings.isRefreshFrequencyCell(e.range) ? "settings.refreshFrequency" : "settings.edit", sheet: sheet, event: e};
+      // an edit that also covers the frequency or the time of day is a frequency edit (setting the trigger up writes the zone label back too)
+      const intent = settings.isRefreshFrequencyCell(e.range) ? "settings.refreshFrequency" : settings.isRefreshTimeZoneCell(e.range) ? "settings.timeZoneCell" : "settings.edit";
+      return {intent: intent, sheet: sheet, event: e};
     }
     return {intent: ManagedSheets.isConfigSheet(sheet) ? "config.coedit" : "sheet.ignored", sheet: sheet, event: e};
   },

@@ -434,7 +434,7 @@ module.exports = function register(t) {
     ex.eval(`Agents.ensureActive = () => {};
       globalThis.CCTImportConfig = class { constructor(v) { this.v = v; } };
       SheetCoeditor.prototype.sheetEdit = function () {};
-      getMainSettings = () => ({ getConfigSheetNames: () => ['Konfiguracja 1'], isConfigSheet: n => n === 'Konfiguracja 1', isRefreshFrequencyCell: r => isInRange(4, 4, r) || isInRange(4, 5, r),
+      getMainSettings = () => ({ getConfigSheetNames: () => ['Konfiguracja 1'], isConfigSheet: n => n === 'Konfiguracja 1', isRefreshFrequencyCell: r => isInRange(4, 4, r) || isInRange(4, 5, r), isRefreshTimeZoneCell: () => false,
         setRefreshTrigger: () => ScheduleRefresh.setUp({ freq: 6, unit: 'hrs' }), getSheetListWithRefreshTrue: () => [], setLastRefresh: () => {} });`);
     ex.eval(`new SheetCoeditor('Konfiguracja 1', false)`);
     if (!o.ownWrite) delete p.cache.document.ownWrite;          // (setting the harness up wrote to the sheet and noted it; the event under test is a user's unless the test says otherwise)
