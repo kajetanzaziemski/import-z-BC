@@ -12,6 +12,8 @@
 // Known quirks kept: without a frequency line (null) it fails with a TypeError (nothing was changed before it, since the set-up checks first); the first legacy run records no lastRun (the permit it just issued is not stored yet when it is touched).
 // ---------------------------------------------------------------------------
 
+const REFRESH_TRIGGER_SEEN_SECONDS = 120;
+
 const ScheduleRefresh = {
   /**
    * @param frequency {{freq: number, unit: "hrs"|"days"|null}} As SettingsSheet.getRefreshFrequency() returns it.
@@ -124,6 +126,25 @@ const ScheduleRefresh = {
     ScheduleRefresh.report_(settings,{ok:true,off:!result,when:new Date(),frequency:settings.getRefreshFrequency(),next:result?.nextRefresh ?? null});
   },
 
+  /**
+   * Is the refresh trigger with this id installed (for this user)? The list ScriptApp.getProjectTriggers() gives is NOT reliable in a sidebar call: polled every
+   * two seconds it was seen to return all eight triggers of the user and, the next time, only two of them (the permit's trigger missing). So: up to three looks,
+   * a short pause between them; and a trigger that was seen within the last two minutes still counts (the sighting is kept in the cache, renewed by every look
+   * that finds it, and forgotten when the add-on removes the trigger itself). A trigger deleted by hand therefore shows as gone up to two minutes late.
+   */
+  isInstalled_(triggerUid){
+    if(!triggerUid) return false;
+    for(let i = 0; i < 3; i++){
+      if(i) Utilities.sleep(200);
+      const found = ScriptApp.getProjectTriggers().some(t => t.getUniqueId() === triggerUid && ["autoRefresh","autoRefreshHandler"].includes(t.getHandlerFunction()));
+      if(found){
+        try{ Store.cache.set("document","refreshTriggerSeen",triggerUid,REFRESH_TRIGGER_SEEN_SECONDS); }catch(err){ dbgLog(`Sighting not cached: ${err}`); }
+        return true;
+      }
+    }
+    try{ return Store.cache.get("document","refreshTriggerSeen") === triggerUid; }catch(err){ return false; }
+  },
+
   /** What current() looked at, as plain data (the sidebar shows it under "Szczegóły techniczne": a state that flips between two polls can be told apart there). */
   explain(now = new Date()){
     try{
@@ -131,7 +152,7 @@ const ScheduleRefresh = {
       const triggers = ScriptApp.getProjectTriggers().filter(t => ["autoRefresh","autoRefreshHandler"].includes(t.getHandlerFunction())).map(t => t.getUniqueId());
       return {permitFor: permit?.issuedFor ?? null, off: !!permit?.off, issuedByMe: !!permit?.issuedBy && permit.issuedBy === ScheduleRefresh.ownerToken_(false),
               hasToken: !!permit?.issuedBy, intervalHours: permit?.intervalHours ?? null, lastRun: permit?.lastRun ?? null, triggers: triggers,
-              named: !!permit?.issuedFor && triggers.includes(permit.issuedFor), at: now.toISOString()};
+              named: !!permit?.issuedFor && triggers.includes(permit.issuedFor), seenRecently: Store.cache.get("document","refreshTriggerSeen") === (permit?.issuedFor ?? null), at: now.toISOString()};
     }catch(err){
       return {error: String(err && err.message || err)};
     }
@@ -156,7 +177,7 @@ const ScheduleRefresh = {
       const hours = permit.intervalHours, days = hours % 24 === 0;
       const step = hours * 3600000;
       if(permit.off) return {active:false};
-      const exists = ScriptApp.getProjectTriggers().some(t => t.getUniqueId() === permit.issuedFor && ["autoRefresh","autoRefreshHandler"].includes(t.getHandlerFunction()));
+      const exists = ScheduleRefresh.isInstalled_(permit.issuedFor);
       // The trigger is not among this user's. If this user issued the permit, it was deleted (by hand, in the trigger editor): nothing is set.
       if(!exists && permit.issuedBy && permit.issuedBy === ScheduleRefresh.ownerToken_(false)) return {active:false};
       // getProjectTriggers() lists the triggers of the current user only. A permit that names a trigger which is not there but was used lately (within
@@ -241,6 +262,7 @@ const ScheduleRefresh = {
   /** Deletes the refresh trigger (current or legacy handler) with this id, if there is one. Any other trigger with that id (an agent) is left alone. */
   removeRefreshTrigger_(triggerUid){
     if(!triggerUid) return;
+    try{ if(Store.cache.get("document","refreshTriggerSeen") === triggerUid) Store.cache.remove("document","refreshTriggerSeen"); }catch(err){}
     ScriptApp.getProjectTriggers()
       .filter(t => t.getUniqueId() === triggerUid && ["autoRefresh","autoRefreshHandler"].includes(t.getHandlerFunction()))
       .forEach(t => ScriptApp.deleteTrigger(t));

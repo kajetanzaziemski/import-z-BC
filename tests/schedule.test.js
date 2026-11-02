@@ -455,6 +455,35 @@ module.exports = function register(t) {
     assert.deepStrictEqual(cur(scenario()), { active: false });
   });
 
+  test('schedule: the trigger list of a sidebar call is not reliable - an incomplete list on one look, or on all looks within two minutes of a sighting, does not make a trigger "gone"', () => {
+    const now = Date.UTC(2026, 10, 2, 15, 0, 0);
+    const mk = () => {
+      const sc = scenario({ settings: { refreshPermit: { issuedFor: 't1', issuedBy: 'me', lastRefresh: now, intervalHours: 120 } } });
+      sc.p.props.user.refreshOwnerToken = 'me';
+      sc.p.triggers.push(NAMED('t1'), NAMED('x'));
+      return sc;
+    };
+    const lists = (sc, seq) => sc.ex.eval(`{ const real = ScriptApp.getProjectTriggers; let i = 0; const seq = ${JSON.stringify(seq)}; globalThis.__calls = 0;
+      ScriptApp.getProjectTriggers = () => { __calls++; const all = real(); const keep = seq[Math.min(i++, seq.length - 1)]; return keep === null ? all : all.filter(t => keep.includes(t.getUniqueId())); }; }`);
+    const active = sc => sc.ex.eval(`ScheduleRefresh.current(new Date(${now})).active`);
+    // one incomplete list, then a complete one: found on the second look
+    let sc = mk(); lists(sc, [['x'], null]);
+    assert.strictEqual(active(sc), true);
+    assert.strictEqual(sc.ex.eval(`__calls`), 2);
+    // complete lists keep the sighting; later every list lacks the trigger -> still there (seen a moment ago)
+    sc = mk(); lists(sc, [null]); assert.strictEqual(active(sc), true);
+    sc.ex.eval(`ScriptApp.getProjectTriggers = () => []`);
+    assert.strictEqual(active(sc), true, 'seen within the last two minutes');
+    // never seen, lists lack it: gone (the permit is this user\'s, so the trigger was deleted)
+    sc = mk(); lists(sc, [['x']]); assert.strictEqual(active(sc), false);
+    assert.strictEqual(sc.ex.eval(`__calls`), 3, 'three looks before giving up');
+    // the sighting is forgotten when the add-on removes the trigger itself
+    sc = mk(); lists(sc, [null]); active(sc);
+    sc.ex.eval(`ScheduleRefresh.removeRefreshTrigger_('t1')`);
+    sc.ex.eval(`ScriptApp.getProjectTriggers = () => []`);
+    assert.strictEqual(active(sc), false);
+  });
+
   test('schedule: apply -> a failure reports the state that is really there (current)', () => {
     const sc = applyScenario({ settings: PERMIT('old') });
     sc.ex.eval(`__ss.getRefreshFrequency = () => null`);
