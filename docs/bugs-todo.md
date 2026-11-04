@@ -20,5 +20,5 @@ Only what is **not fixed in the current code**. The fixed ones (#1 to #18 with t
 
 ## Refresh and estimate
 10. **`EstimateSheet` without a table returns early and leaves the reading cell (B2) lit.** Pinned in `tests/refresh.test.js`; the live check reports it as "still showing activity". Fix: switch the cell off before returning.
-11. **Automatic refresh without a frequency.** `ScheduleRefresh.setUp` with no frequency line fails with a `TypeError` (pinned; since the set-up checks first and creates the new trigger before removing the old one, nothing is changed by the failure any more). The first run of a legacy `autoRefresh` trigger records no `lastRun` (the permit it just issued is not stored yet when it is touched).
+11. **Automatic refresh without a frequency.** `ScheduleRefresh.setUp` with no frequency line fails with a `TypeError` (pinned; since the set-up checks the frequency first, nothing is changed by a refused set-up). The first run of a legacy `autoRefresh` trigger records no `lastRun` (the permit it just issued is not stored yet when it is touched).
 12. **`RefreshAll` stops at the first sheet that fails** (the error goes on to the caller; the sheets after it are not refreshed). By design today; listed because a scheduled refresh with one bad sheet refreshes nothing after it.

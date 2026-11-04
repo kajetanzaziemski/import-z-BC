@@ -29,8 +29,9 @@ const ScheduleRefresh = {
     // recognised here; they delete themselves the next time they fire, because the permit is not issued for them.
     const permit = MainSettings.getRefreshPermit();
 
-    // Nothing is touched before the settings are known to be usable (a missing frequency line is a TypeError here, an invalid number an Error): a failed
-    // set-up leaves the trigger and the permit that were there, and the new trigger is created BEFORE the old one is removed for the same reason.
+    // Nothing is touched before the settings are known to be usable (a missing frequency line is a TypeError here, an invalid number an Error): a refused
+    // set-up leaves the trigger and the permit that were there. The old trigger is removed BEFORE the new one is created: an add-on may hold only one
+    // time-based trigger per document and user, and creating a second one first fails with "too many triggers named time-based in this document".
     if(!frequency.freq || (frequency.unit != "days" && frequency.unit != "hrs")){
       // Refresh switched off here. A document that never had a permit gets one for nobody: an old trigger of this document that has not claimed
       // one yet would otherwise claim it when it fires (the legacy handler does) and go on refreshing; with a permit for nobody it deletes itself.
@@ -44,29 +45,58 @@ const ScheduleRefresh = {
     if(typeof interval != "number" || !Number.isInteger(interval) || interval < 1){
       throw new Error(`Nieprawidłowa częstotliwość odświeżania: "${frequency.freq}" (potrzebna liczba całkowita większa od zera).`);
     }
-    let intervalHrs = interval;
-    let trigger = ScriptApp.newTrigger('autoRefreshHandler').timeBased();
-    if(frequency.unit=="days"){
+    const intervalHrs = frequency.unit == "days" ? 24 * interval : interval;
+
+    ScheduleRefresh.removeRefreshTrigger_(permit?.issuedFor);
+    let newTrigger;
+    try{
+      newTrigger = ScheduleRefresh.createTrigger_(frequency.unit, interval, startAt);
+    }catch(err){
+      ScheduleRefresh.restoreAfterFailure_(permit);
+      throw err;
+    }
+    // Issue a permit for this trigger. This will override any other permits, so all old triggers will automatically uninstall.
+    MainSettings.setRefreshPermit(newTrigger.getUniqueId(),intervalHrs);
+    const nextRefresh = ScheduleRefresh.nextRefresh(new Date(), frequency.unit, interval, startAt);
+    const issued = MainSettings.getRefreshPermit();
+    MainSettings.updateRefreshPermit(Object.assign({}, issued, {issuedBy: ScheduleRefresh.ownerToken_(true), nextRefresh: nextRefresh.getTime(), startAt: startAt ? `${startAt.hour}:${String(startAt.minute ?? 0).padStart(2,"0")}` : null, timeZone: startAt?.timeZone ?? null}));
+    // Save the permit now, not when the run closes: writing the status message takes seconds and the sidebar polls the permit meanwhile
+    // (a permit that still names the removed trigger reads as "nothing is set").
+    Settings.store().saveArray();
+    return {nextRefresh, intervalHrs};
+  },
+
+  /** Builds and creates the time trigger: every `interval` days (at the hour of startAt) or hours, near the minute, in the zone of startAt. */
+  createTrigger_(unit, interval, startAt){
+    const trigger = ScriptApp.newTrigger('autoRefreshHandler').timeBased();
+    if(unit == "days"){
       trigger.everyDays(interval);
       if(startAt) trigger.atHour(startAt.hour);
-      intervalHrs = 24 * interval;
     }else{
       trigger.everyHours(interval);
     }
     if(startAt && startAt.minute != null) trigger.nearMinute(startAt.minute);
     if(startAt?.timeZone) trigger.inTimezone(startAt.timeZone);      // else the time zone of the script
+    return trigger.create();
+  },
 
-    let newTrigger = trigger.create();
-    ScheduleRefresh.removeRefreshTrigger_(permit?.issuedFor);
-    // Issue a permit for this trigger. This will override any other permits, so all old triggers will automatically uninstall.
-    MainSettings.setRefreshPermit(newTrigger.getUniqueId(),intervalHrs);
-    const nextRefresh = ScheduleRefresh.nextRefresh(new Date(), frequency.unit, interval, startAt);
-    const issued = MainSettings.getRefreshPermit();
-    MainSettings.updateRefreshPermit(Object.assign({}, issued, {issuedBy: ScheduleRefresh.ownerToken_(true), nextRefresh: nextRefresh.getTime(), startAt: startAt ? `${startAt.hour}:${String(startAt.minute ?? 0).padStart(2,"0")}` : null}));
-    // Save the permit now, not when the run closes: writing the status message takes seconds and the sidebar polls the permit meanwhile
-    // (a permit that still names the removed trigger reads as "nothing is set").
+  /**
+   * The new trigger could not be created after the old one was removed: put back what was there, from what the permit remembers (interval, time of day, zone),
+   * and keep the permit (run record included) with the new id. If even that fails the permit is marked off, so that what is shown is what is true.
+   */
+  restoreAfterFailure_(permit){
+    if(!permit?.issuedFor || !permit.intervalHours || permit.off) return;
+    try{
+      const days = permit.intervalHours % 24 === 0;
+      const m = /^(\d{1,2}):(\d{2})$/.exec(String(permit.startAt ?? ""));
+      const startAt = m ? {hour: +m[1], minute: +m[2], timeZone: permit.timeZone ?? undefined} : null;
+      const restored = ScheduleRefresh.createTrigger_(days ? "days" : "hrs", days ? permit.intervalHours / 24 : permit.intervalHours, startAt);
+      MainSettings.updateRefreshPermit(Object.assign({}, permit, {issuedFor: restored.getUniqueId()}));
+    }catch(err){
+      dbgLog(`The previous refresh trigger could not be put back: ${err}`);
+      MainSettings.updateRefreshPermit(Object.assign({}, permit, {off: true}));
+    }
     Settings.store().saveArray();
-    return {nextRefresh, intervalHrs};
   },
 
   /**

@@ -174,12 +174,34 @@ module.exports = function register(t) {
     assert.deepStrictEqual(triggers(ok.p).map(x => x.params), [{ everyDays: 2 }]);
   });
 
-  test('schedule: a trigger that fails to be created leaves the old one in place (the new one is created before the old is removed)', () => {
+  const FAIL_CREATE = (n = 1) => `{ const n0 = ScriptApp.newTrigger; let left = ${n}; ScriptApp.newTrigger = fn => { const b = n0(fn); const c = b.create; b.create = () => { if (left-- > 0) throw new Error('quota'); return c(); }; return b; }; }`;
+
+  test('schedule: the old trigger is removed BEFORE the new one is created (an add-on may hold one time trigger per document and user: creating first fails with "too many triggers")', () => {
     const sc = scenario({ settings: PERMIT('old') });
     sc.p.triggers.push(NAMED('old'));
-    sc.ex.eval(`{ const n = ScriptApp.newTrigger; ScriptApp.newTrigger = fn => { const b = n(fn); b.create = () => { throw new Error('quota'); }; return b; }; }`);
+    sc.ex.eval(`{ const n0 = ScriptApp.newTrigger; globalThis.__atCreate = null; ScriptApp.newTrigger = fn => { const b = n0(fn); const c = b.create; b.create = () => { __atCreate = ScriptApp.getProjectTriggers().map(t => t.getUniqueId()); return c(); }; return b; }; }`);
+    sc.settingsSheet({ freq: 3, unit: 'hrs' }).setRefreshTrigger();
+    assert.deepStrictEqual(plain(sc.ex.eval(`__atCreate`)), [], 'nothing of the old one was left when the new one was created');
+  });
+
+  test('schedule: the new trigger cannot be created (quota ...): the old one is put back from the permit (same interval, time of day and zone), the permit keeps its run record and names the restored trigger, the error goes on', () => {
+    const sc = scenario({ settings: { refreshPermit: { issuedFor: 'old', issuedBy: 'me', lastRefresh: 1, lastRun: 5, lastSheets: ['R1'], intervalHours: 48, startAt: '17:30', timeZone: 'Europe/Warsaw' } } });
+    sc.p.triggers.push(NAMED('old'));
+    sc.ex.eval(FAIL_CREATE(1));
     assert.throws(() => sc.settingsSheet({ freq: 3, unit: 'hrs' }).setRefreshTrigger(), /quota/);
-    assert.deepStrictEqual(triggers(sc.p).map(x => x.id), ['old']);
+    assert.deepStrictEqual(triggers(sc.p).map(x => [x.id, x.params]), [['trig-1', { everyDays: 2, atHour: 17, nearMinute: 30, inTimezone: 'Europe/Warsaw' }]]);
+    const kept = sc.stored().refreshPermit;
+    assert.deepStrictEqual([kept.issuedFor, kept.lastRun, kept.lastSheets, kept.intervalHours, kept.off], ['trig-1', 5, ['R1'], 48, undefined]);
+  });
+
+  test('schedule: even the old trigger cannot be put back: the permit is marked off (what is shown is what is true) and the error goes on', () => {
+    const sc = scenario({ settings: { refreshPermit: { issuedFor: 'old', issuedBy: 'me', lastRefresh: 1, intervalHours: 6 } } });
+    sc.p.triggers.push(NAMED('old'));
+    sc.ex.eval(FAIL_CREATE(2));
+    assert.throws(() => sc.settingsSheet({ freq: 3, unit: 'hrs' }).setRefreshTrigger(), /quota/);
+    assert.deepStrictEqual(triggers(sc.p), []);
+    assert.strictEqual(sc.stored().refreshPermit.off, true);
+    assert.deepStrictEqual(plain(sc.ex.eval(`ScheduleRefresh.current()`)), { active: false });
   });
 
   test('schedule: switching off marks the kept permit "off": current() says nothing is set, not "another user\'s trigger"', () => {
