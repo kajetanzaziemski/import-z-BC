@@ -255,7 +255,43 @@ const ScheduleRefresh = {
     const started = Date.now();
     RefreshAll.scheduled();
     
-    MainSettings.touchRefreshPermit(e.triggerUid,{lastDurationMs: Date.now() - started, lastSheets: sheets});
+    ScheduleRefresh.finishRun_(e.triggerUid,sheets,started);
+  },
+
+  /**
+   * After a scheduled refresh: the permit records the run (when, how long, which sheets, the next planned run) and the status message in the settings sheet is
+   * written again - the same text as after a settings change, with the next refresh moved on. A refresh that failed never gets here (the message stays).
+   */
+  finishRun_(triggerUid, sheets, started){
+    const extra = {lastDurationMs: Date.now() - started, lastSheets: sheets};
+    const next = ScheduleRefresh.nextAfterRun_(MainSettings.getRefreshPermit(), started);
+    if(next) extra.nextRefresh = next;
+    if(MainSettings.touchRefreshPermit(triggerUid,extra)) ScheduleRefresh.reportScheduled_();
+  },
+
+  /**
+   * The next planned run after the one that started at `started`: the planned time the permit remembers, moved on by whole intervals until it is more than half an
+   * interval after the start (a run may start up to a quarter of an hour off its planned time, and it must not count itself as the next one). 0 when unknown.
+   */
+  nextAfterRun_(permit, started){
+    const step = (permit?.intervalHours || 0) * 3600000;
+    if(!step) return 0;
+    let next = permit.nextRefresh ?? ((permit.lastRun ?? permit.lastRefresh ?? started) + step);
+    const limit = started + step / 2;
+    if(next <= limit) next += Math.ceil((limit - next + 1) / step) * step;
+    return next;
+  },
+
+  /** Writes the status message from the permit (the run must not fail because the message cannot be written: it is only logged). */
+  reportScheduled_(){
+    try{
+      const permit = MainSettings.getRefreshPermit();
+      if(!permit?.intervalHours || permit.off || !permit.nextRefresh) return;
+      const hours = permit.intervalHours, days = hours % 24 === 0;
+      getMainSettings().setRefreshMessage({ok: true, when: new Date(permit.lastRefresh ?? Date.now()), frequency: {freq: days ? hours / 24 : hours, unit: days ? "days" : "hrs"}, next: new Date(permit.nextRefresh)});
+    }catch(err){
+      dbgLog(`Status message not updated after the scheduled refresh: ${err}`);
+    }
   },
 
   /** The result sheets of the pairs ticked for automatic refresh (what a scheduled run refreshes), for the record on the permit. */
@@ -286,7 +322,7 @@ const ScheduleRefresh = {
     const started = Date.now();
     RefreshAll.scheduled();
     
-    MainSettings.touchRefreshPermit(e.triggerUid,{lastDurationMs: Date.now() - started, lastSheets: sheets});
+    ScheduleRefresh.finishRun_(e.triggerUid,sheets,started);
   },
 
   /** Deletes the refresh trigger (current or legacy handler) with this id, if there is one. Any other trigger with that id (an agent) is left alone. */

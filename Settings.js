@@ -43,7 +43,7 @@ const Settings = {
     if (!current || current.issuedFor !== triggerUid) return false;
     current.lastRun = Date.now();
     if (extra) Object.assign(current, extra);                              // what the run did: lastDurationMs, lastSheets (the side panel shows them)
-    if (current.intervalHours) current.nextRefresh = current.lastRun + current.intervalHours * 3600000;
+    if (current.intervalHours && !(extra && extra.nextRefresh)) current.nextRefresh = current.lastRun + current.intervalHours * 3600000;
     Settings.updateRefreshPermit(current);
     return true;
   },

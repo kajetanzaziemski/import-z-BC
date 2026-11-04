@@ -339,6 +339,49 @@ module.exports = function register(t) {
   });
 
   // ---- the legacy handler (autoRefresh, older triggers) ------------------------------------------------------------------------------------
+  // ---- the status message after a scheduled refresh ---------------------------------------------------------------------------------------
+  const MSG = `globalThis.__msgs = []; getMainSettings = (g => () => Object.assign(g(), { setRefreshMessage: r => { if (globalThis.__msgFails) throw new Error('no message'); __msgs.push(r); } }))(getMainSettings);`;
+  const HOUR_MS = 3600000;
+
+  test('trigger: after a scheduled refresh the status message is written again - green, the same frequency, "set" time of the set-up, the next refresh moved on by an interval', () => {
+    const issued = Date.now() - 30 * HOUR_MS, planned = Date.now() - 60000;
+    const sc = scenario({ settings: { refreshPermit: { issuedFor: 'trig-A', lastRefresh: issued, intervalHours: 24, nextRefresh: planned, startAt: '17:30' } } });
+    sc.p.triggers.push(NAMED('trig-A'));
+    sc.ex.eval(MSG);
+    sc.ex.eval(`autoRefreshHandler(${event('trig-A')})`);
+    sc.save();
+    const m = plain(sc.ex.eval(`__msgs`));
+    assert.strictEqual(m.length, 1);
+    assert.deepStrictEqual([m[0].ok, m[0].frequency, Date.parse(m[0].when), Date.parse(m[0].next)], [true, { freq: 1, unit: 'days' }, issued, planned + 24 * HOUR_MS]);
+    assert.strictEqual(permit(sc).nextRefresh, planned + 24 * HOUR_MS, 'the permit remembers it too (no drift by the time the run took)');
+  });
+
+  test('trigger: the next planned run after a run = the planned time moved on until it is more than half an interval after the start (a run does not count itself)', () => {
+    const sc = scenario();
+    const next = (permit, started) => sc.ex.eval(`ScheduleRefresh.nextAfterRun_(${JSON.stringify(permit)}, ${started})`);
+    const t = 1_800_000_000_000;
+    assert.strictEqual(next({ intervalHours: 1, nextRefresh: t }, t + 10 * 60000), t + HOUR_MS, 'hourly, 10 minutes late');
+    assert.strictEqual(next({ intervalHours: 1, nextRefresh: t }, t - 5 * 60000), t + HOUR_MS, 'hourly, 5 minutes early');
+    assert.strictEqual(next({ intervalHours: 24, nextRefresh: t }, t + 7 * 60000), t + 24 * HOUR_MS);
+    assert.strictEqual(next({ intervalHours: 24, nextRefresh: t - 3 * 24 * HOUR_MS }, t), t + 24 * HOUR_MS, 'a stale plan is moved on');
+    assert.strictEqual(next({ intervalHours: 6, lastRefresh: t }, t + 6 * HOUR_MS), t + 12 * HOUR_MS, 'no plan remembered: from the set-up time');
+    assert.strictEqual(next({}, t), 0, 'no interval: unknown');
+  });
+
+  test('trigger: a refresh that fails writes no message; a message that cannot be written does not fail the run (the permit still records it)', () => {
+    const failing = scenario({ settings: { refreshPermit: { issuedFor: 'trig-A', lastRefresh: 1, intervalHours: 6, nextRefresh: Date.now() } } });
+    failing.ex.eval(MSG);
+    failing.ex.eval(`RefreshAll.scheduled = () => { throw new Error('BC down'); }`);
+    assert.throws(() => failing.ex.eval(`autoRefreshHandler(${event('trig-A')})`), /BC down/);
+    assert.deepStrictEqual(plain(failing.ex.eval(`__msgs`)), []);
+    const noMessage = scenario({ settings: { refreshPermit: { issuedFor: 'trig-A', lastRefresh: 1, intervalHours: 6, nextRefresh: Date.now() } } });
+    noMessage.ex.eval(MSG);
+    noMessage.ex.eval(`globalThis.__msgFails = true`);
+    noMessage.ex.eval(`autoRefreshHandler(${event('trig-A')})`);
+    noMessage.save();
+    assert.strictEqual(typeof permit(noMessage).lastRun, 'number');
+  });
+
   test('legacy trigger: without a permit it issues one for itself (no interval) and refreshes', () => {
     const sc = scenario();
     sc.p.triggers.push({ id: 'trig-L', fn: 'autoRefresh', type: 'CLOCK', source: null, params: {} });
