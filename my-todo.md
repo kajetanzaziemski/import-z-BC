@@ -35,6 +35,14 @@ The panel should refresh with poll every 1-3 s.
 1 - if there is indication that there is another trigger set by another user the sidebar should be based on that info with a prompt saying:
 > Odświeżanie ustawione przez innego użytkownika - poniższe informacje mogą zawierać błędy. 
 
+### Error reporting
+
+in Autoodświeżanie: 
+
+where: after last refresh info, but before Apply sheet's settings button.
+what: a last reported error in setting of autorefresh (if there was one. if the setup went correctly, nothing to display). It should say the message of refreshStatus but with Szczegóły błędu collapsed by default but holding platform error. 
+special treatment: if setup failed because it outrun 5 clock triggers limit per user it should say so in the main message (before the details).
+
 ## Managing script quirks and internal paths
 
 Some parts of the script require caching, document properties etc. Some form of managament should be available for the user. For example:
