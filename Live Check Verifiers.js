@@ -242,6 +242,27 @@ function lcParallelSettingsWrites_(c){
   }
 }
 
+/**
+ * The download log (Refresh Log.js): the refresh that just ran is its NEWEST entry, row 2 under the headers - source, start inside this run, an end not before it, a status
+ * (the error message when the run failed), and the technical text. Read from the sheet itself, as the user sees it. `technical` is a RegExp for the technical column.
+ */
+function lcVerifyRefreshLog_(c,source,technical){
+  c.attempt("the download log has this refresh as its newest entry",() => {
+    const name = c.settings().logSheetName || "Dziennik pobrań";
+    const sheet = c.spreadsheet().getSheetByName(name);
+    if(!c.expect(`the log sheet "${name}" exists`,!!sheet,"it is made by the first entry: nothing was written")) return;
+    c.expectEqual("log headers",sheet.getRange(1,1,1,7).getValues()[0],["Źródło","Początek","Koniec","Czas trwania","Status","Odświeżone arkusze","Dane techniczne"]);
+    const row = sheet.getRange(2,1,1,7).getValues()[0];
+    const isDate = d => Object.prototype.toString.call(d) === "[object Date]" && !isNaN(d);
+    c.expectEqual("log source",row[0],source);
+    c.expect("log start is inside this run",isDate(row[1]) && row[1].getTime() >= c.startedAt - 2000 && row[1].getTime() <= Date.now() + 2000,`the newest entry starts ${row[1]}`);
+    c.expect("log end is not before its start",isDate(row[2]) && isDate(row[1]) && row[2].getTime() >= row[1].getTime(),`${row[1]} - ${row[2]}`);
+    c.expect("log has a duration and a status",String(row[3]).trim() !== "" && String(row[4]).trim() !== "",`duration ${JSON.stringify(row[3])}, status ${JSON.stringify(row[4])}`);
+    if(c.error) c.expectEqual("log status is the error the run ended with",String(row[4]),String(c.error.message ?? c.error));
+    if(technical) c.expect("log technical text",technical.test(String(row[6])),`reads ${JSON.stringify(row[6])}`);
+  });
+}
+
 /** Header of a config sheet that was created by the add-on. */
 function lcVerifyConfigHeader_(c,sheet,tag){
   const g = LC_CONFIG_HEADER;
@@ -682,6 +703,7 @@ function buildLiveCheckVerifiers_(){
           return;
         }
         lcVerifyRefreshedConfig_(c,entry);
+        lcVerifyRefreshLog_(c,"Odświeżanie jednego arkusza",/^Menu: Pobierz dane dla tego arkusza/);
       }
     },
 
@@ -689,6 +711,7 @@ function buildLiveCheckVerifiers_(){
       needs: ["sheets","settingsSheet","indicators"],
       verify(c){
         const settings = c.now("settingsSheet");
+        lcVerifyRefreshLog_(c,"Odświeżanie wszystkich arkuszy",/^Menu: Pobierz dane dla wszystkich arkuszy/);
         if(!settings.configs.length){ c.pass("no config sheets listed: nothing to refresh"); return; }
         settings.configs.forEach(entry => lcVerifyRefreshedConfig_(c,entry));
       }
@@ -766,6 +789,28 @@ function buildLiveCheckVerifiers_(){
     requestApplyRefreshSettings: {
       needs: ["docProps","settingsSheet"],
       verify(c){ /* the job (settings.refreshApply) says what it did */ }
+    },
+
+    requestRefreshLogSheetName: {
+      needs: ["sheets","docProps"],
+      verify(c){
+        lcVerifyNothingChanged_(c);
+        c.expect("result is the stored name (else the default)",c.result === (c.settings().logSheetName || "Dziennik pobrań"),`result ${JSON.stringify(c.result)}`);
+      }
+    },
+
+    requestSetRefreshLogSheetName: {
+      needs: ["sheets"],
+      verify(c){
+        const stored = c.settings().logSheetName;
+        const asked = String(c.input.name ?? "").trim();
+        c.expectError(err => /jest już używana|najwyżej 100 znaków/.test(String(err && err.message)),"the name is refused: it is a sheet of the add-on already, or too long");
+        if(c.error) c.unchanged("sheets","a refused name changes no sheet");
+        else{
+          c.expectEqual("stored name (empty = the default)",stored || "Dziennik pobrań",asked || "Dziennik pobrań");
+          c.unchanged("sheets","choosing the name does not make the sheet: it is made by the first entry");
+        }
+      }
     },
 
     requestSetSettingsSheetName: {
@@ -1147,6 +1192,7 @@ function lcRefreshTriggerHoldsPermit_(c){
 function lcVerifyScheduledRefresh_(c){
   const uid = c.input.e.triggerUid;
   lcVerifyZoneLabels_(c,c.now("settingsSheet"));
+  lcVerifyRefreshLog_(c,"Autoodświeżanie",/^Trigger czasowy /);
   const triggerStillThere = lcTriggersSeen_().some(t => t.getUniqueId() === uid);
   const settings = c.now("settingsSheet");
   c.expect("permitted trigger stays installed",triggerStillThere,"trigger removed itself");
@@ -1171,7 +1217,12 @@ function lcVerifyRetiredRefresh_(c){
   const triggerStillThere = lcTriggersSeen_().some(t => t.getUniqueId() === uid);
   const settings = c.now("settingsSheet");
   c.expect("trigger without a permit removed itself",!triggerStillThere,"trigger is still installed");
-  c.unchanged("sheets","nothing refreshed");
+  // nothing is refreshed, but the log says so: its sheet may have been made by this entry (and nothing else was added or removed)
+  const logName = c.settings().logSheetName || "Dziennik pobrań";
+  const added = lcAddedSheets_(c).filter(n => n !== logName);
+  const removed = lcSheetNames_(c.before.sheets).filter(n => !lcSheetNames_(c.now("sheets")).includes(n));
+  c.expect("nothing refreshed: no sheet added or removed (the log sheet apart)",added.length == 0 && removed.length == 0,`added ${added.join(", ") || "-"}, removed ${removed.join(", ") || "-"}`);
+  lcVerifyRefreshLog_(c,"Autoodświeżanie",/nie zostało wykonane/);
   c.expectEqual("last refresh untouched",settings.lastRefresh && new Date(settings.lastRefresh).getTime(),c.before.settingsSheet.lastRefresh && new Date(c.before.settingsSheet.lastRefresh).getTime());
   c.expectEqual("permit untouched",c.settings().refreshPermit ?? null,c.before.settings?.refreshPermit ?? null);
 }

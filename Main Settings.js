@@ -27,6 +27,24 @@ class MainSettings{
     return this;
   }
 
+  static getLogSheetName(){
+    return Settings.logSheetName();
+  }
+
+  /**
+   * The name of the sheet of the download log. Empty = the default ("Dziennik pobrań"). A name that is already a sheet of the add-on (the settings sheet, a config
+   * or a result sheet) is refused: the log would be written into it. Sheet names are not told apart by case.
+   */
+  static setLogSheetName(name){
+    name = String(name ?? "").trim() || REFRESH_LOG_DEFAULT_NAME;
+    if(name.length > 100) throw new Error("Nazwa arkusza dziennika pobrań może mieć najwyżej 100 znaków.");
+    const taken = [MainSettings.getSettingsSheetName()];
+    if(settingsSheetExists()) getMainSettings().getSheetList().forEach(x => taken.push(x.configSheet,x.resultSheet));
+    if(taken.some(x => x && String(x).toLowerCase() === name.toLowerCase())) throw new Error(`Nazwa „${name}” jest już używana przez arkusz ustawień, konfiguracji lub wynikowy.`);
+    Settings.setLogSheetName(name);
+    return this;
+  }
+
   static getAddonStatus(){
     const status = Settings.addonStatus();
     dbgLog("getAddonStatus returning "+(status ? 'true' : 'false'));
@@ -74,6 +92,15 @@ function setImportSettingsSheetName(name){
     dbgLog("Changing settings Sheet name to "+name);
     return MainSettings.setSettingsSheetName(name);
   });
+}
+
+function getRefreshLogSheetName(){
+  return Controller.run("requestRefreshLogSheetName",()=>MainSettings.getLogSheetName());
+}
+
+function setRefreshLogSheetName(name){
+  Controller.checkInput("requestSetRefreshLogSheetName",{name});
+  return Controller.run("requestSetRefreshLogSheetName",()=>MainSettings.setLogSheetName(name));
 }
 
 function changeAddonStatus(newStatus){

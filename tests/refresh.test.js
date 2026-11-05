@@ -18,7 +18,7 @@ const ROOT = path.join(__dirname, '..');
 const BASE = ['Custom errors.js', 'Helper Data Store.js', 'Store.js', 'Settings.js', 'Main Settings.js', 'Controller.js', 'Trigger Manager.js',
   'Global Add-on Settings.js', 'Quick Start.js', 'functions.js', 'Track onEdit Triggers.js', 'Status Manager.js', 'Agent Reconciler.js', 'Agents.js', 'Verify Agent.js', 'Data Type.js', 'Menu.js', 'Menu Actions.js'];
 // the files of the extraction, loaded once they exist
-const USE_CASE_FILES = ['Import Query.js', 'BulkSheet.js', 'ResultSheet.js', 'RefreshSheet.js', 'EstimateSheet.js', 'RefreshAll.js', 'Refresh Registry.js', 'ScheduleRefresh.js'].filter(f => fs.existsSync(path.join(ROOT, f)));
+const USE_CASE_FILES = ['Import Query.js', 'BulkSheet.js', 'ResultSheet.js', 'RefreshSheet.js', 'EstimateSheet.js', 'RefreshAll.js', 'Refresh Registry.js', 'Refresh Log.js', 'Refresh Log Grid.js', 'Auto Refresh Panel.js', 'ScheduleRefresh.js'].filter(f => fs.existsSync(path.join(ROOT, f)));
 
 const FAKES = `
   globalThis.SheetCoeditor = class {

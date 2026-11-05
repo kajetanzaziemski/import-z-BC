@@ -10,7 +10,7 @@ const { FakePlatform } = require('./platform-fakes');
 const ROOT = path.join(__dirname, '..');
 const BASE = ['Custom errors.js', 'Helper Data Store.js', 'Store.js', 'Settings.js', 'Main Settings.js', 'Controller.js', 'Trigger Manager.js',
   'Global Add-on Settings.js', 'Quick Start.js', 'functions.js', 'Track onEdit Triggers.js', 'Status Manager.js', 'Agent Reconciler.js', 'Agents.js', 'Verify Agent.js', 'Data Type.js', 'Menu.js', 'Settings Sheet.js',
-  'Settings Grid.js', 'RefreshAll.js', 'Refresh Registry.js', 'ScheduleRefresh.js', 'Auto Refresh Panel.js'];
+  'Settings Grid.js', 'RefreshAll.js', 'Refresh Registry.js', 'Refresh Log.js', 'Refresh Log Grid.js', 'Auto Refresh Panel.js', 'ScheduleRefresh.js'];
 
 module.exports = function register(t) {
   const { test } = t;

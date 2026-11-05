@@ -445,6 +445,39 @@
       }
 
       /* =========================================================
+         Sheet of the download log
+      ========================================================= */
+      function refreshLogSheetInfo() {
+        google.script.run
+          .withSuccessHandler(function (name) { document.getElementById('logSheetForm').logSheetName.value = name; })
+          .withFailureHandler(function (error) {
+            document.getElementById('logSheetErrorDiv').innerHTML =
+              "Błąd odświeżania nazwy arkusza: <font color='red'>" + escapeHtml(error.message) + "</font>";
+          })
+          .getRefreshLogSheetName();
+      }
+
+      function saveLogSheetName(form) {
+        var btn = document.getElementById("logSheetSubmit");
+        btn.disabled = true;
+        btn.innerHTML = "Zapisywanie...";
+        google.script.run
+          .withSuccessHandler(function () {
+            btn.innerHTML = " Zapisano <font color='green'><bold>✓</bold></font>";
+            document.getElementById('logSheetErrorDiv').innerHTML = "";
+            setTimeout(function () { resetSaveButton('logSheetSubmit'); }, 2500);
+            refreshLogSheetInfo();
+          })
+          .withFailureHandler(function (error) {
+            btn.innerHTML = "Spróbuj zapisać ponownie";
+            btn.disabled = false;
+            document.getElementById('logSheetErrorDiv').innerHTML =
+              "Błąd zapisywania nazwy: <font color='red'>" + escapeHtml(error.message) + "</font>";
+          })
+          .setRefreshLogSheetName(form.logSheetName.value);
+      }
+
+      /* =========================================================
          Global settings (from Global Settings Side Bar.html)
       ========================================================= */
       function saveSettings(form) {
@@ -478,6 +511,7 @@
         refreshStatusInfo();
         refreshAgentInfo();
         refreshImportSheetInfo();
+        refreshLogSheetInfo();
       }
 
       window.onload = refreshAllInfo;
@@ -508,6 +542,17 @@
         </div>
         <div id='sheetSettingsErrorDiv'> </div>
         <button type="submit" class="action" id="sheetSettingsSubmit"> Zapisz zmiany </button>
+      </form>
+      <hr />
+
+      <h1> Arkusz dziennika pobrań </h1>
+      <form onsubmit="event.preventDefault(); saveLogSheetName(this)" id='logSheetForm'>
+        <div class="block form-group">
+          <label for="logSheetName">Nazwa arkusza: </label>
+          <input type="text" id="logSheetName" name="logSheetName" value="Pobieranie danych…"/>
+        </div>
+        <div id='logSheetErrorDiv'> </div>
+        <button type="submit" class="action" id="logSheetSubmit"> Zapisz zmiany </button>
       </form>
       <hr />
 

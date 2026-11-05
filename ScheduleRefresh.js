@@ -323,6 +323,7 @@ const ScheduleRefresh = {
     // Registry doesn't point at me anymore → delete my own trigger and stop
     if (!myPermit || myPermit.issuedFor !== e.triggerUid || myPermit.off) {      // a permit marked off (the refresh was switched off) holds nobody
       Controller.intent("refresh.retired",{sheet: null, changeType: null});
+      ScheduleRefresh.logRetired_(e.triggerUid,false);
       ScheduleRefresh.removeTrigger(e.triggerUid);
       return;
     }
@@ -330,9 +331,21 @@ const ScheduleRefresh = {
     Controller.intent("refresh.scheduled",{sheet: null, changeType: null});
     const sheets = ScheduleRefresh.tickedResultSheets_();
     const started = Date.now();
-    RefreshAll.scheduled();
+    RefreshAll.scheduled(ScheduleRefresh.triggerText_(e.triggerUid,false));
     
     ScheduleRefresh.finishRun_(e.triggerUid,sheets,started);
+  },
+
+  /** What the log says about the clock trigger that fired. */
+  triggerText_(triggerUid, legacy){
+    return `Trigger czasowy ${triggerUid}${legacy ? " (stara wersja: funkcja autoRefresh)" : ""}`;
+  },
+
+  /** A trigger that does not hold the permit deletes itself and refreshes nothing: that is an entry of the log too. */
+  logRetired_(triggerUid, legacy){
+    RefreshLog.logOnly(REFRESH_LOG_SOURCES.auto,
+      `${ScheduleRefresh.triggerText_(triggerUid,legacy)}. Zezwolenie na odświeżanie nie jest wydane dla tego triggera (wyłączone lub wydane dla innego): trigger został usunięty, odświeżanie nie zostało wykonane.`,
+      "Odświeżanie nie zostało wykonane");
   },
 
   /**
@@ -395,6 +408,7 @@ const ScheduleRefresh = {
     // Registry doesn't point at me anymore → delete my own trigger and stop
     if (myPermit.issuedFor !== e.triggerUid || myPermit.off) {
       Controller.intent("refresh.retired",{sheet: null, changeType: null});
+      ScheduleRefresh.logRetired_(e.triggerUid,true);
       ScheduleRefresh.removeTrigger(e.triggerUid);
       return;
     }
@@ -402,7 +416,7 @@ const ScheduleRefresh = {
     Controller.intent("refresh.scheduled",{sheet: null, changeType: null});
     const sheets = ScheduleRefresh.tickedResultSheets_();
     const started = Date.now();
-    RefreshAll.scheduled();
+    RefreshAll.scheduled(ScheduleRefresh.triggerText_(e.triggerUid,true));
     
     ScheduleRefresh.finishRun_(e.triggerUid,sheets,started);
   },

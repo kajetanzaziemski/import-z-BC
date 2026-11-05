@@ -17,6 +17,7 @@ const RefreshSheet = {
     try{ 
       if(!shCoed.getTable()){
         dbgLog("No table in config sheet. Quitting.");
+        RefreshLog.noteProblem(`Brak tabeli w arkuszu konfiguracji „${configSheetName}”`);
         shCoed.switchReadingControl(false);
         return;
       }
@@ -38,6 +39,9 @@ const RefreshSheet = {
       const table = odConnection.getDataArray();
       const sheetName = resultSheetName ?? getMainSettings().getResultSheetName(configSheetName);
       ResultSheet.write(sheetName,table,columnDataTypes);
+      const bcError = odConnection.getError();
+      if(bcError) RefreshLog.noteProblem(`BC (${sheetName}): ${[bcError.code,bcError.message].filter(x => x).join(": ")}`);
+      else RefreshLog.noteSheet(sheetName,Math.max(table.length - 1,0));
     } catch (e) {
       shCoed.switchDataWritingControl(false);
       throw e;  

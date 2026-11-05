@@ -14,7 +14,7 @@ const { FakePlatform } = require('./platform-fakes');
 const ROOT = path.join(__dirname, '..');
 const BASE = ['Custom errors.js', 'Helper Data Store.js', 'Store.js', 'Settings.js', 'Main Settings.js', 'Controller.js', 'Trigger Manager.js',
   'Global Add-on Settings.js', 'Quick Start.js', 'functions.js', 'Track onEdit Triggers.js', 'Status Manager.js', 'Agent Reconciler.js', 'Agents.js', 'Verify Agent.js', 'Data Type.js', 'Menu.js', 'Settings Sheet.js'];
-const USE_CASE_FILES = ['Import Query.js', 'BulkSheet.js', 'ResultSheet.js', 'RefreshSheet.js', 'EstimateSheet.js', 'RefreshAll.js', 'Refresh Registry.js', 'ScheduleRefresh.js', 'Grid.js'].filter(f => fs.existsSync(path.join(ROOT, f)));
+const USE_CASE_FILES = ['Import Query.js', 'BulkSheet.js', 'ResultSheet.js', 'RefreshSheet.js', 'EstimateSheet.js', 'RefreshAll.js', 'Refresh Registry.js', 'Refresh Log.js', 'Refresh Log Grid.js', 'Auto Refresh Panel.js', 'ScheduleRefresh.js', 'Grid.js'].filter(f => fs.existsSync(path.join(ROOT, f)));
 
 const FAKES = `
   globalThis.SheetCoeditor = class {
@@ -46,6 +46,7 @@ module.exports = function register(t) {
     const ex = p.execution(FILES, { __cfg: cfg, __log: log });
     ex.eval(`Agents.ensureActive = () => {}`);
     ex.eval(FAKES);
+    ex.eval(`globalThis.__logged = []; RefreshLogGrid.append = (name, e) => __logged.push(Object.assign({ name }, e));`);
     const stored = () => JSON.parse(p.props.document.importSettingsArray);
     return { p, ex, log, cfg, calls: () => plain(log), stored,
       save: () => ex.eval(`getImportSettings().saveArray()`),
@@ -460,6 +461,43 @@ module.exports = function register(t) {
     assert.strictEqual(permit(sc).lastRun, undefined);
   });
 
+  // ---- the download log (Refresh Log.js) ------------------------------------------------------------------------------------------------------
+  test('log: a scheduled refresh writes ONE entry "Autoodświeżanie" - the clock trigger in the technical text, the ticked sheets and what the add-on handled itself as the status; the legacy handler says so', () => {
+    const sc = scenario({ settings: { refreshPermit: { issuedFor: 'trig-A', lastRefresh: 1, intervalHours: 6 } } });
+    sc.p.triggers.push(NAMED('trig-A'));
+    sc.ex.eval(`autoRefreshHandler(${event('trig-A')})`);
+    const logged = plain(sc.ex.eval(`__logged`));
+    assert.strictEqual(logged.length, 1);
+    // the fake config sheets here have no table: a failure the add-on handles itself is the status, and no sheet counts as refreshed
+    assert.deepStrictEqual([logged[0].name, logged[0].source, logged[0].status, logged[0].sheets, logged[0].technical],
+      ['Dziennik pobrań', 'Autoodświeżanie', 'Brak tabeli w arkuszu konfiguracji „K1”; Brak tabeli w arkuszu konfiguracji „K3”', '0 arkuszy', 'Trigger czasowy trig-A']);
+    const legacy = scenario({ settings: { refreshPermit: { issuedFor: 'trig-L', lastRefresh: 1, intervalHours: 6 } } });
+    legacy.p.triggers.push(NAMED('trig-L', 'autoRefresh'));
+    legacy.ex.eval(`autoRefresh(${event('trig-L')})`);
+    assert.strictEqual(plain(legacy.ex.eval(`__logged[0].technical`)), 'Trigger czasowy trig-L (stara wersja: funkcja autoRefresh)');
+  });
+
+  test('log: a scheduled refresh that fails writes the entry with the error as the status, and the error goes on', () => {
+    const sc = scenario({ settings: { refreshPermit: { issuedFor: 'trig-A', lastRefresh: 1, intervalHours: 6 } }, refreshError: 'BC down' });
+    sc.p.triggers.push(NAMED('trig-A'));
+    assert.throws(() => sc.ex.eval(`autoRefreshHandler(${event('trig-A')})`), /BC down/);
+    assert.deepStrictEqual(plain(sc.ex.eval(`__logged.map(e => [e.source, e.status])`)), [['Autoodświeżanie', 'BC down']]);
+  });
+
+  test('log: a trigger that does not hold the permit deletes itself and writes an entry that says so - technical: the trigger and that it was deleted, status: nothing was refreshed (both handlers)', () => {
+    const sc = scenario({ settings: { refreshPermit: { issuedFor: 'trig-B', lastRefresh: 1, intervalHours: 6 } } });
+    sc.p.triggers.push(NAMED('trig-A'));
+    sc.ex.eval(`autoRefreshHandler(${event('trig-A')})`);
+    const [e] = plain(sc.ex.eval(`__logged`));
+    assert.deepStrictEqual([e.source, e.status, e.sheets], ['Autoodświeżanie', 'Odświeżanie nie zostało wykonane', '0 arkuszy']);
+    assert.ok(/^Trigger czasowy trig-A\./.test(e.technical) && /trigger został usunięty/.test(e.technical) && /odświeżanie nie zostało wykonane/.test(e.technical), e.technical);
+    assert.deepStrictEqual(sc.calls(), [], 'nothing was refreshed');
+    const off = scenario({ settings: { refreshPermit: { issuedFor: 'trig-L', lastRefresh: 1, intervalHours: 6, off: true } } });
+    off.p.triggers.push(NAMED('trig-L', 'autoRefresh'));
+    off.ex.eval(`autoRefresh(${event('trig-L')})`);
+    assert.ok(/stara wersja/.test(plain(off.ex.eval(`__logged[0].technical`))));
+  });
+
   // ---- the legacy handler (autoRefresh, older triggers) ------------------------------------------------------------------------------------
   // ---- the status message after a scheduled refresh ---------------------------------------------------------------------------------------
   const MSG = `globalThis.__msgs = []; getMainSettings = (g => () => Object.assign(g(), { setRefreshMessage: r => { if (globalThis.__msgFails) throw new Error('no message'); __msgs.push(r); } }))(getMainSettings);`;
@@ -717,6 +755,6 @@ module.exports = function register(t) {
 
   test('rule: the new files load alone, in any order (nothing is used at load time)', () => {
     const vm = require('vm');
-    ['RefreshAll.js', 'Refresh Registry.js', 'ScheduleRefresh.js'].forEach(f => vm.runInNewContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), {}));
+    ['RefreshAll.js', 'Refresh Registry.js', 'Refresh Log.js', 'Refresh Log Grid.js', 'Auto Refresh Panel.js', 'ScheduleRefresh.js'].forEach(f => vm.runInNewContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), {}));
   });
 };

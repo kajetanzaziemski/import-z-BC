@@ -104,3 +104,14 @@ no `UTC+N` (an older version wrote "CET") is left alone. A failure is logged wit
 
 The time of the last refresh is put right too (`SettingsGrid.retime`): a cell keeps the wall-clock number, not the moment, so after a change of the zone `2026-11-04 07:44` still reads 07:44 but is another moment. The old label says in which zone it was written
 (`UTC-8`), so the moment is the wall reading minus that offset (15:44 UTC) and is written back; the sheet then shows it in the new zone (16:44 in UTC+1) with the label `UTC+1`. A `lastRefresh` label that is no `UTC+N` (an older version's "CET", or none) says nothing about the zone it was written in: that line is left as it is, label AND time (the next refresh writes it in `UTC+N`). The `refreshTime` line is still put right.
+
+## The download log (`Refresh Log.js`, `Refresh Log Grid.js`; `my-todo.md` "Data connection log")
+Every download from BC that writes (or should write) data in the sheets leaves ONE entry in the log sheet - the menu items "Pobierz dane dla tego arkusza" (`MenuActions.refreshActive`) and "Pobierz dane dla wszystkich arkuszy" (`RefreshAll.all`) and the automatic refresh
+(`RefreshAll.scheduled`, called by both clock-trigger handlers). `RefreshLog.run(source, technical, work)` wraps the work: a refresh inside a refresh is one entry (the outer), the result sheets written (`RefreshSheet` -> `RefreshLog.noteSheet(name, data rows)`),
+a failure the add-on handles itself (`noteProblem`: a BC error document, a config sheet without a table) and the error the platform throws (written as the status, thrown on). A clock trigger that does not hold the permit and deletes itself writes an entry too
+(`logOnly`: status "Odświeżanie nie zostało wykonane", technical: the trigger, that it was deleted and that nothing was refreshed). Writing the log never fails a refresh (`console.error` + a note on the live check run).
+
+The sheet (name chosen in the sidebar, Ogólne, "Arkusz dziennika pobrań"; default "Dziennik pobrań"; made by the first entry, headers in row 1): columns Źródło (Autoodświeżanie / Odświeżanie jednego arkusza / Odświeżanie wszystkich arkuszy), Początek, Koniec, Czas trwania,
+Status ("OK", the handled failure, or the platform error), Odświeżone arkusze (one cell: "2 arkusze" and a line "name (n wierszy)" per sheet), Dane techniczne ("Trigger czasowy <id>" / "Menu: ..."). NEWEST FIRST: an entry is inserted as row 2, under the headers and above the older entries
+(`Grid.insertRowsAfter(1, 1)` with the row reformatted: not bold, no grey; the grid reads only the first rows and commits once per entry). The name may not be the settings sheet, a config sheet or a result sheet (`MainSettings.setLogSheetName`).
+An older log sheet stays where it is when the name is changed (nothing is renamed or moved).

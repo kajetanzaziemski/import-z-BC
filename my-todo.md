@@ -58,7 +58,9 @@ Not fully completed lines should gray out anything that is unknown yet (ie. only
 
 # Preview request for a config sheet
 
-# Data connection log
+# [DONE, not checked on a real spreadsheet] Data connection log
+
+Done as described (docs/use-cases.md, "The download log"). Choices: one entry per refresh RUN (not per sheet); "Odświeżone arkusze" is one cell, a line per sheet; a config sheet without a table or a BC error document is a handled failure (the status, not "OK"); the name of the log sheet may not be the settings, a config or a result sheet.
 
 For all queries to BC that result (or should result) in data write in the sheets (ie. both "Pobierz dane..." functions in the menu and auto refresh) a status message should be logged. The log is a new sheet (default name "Dziennik pobrań", customizable via Konfiguracja panel), an entry is a new line in this sheet. Insert newest first (ie. logging should insert new row above previous entries, but below headers).
 

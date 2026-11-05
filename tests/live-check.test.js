@@ -262,7 +262,7 @@ module.exports = function register(t) {
     const app = { getActiveSpreadsheet: () => ss, flush() {}, WrapStrategy: book.SpreadsheetApp.WrapStrategy, newDataValidation: book.SpreadsheetApp.newDataValidation,
       DataValidationCriteria: book.SpreadsheetApp.DataValidationCriteria,
       getActive: () => ({ getActiveSheet: () => ({ getName: () => 'Konfiguracja 1' }) }), getUi: () => ({ alert() {} }) };
-    const files = [...FILES, 'Data Type.js', 'Menu.js', 'Menu Actions.js', 'Import Query.js', 'BulkSheet.js', 'ResultSheet.js', 'RefreshSheet.js', 'EstimateSheet.js', 'Sheet Coeditor.js', 'Grid.js', 'Grid Util.js', 'Config Grid.js'];
+    const files = [...FILES, 'Data Type.js', 'Menu.js', 'Menu Actions.js', 'Import Query.js', 'BulkSheet.js', 'ResultSheet.js', 'RefreshSheet.js', 'EstimateSheet.js', 'Refresh Log.js', 'Refresh Log Grid.js', 'Auto Refresh Panel.js', 'Sheet Coeditor.js', 'Grid.js', 'Grid Util.js', 'Config Grid.js'];
     const ex = p.execution(files, { SpreadsheetApp: app, Utilities: book.Utilities, Session: { getActiveUser: () => ({ getEmail: () => 'u' }) } });
     ex.eval(`Agents.ensureActive = () => {};
       globalThis.CCTImportConfig = class { constructor(v) { this.v = v; } };
@@ -400,6 +400,36 @@ module.exports = function register(t) {
     assert.ok(/needs: \["sheets","docProps","settingsSheet"\],\s*verify\(c\)\{\s*\/\/ importSettingsArray may change/.test(src), 'onOpen reads the settings sheet');
   });
 
+  test('live check: the download log is verified as the user sees it - the refresh that just ran is the newest entry (row 2) with its source, a start inside the run, a status (the error message when the run failed) and the technical text; no log sheet or a stale entry is a FAIL', () => {
+    const plain = v => JSON.parse(JSON.stringify(v));
+    const p = new FakePlatform();
+    const ex = p.execution(FILES);
+    const T = 1750000000000;
+    const HEAD = ['Źródło', 'Początek', 'Koniec', 'Czas trwania', 'Status', 'Odświeżone arkusze', 'Dane techniczne'];
+    const GOOD = ['Autoodświeżanie', { t: T }, { t: T + 5000 }, '5 s', 'OK', '0 arkuszy', 'Trigger czasowy t1'];
+    /** the verdicts of lcVerifyRefreshLog_ on a log sheet whose row 2 is `row` (dates as { t: ms }) */
+    const run = (row, over) => plain(ex.eval(`(() => { const res = []; const D = x => (x && typeof x == 'object' && 't' in x) ? new Date(x.t) : x;
+      const rows = { 1: ${JSON.stringify(HEAD)}, 2: ${JSON.stringify(row)}.map(D) };
+      const sheet = ${over && over.noSheet ? 'null' : '{ getRange: (r) => ({ getValues: () => [rows[r]] }) }'};
+      const c = { startedAt: ${T - 1000}, error: ${over && over.error ? '{ message: "BC down" }' : 'null'}, settings: () => ({ logSheetName: ${over && over.name ? JSON.stringify(over.name) : 'undefined'} }), attempt: (n, f) => f(),
+        spreadsheet: () => ({ getSheetByName: n => { res.push(['sheet', n]); return sheet; } }),
+        expect: (n, ok) => { res.push([n, ok ? 'PASS' : 'FAIL']); return ok; }, expectEqual: (n, a, b) => res.push([n, JSON.stringify(a) === JSON.stringify(b) ? 'PASS' : 'FAIL']) };
+      Date.now = () => ${T + 10000}; lcVerifyRefreshLog_(c, 'Autoodświeżanie', /^Trigger czasowy /); return res; })()`));
+    const fails = res => res.filter(r => r[1] === 'FAIL').map(r => r[0]);
+    assert.deepStrictEqual(fails(run(GOOD)), []);
+    assert.strictEqual(run(GOOD)[0][1], 'Dziennik pobrań', 'the default name');
+    assert.strictEqual(run(GOOD, { name: 'Moje pobrania' })[0][1], 'Moje pobrania', 'the chosen name');
+    assert.ok(fails(run(GOOD, { noSheet: true })).some(n => /log sheet/.test(n)), 'no log sheet');
+    assert.deepStrictEqual(fails(run(['Odświeżanie jednego arkusza'].concat(GOOD.slice(1)))), ['log source']);
+    assert.deepStrictEqual(fails(run(GOOD.slice(0, 6).concat(['Menu']))), ['log technical text']);
+    assert.deepStrictEqual(fails(run([GOOD[0], { t: T - 600000 }].concat(GOOD.slice(2)))).slice(0, 1), ['log start is inside this run'], 'an older entry: nothing was written by this run');
+    assert.deepStrictEqual(fails(run(GOOD.slice(0, 4).concat(['OK'], GOOD.slice(5)), { error: true })), ['log status is the error the run ended with'], 'the run failed but the status says OK');
+    assert.deepStrictEqual(fails(run(GOOD.slice(0, 4).concat(['BC down'], GOOD.slice(5)), { error: true })), []);
+    const src = fs.readFileSync(path.join(ROOT, 'Live Check Verifiers.js'), 'utf8');
+    ['menuRefreshCurrentSheet: {', 'menuRefreshAll: {'].forEach(k => assert.ok(/lcVerifyRefreshLog_\(c,/.test(src.slice(src.indexOf(k), src.indexOf(k) + 900)), k));
+    assert.ok(/function lcVerifyScheduledRefresh_\(c\)\{[\s\S]*?lcVerifyRefreshLog_\(c,"Autoodświeżanie"/.test(src) && /function lcVerifyRetiredRefresh_\(c\)\{[\s\S]*?lcVerifyRefreshLog_\(c,"Autoodświeżanie",\/nie zostało wykonane\//.test(src));
+  });
+
   const THREE_ROWS = `ODataConnection.prototype.getDataArray = () => [['No'], ['C1'], ['C2']];`;
   const FMT = /number format uniform in every column/;
   test('live check, end to end: a result column whose number format differs between data rows -> FAIL naming the column and the actual formats (header shown, not judged)', () => {
@@ -423,7 +453,7 @@ module.exports = function register(t) {
   });
 
   // ---- jobs (intents): a run is reported under what it DID, via the technical trigger ---------------------------------------------------------
-  const JOB_FILES = ['Import Query.js', 'BulkSheet.js', 'ResultSheet.js', 'RefreshSheet.js', 'EstimateSheet.js', 'RefreshAll.js', 'Refresh Registry.js', 'ScheduleRefresh.js', 'AnalyseConfig.js', 'Router.js', 'Managed Sheets.js', 'Own Writes.js',
+  const JOB_FILES = ['Import Query.js', 'BulkSheet.js', 'ResultSheet.js', 'RefreshSheet.js', 'EstimateSheet.js', 'RefreshAll.js', 'Refresh Registry.js', 'Refresh Log.js', 'Refresh Log Grid.js', 'Auto Refresh Panel.js', 'ScheduleRefresh.js', 'AnalyseConfig.js', 'Router.js', 'Managed Sheets.js', 'Own Writes.js',
     'Data Type.js', 'Menu.js', 'Menu Actions.js', 'Sheet Coeditor.js', 'Grid.js', 'Grid Util.js', 'Config Grid.js'];
 
   test('live check jobs: every job the code announces (Controller.intent, the router\'s action table) is in the catalogue and has a verifier, and none is orphaned', () => {

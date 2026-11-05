@@ -14,6 +14,7 @@
 // ---------------------------------------------------------------------------
 
 const IMPORT_SETTINGS_KEY = "importSettingsArray";
+const REFRESH_LOG_DEFAULT_NAME = "Dziennik pobrań";
 
 const Settings = {
   /** The StorageObject behind the import settings (one per run). */
@@ -31,6 +32,10 @@ const Settings = {
   /** The time zone of the spreadsheet as the add-on last saw it (the sheet's zone labels and the time of day are in it; see ScheduleRefresh.syncTimeZone). */
   lastTimeZone() { return Settings.get("timeZone"); },
   setLastTimeZone(timeZone) { return Settings.set("timeZone", timeZone); },
+
+  /** The sheet the log of the data downloads (menu and automatic refresh) is written to; the default name when none was chosen. */
+  logSheetName() { return Settings.get("logSheetName") || REFRESH_LOG_DEFAULT_NAME; },
+  setLogSheetName(name) { return Settings.set("logSheetName", name); },
 
   refreshPermit() { return Settings.get("refreshPermit"); },
   /** A permit for one time-based trigger: only that trigger may refresh (the others delete themselves). */

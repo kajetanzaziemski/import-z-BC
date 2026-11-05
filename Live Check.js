@@ -556,6 +556,8 @@ const LIVE_CHECK_ENTRY_POINTS = [
   {action: "menuLogoutFlow",                  entry: "menu: Wyloguj"},
   {action: "requestSettingsSheetName",        entry: "sidebar: getImportSettingsSheetName()"},
   {action: "requestSetSettingsSheetName",     entry: "sidebar: setImportSettingsSheetName(name)"},
+  {action: "requestRefreshLogSheetName",    entry: "sidebar: getRefreshLogSheetName()"},
+  {action: "requestSetRefreshLogSheetName", entry: "sidebar: setRefreshLogSheetName(name)"},
   {action: "requestAddonStatus",              entry: "sidebar: getAddonStatus()"},
   {action: "requestChangeAddonStatus",        entry: "sidebar: changeAddonStatus(newStatus)"},
   {action: "requestPermitsInfo",              entry: "sidebar: getPermitsInfo()"},

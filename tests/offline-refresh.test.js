@@ -10,7 +10,7 @@ const { SimBook } = require('./sim');
 
 const ROOT = path.join(__dirname, '..');
 const FILES = ['Grid.js', 'Grid Util.js', 'Config Grid.js', 'Custom errors.js', 'functions.js', 'OData Query.js', 'Fix Register.js', 'Data Validations.js', 'Content Tracker.js',
-  'Sheet Coeditor.js', 'Data Type.js', 'BC Connection.js', 'OData Connection.js', 'OData Response.js', 'Import Query.js', 'BulkSheet.js', 'ResultSheet.js', 'RefreshSheet.js', 'RefreshAll.js'];
+  'Sheet Coeditor.js', 'Data Type.js', 'BC Connection.js', 'OData Connection.js', 'OData Response.js', 'Import Query.js', 'BulkSheet.js', 'ResultSheet.js', 'RefreshSheet.js', 'RefreshAll.js', 'Refresh Log.js', 'Refresh Log Grid.js', 'Auto Refresh Panel.js'];
 
 module.exports = function register(t) {
   const { test } = t;

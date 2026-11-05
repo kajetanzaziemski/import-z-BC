@@ -166,6 +166,11 @@ The sidebar button "Wyłącz autoodświeżanie" (action `requestTurnOffRefresh`)
 "CET" is skipped: it says nothing about the zone and the next refresh rewrites it). It is part of `onOpen` (where a changed zone is put right; `onOpen` now also reads the settings sheet), `settings.refreshFrequency`, `settings.refreshApply` and the scheduled refresh. A sheet without those lines is skipped. The TIME of the last refresh is checked too: it must be within 15 minutes of the moment of the last scheduled run that the permit remembers (a label can be right while the time still reads the old zone).
 A failure of the check in `onOpen` itself is no longer silent: it is `console.error` in the execution log and a note on the live check run.
 
+## The download log (hashes re-pinned)
+`lcVerifyRefreshLog_` reads the log sheet as the user sees it: the refresh that just ran must be the newest entry (row 2): its source, a start inside the run, an end not before it, a duration and a status (the error message when the run failed) and the technical text.
+It is part of `menuRefreshCurrentSheet` (a config sheet), `menuRefreshAll`, the scheduled refresh, and the retired trigger (whose entry says nothing was refreshed; the retired check no longer fails on the log sheet that entry may have made). The sidebar functions
+`getRefreshLogSheetName` / `setRefreshLogSheetName` are `requestRefreshLogSheetName` / `requestSetRefreshLogSheetName` (a refused name - already a sheet of the add-on, or over 100 characters - is an expected error).
+
 ## Quiet jobs
 `sheet.ignored`, `change.ignored` and `change.own` (`LIVE_CHECK_QUIET_JOBS`, `Live Check.js`) only look at an event and do nothing; they were most of the report. While they **pass** (or skip) nothing is logged, stored or shown, and their "running" placeholder
 is removed at once. One that fails or warns (an edit in a config sheet wrongly ignored) is recorded and shown like any other run. `settings.edit` and `agent.skipped` also do nothing but are still reported.
