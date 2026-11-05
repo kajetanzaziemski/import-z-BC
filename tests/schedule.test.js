@@ -470,11 +470,11 @@ module.exports = function register(t) {
     assert.strictEqual(logged.length, 1);
     // the fake config sheets here have no table: a failure the add-on handles itself is the status, and no sheet counts as refreshed
     assert.deepStrictEqual([logged[0].name, logged[0].source, logged[0].status, logged[0].sheets, logged[0].technical],
-      ['Dziennik pobrań', 'Autoodświeżanie', 'Brak tabeli w arkuszu konfiguracji „K1”; Brak tabeli w arkuszu konfiguracji „K3”', '0 arkuszy', 'Trigger czasowy trig-A']);
+      ['Dziennik pobrań', 'Autoodświeżanie', 'Brak tabeli w arkuszu konfiguracji „K1”; Brak tabeli w arkuszu konfiguracji „K3”', '0 arkuszy', 'Clock trigger trig-A']);
     const legacy = scenario({ settings: { refreshPermit: { issuedFor: 'trig-L', lastRefresh: 1, intervalHours: 6 } } });
     legacy.p.triggers.push(NAMED('trig-L', 'autoRefresh'));
     legacy.ex.eval(`autoRefresh(${event('trig-L')})`);
-    assert.strictEqual(plain(legacy.ex.eval(`__logged[0].technical`)), 'Trigger czasowy trig-L (stara wersja: funkcja autoRefresh)');
+    assert.strictEqual(plain(legacy.ex.eval(`__logged[0].technical`)), 'Clock trigger trig-L (old version: autoRefresh function)');
   });
 
   test('log: a scheduled refresh that fails writes the entry with the error as the status, and the error goes on', () => {
@@ -490,12 +490,12 @@ module.exports = function register(t) {
     sc.ex.eval(`autoRefreshHandler(${event('trig-A')})`);
     const [e] = plain(sc.ex.eval(`__logged`));
     assert.deepStrictEqual([e.source, e.status, e.sheets], ['Autoodświeżanie', 'Odświeżanie nie zostało wykonane', '0 arkuszy']);
-    assert.ok(/^Trigger czasowy trig-A\./.test(e.technical) && /trigger został usunięty/.test(e.technical) && /odświeżanie nie zostało wykonane/.test(e.technical), e.technical);
+    assert.ok(/^Clock trigger trig-A\./.test(e.technical) && /trigger was deleted/.test(e.technical) && /no refresh was performed/.test(e.technical), e.technical);
     assert.deepStrictEqual(sc.calls(), [], 'nothing was refreshed');
     const off = scenario({ settings: { refreshPermit: { issuedFor: 'trig-L', lastRefresh: 1, intervalHours: 6, off: true } } });
     off.p.triggers.push(NAMED('trig-L', 'autoRefresh'));
     off.ex.eval(`autoRefresh(${event('trig-L')})`);
-    assert.ok(/stara wersja/.test(plain(off.ex.eval(`__logged[0].technical`))));
+    assert.ok(/old version/.test(plain(off.ex.eval(`__logged[0].technical`))));
   });
 
   // ---- the legacy handler (autoRefresh, older triggers) ------------------------------------------------------------------------------------

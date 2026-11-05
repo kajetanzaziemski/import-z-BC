@@ -406,7 +406,7 @@ module.exports = function register(t) {
     const ex = p.execution(FILES);
     const T = 1750000000000;
     const HEAD = ['Źródło', 'Początek', 'Koniec', 'Czas trwania', 'Status', 'Odświeżone arkusze', 'Dane techniczne'];
-    const GOOD = ['Autoodświeżanie', { t: T }, { t: T + 5000 }, '5 s', 'OK', '0 arkuszy', 'Trigger czasowy t1'];
+    const GOOD = ['Autoodświeżanie', { t: T }, { t: T + 5000 }, '5 s', 'OK', '0 arkuszy', 'Clock trigger t1'];
     /** the verdicts of lcVerifyRefreshLog_ on a log sheet whose row 2 is `row` (dates as { t: ms }) */
     const run = (row, over) => plain(ex.eval(`(() => { const res = []; const D = x => (x && typeof x == 'object' && 't' in x) ? new Date(x.t) : x;
       const rows = { 1: ${JSON.stringify(HEAD)}, 2: ${JSON.stringify(row)}.map(D) };
@@ -414,7 +414,7 @@ module.exports = function register(t) {
       const c = { startedAt: ${T - 1000}, error: ${over && over.error ? '{ message: "BC down" }' : 'null'}, settings: () => ({ logSheetName: ${over && over.name ? JSON.stringify(over.name) : 'undefined'} }), attempt: (n, f) => f(),
         spreadsheet: () => ({ getSheetByName: n => { res.push(['sheet', n]); return sheet; } }),
         expect: (n, ok) => { res.push([n, ok ? 'PASS' : 'FAIL']); return ok; }, expectEqual: (n, a, b) => res.push([n, JSON.stringify(a) === JSON.stringify(b) ? 'PASS' : 'FAIL']) };
-      Date.now = () => ${T + 10000}; lcVerifyRefreshLog_(c, 'Autoodświeżanie', /^Trigger czasowy /); return res; })()`));
+      Date.now = () => ${T + 10000}; lcVerifyRefreshLog_(c, 'Autoodświeżanie', /^Clock trigger /); return res; })()`));
     const fails = res => res.filter(r => r[1] === 'FAIL').map(r => r[0]);
     assert.deepStrictEqual(fails(run(GOOD)), []);
     assert.strictEqual(run(GOOD)[0][1], 'Dziennik pobrań', 'the default name');
@@ -427,7 +427,7 @@ module.exports = function register(t) {
     assert.deepStrictEqual(fails(run(GOOD.slice(0, 4).concat(['BC down'], GOOD.slice(5)), { error: true })), []);
     const src = fs.readFileSync(path.join(ROOT, 'Live Check Verifiers.js'), 'utf8');
     ['menuRefreshCurrentSheet: {', 'menuRefreshAll: {'].forEach(k => assert.ok(/lcVerifyRefreshLog_\(c,/.test(src.slice(src.indexOf(k), src.indexOf(k) + 900)), k));
-    assert.ok(/function lcVerifyScheduledRefresh_\(c\)\{[\s\S]*?lcVerifyRefreshLog_\(c,"Autoodświeżanie"/.test(src) && /function lcVerifyRetiredRefresh_\(c\)\{[\s\S]*?lcVerifyRefreshLog_\(c,"Autoodświeżanie",\/nie zostało wykonane\//.test(src));
+    assert.ok(/function lcVerifyScheduledRefresh_\(c\)\{[\s\S]*?lcVerifyRefreshLog_\(c,"Autoodświeżanie"/.test(src) && /function lcVerifyRetiredRefresh_\(c\)\{[\s\S]*?lcVerifyRefreshLog_\(c,"Autoodświeżanie",\/no refresh was performed\//.test(src));
   });
 
   const THREE_ROWS = `ODataConnection.prototype.getDataArray = () => [['No'], ['C1'], ['C2']];`;

@@ -22,7 +22,7 @@ const MenuActions = {
   /** "Pobierz dane dla tego arkusza". */
   refreshActive(){
     const configSheet = MenuActions.activeConfigSheet();
-    if(configSheet) RefreshLog.run(REFRESH_LOG_SOURCES.one,`Menu: Pobierz dane dla tego arkusza (${configSheet})`,() => RefreshSheet.run(configSheet));
+    if(configSheet) RefreshLog.run(REFRESH_LOG_SOURCES.one,`Menu: refresh one sheet (config sheet: ${configSheet})`,() => RefreshSheet.run(configSheet));
     else MenuActions.warnNotConfigSheet();
   },
 

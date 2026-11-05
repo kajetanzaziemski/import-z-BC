@@ -7,7 +7,7 @@
 const RefreshAll = {
   /** Every config/result pair of the settings sheet, in the order listed there (menu "refresh all"). */
   all(){
-    RefreshLog.run(REFRESH_LOG_SOURCES.all,"Menu: Pobierz dane dla wszystkich arkuszy",
+    RefreshLog.run(REFRESH_LOG_SOURCES.all,"Menu: refresh all sheets",
       () => getMainSettings().getSheetList().forEach(cfg => RefreshSheet.run(cfg.configSheet,cfg.resultSheet)));
   },
 
@@ -21,7 +21,7 @@ const RefreshAll = {
    * What a time-based trigger does: refresh the ticked pairs, then note the time on the settings sheet.
    * Quirk kept: the time is noted also when nothing was ticked; it is not noted when a refresh fails.
    */
-  scheduled(technical = "Trigger czasowy"){
+  scheduled(technical = "Clock trigger"){
     RefreshLog.run(REFRESH_LOG_SOURCES.auto,technical,() => {
       RefreshAll.ticked();
       getMainSettings().setLastRefresh(new Date());

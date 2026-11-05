@@ -26,7 +26,7 @@ module.exports = function register(t) {
     GRID_FILES.forEach(f => new vm.Script(fs.readFileSync(path.join(ROOT, f), 'utf8'), { filename: f }).runInContext(ctx));
     return { book, ctx, run: code => vm.runInContext(code, ctx) };
   }
-  const entry = (n) => `({ source: 'Autoodświeżanie', start: new Date(Date.UTC(2026, 10, 5, 10, ${n})), end: new Date(Date.UTC(2026, 10, 5, 10, ${n}, 30)), duration: '30 s', status: 'OK', sheets: '1 arkusz\\nDane K1 (${n} wierszy)', technical: 'Trigger czasowy t${n}' })`;
+  const entry = (n) => `({ source: 'Autoodświeżanie', start: new Date(Date.UTC(2026, 10, 5, 10, ${n})), end: new Date(Date.UTC(2026, 10, 5, 10, ${n}, 30)), duration: '30 s', status: 'OK', sheets: '1 arkusz\\nDane K1 (${n} wierszy)', technical: 'Clock trigger t${n}' })`;
 
   MODES.forEach(mode => test('log sheet: the first entry makes the sheet with the headers (bold, grey) and writes the entry under them; the next one goes ABOVE it, right under the headers [' + mode + ']', () => {
     const s = gridScope(mode);
@@ -34,9 +34,9 @@ module.exports = function register(t) {
     const sh = s.book.sheets['Dziennik pobrań'];
     const v = (r, c) => (sh.cells[r + ',' + c] || {}).v ?? '';
     assert.deepStrictEqual([1, 2, 3, 4, 5, 6, 7].map(c => v(1, c)), ['Źródło', 'Początek', 'Koniec', 'Czas trwania', 'Status', 'Odświeżone arkusze', 'Dane techniczne']);
-    assert.deepStrictEqual([v(2, 1), v(2, 4), v(2, 5), v(2, 6), v(2, 7)], ['Autoodświeżanie', '30 s', 'OK', '1 arkusz\nDane K1 (1 wierszy)', 'Trigger czasowy t1']);
+    assert.deepStrictEqual([v(2, 1), v(2, 4), v(2, 5), v(2, 6), v(2, 7)], ['Autoodświeżanie', '30 s', 'OK', '1 arkusz\nDane K1 (1 wierszy)', 'Clock trigger t1']);
     s.run(`RefreshLogGrid.append('Dziennik pobrań', ${entry(2)})`);
-    assert.deepStrictEqual([v(2, 7), v(3, 7), v(4, 7)], ['Trigger czasowy t2', 'Trigger czasowy t1', ''], 'the newest first');
+    assert.deepStrictEqual([v(2, 7), v(3, 7), v(4, 7)], ['Clock trigger t2', 'Clock trigger t1', ''], 'the newest first');
     assert.deepStrictEqual([1, 2, 3, 4, 5, 6, 7].map(c => v(1, c))[0], 'Źródło', 'the headers stay on top');
   }));
 
@@ -62,8 +62,8 @@ module.exports = function register(t) {
     s.run(`RefreshLogGrid.append('Dziennik pobrań', ${entry(31)})`);
     if (mode === 'api') assert.strictEqual(s.book.requests.length - requestsBefore, 1, 'one batchUpdate');
     const sh = s.book.sheets['Dziennik pobrań'];
-    assert.strictEqual((sh.cells['2,7'] || {}).v, 'Trigger czasowy t31');
-    assert.strictEqual((sh.cells['32,7'] || {}).v, 'Trigger czasowy t1', 'all 31 entries are there, the oldest last');
+    assert.strictEqual((sh.cells['2,7'] || {}).v, 'Clock trigger t31');
+    assert.strictEqual((sh.cells['32,7'] || {}).v, 'Clock trigger t1', 'all 31 entries are there, the oldest last');
   }));
 
   test('log sheet: both commit paths leave the same sheet', () => {
@@ -83,9 +83,9 @@ module.exports = function register(t) {
 
   test('entry: OK, the sheets with their rows (one cell, a line each), the Polish plural of sheets and rows, start / end / duration, the technical text', () => {
     const u = useCase();
-    u.ex.eval(`RefreshLog.run('Autoodświeżanie', 'Trigger czasowy t1', () => { RefreshLog.noteSheet('Dane K1', 1234); RefreshLog.noteSheet('Dane K3', 1); RefreshLog.noteSheet('Dane K4', 22); })`);
+    u.ex.eval(`RefreshLog.run('Autoodświeżanie', 'Clock trigger t1', () => { RefreshLog.noteSheet('Dane K1', 1234); RefreshLog.noteSheet('Dane K3', 1); RefreshLog.noteSheet('Dane K4', 22); })`);
     const [e] = u.entries();
-    assert.deepStrictEqual([e.name, e.source, e.status, e.technical], ['Dziennik pobrań', 'Autoodświeżanie', 'OK', 'Trigger czasowy t1']);
+    assert.deepStrictEqual([e.name, e.source, e.status, e.technical], ['Dziennik pobrań', 'Autoodświeżanie', 'OK', 'Clock trigger t1']);
     assert.strictEqual(e.sheets, '3 arkusze\nDane K1 (1234 wiersze)\nDane K3 (1 wiersz)\nDane K4 (22 wiersze)');
     assert.ok(Date.parse(e.start) <= Date.parse(e.end));
     assert.ok(/^\d+ s$|^\d+ m \d+ s$/.test(e.duration), e.duration);
@@ -132,9 +132,9 @@ module.exports = function register(t) {
 
   test('entry: logOnly (a clock trigger that deleted itself) = an entry with no sheets and the reason as the status', () => {
     const u = useCase();
-    u.ex.eval(`RefreshLog.logOnly('Autoodświeżanie', 'Trigger czasowy t9. Trigger został usunięty', 'Odświeżanie nie zostało wykonane')`);
+    u.ex.eval(`RefreshLog.logOnly('Autoodświeżanie', 'Clock trigger t9. The trigger was deleted', 'Odświeżanie nie zostało wykonane')`);
     const [e] = u.entries();
-    assert.deepStrictEqual([e.source, e.status, e.sheets, e.technical], ['Autoodświeżanie', 'Odświeżanie nie zostało wykonane', '0 arkuszy', 'Trigger czasowy t9. Trigger został usunięty']);
+    assert.deepStrictEqual([e.source, e.status, e.sheets, e.technical], ['Autoodświeżanie', 'Odświeżanie nie zostało wykonane', '0 arkuszy', 'Clock trigger t9. The trigger was deleted']);
   });
 
   // ---- the three kinds of refresh write an entry -------------------------------------------------------------------------------------------------
@@ -147,8 +147,8 @@ module.exports = function register(t) {
     u.ex.eval(`RefreshAll.all()`);
     u.ex.eval(`MenuActions.activeConfigSheet = () => 'K2'; MenuActions.refreshActive()`);
     const [all, one] = u.entries();
-    assert.deepStrictEqual([all.source, all.sheets, all.technical, all.status], ['Odświeżanie wszystkich arkuszy', '2 arkusze\nDane K1 (10 wierszy)\nDane K2 (20 wierszy)', 'Menu: Pobierz dane dla wszystkich arkuszy', 'OK']);
-    assert.deepStrictEqual([one.source, one.sheets, one.technical], ['Odświeżanie jednego arkusza', '1 arkusz\nDane K2 (20 wierszy)', 'Menu: Pobierz dane dla tego arkusza (K2)']);
+    assert.deepStrictEqual([all.source, all.sheets, all.technical, all.status], ['Odświeżanie wszystkich arkuszy', '2 arkusze\nDane K1 (10 wierszy)\nDane K2 (20 wierszy)', 'Menu: refresh all sheets', 'OK']);
+    assert.deepStrictEqual([one.source, one.sheets, one.technical], ['Odświeżanie jednego arkusza', '1 arkusz\nDane K2 (20 wierszy)', 'Menu: refresh one sheet (config sheet: K2)']);
   });
 
   test('menu: on a sheet that is not a config sheet nothing is refreshed and nothing is logged; a failing sheet stops the run and the entry carries the error', () => {
@@ -163,9 +163,9 @@ module.exports = function register(t) {
 
   test('automatic refresh: RefreshAll.scheduled writes "Autoodświeżanie" with the clock trigger in the technical text; a trigger that retires writes an entry that says nothing was refreshed', () => {
     const u = useCase(); u.ex.eval(STUBS);
-    u.ex.eval(`RefreshAll.scheduled('Trigger czasowy t1')`);
+    u.ex.eval(`RefreshAll.scheduled('Clock trigger t1')`);
     const [e] = u.entries();
-    assert.deepStrictEqual([e.source, e.technical, e.sheets, e.status], ['Autoodświeżanie', 'Trigger czasowy t1', '1 arkusz\nDane K1 (10 wierszy)', 'OK']);
+    assert.deepStrictEqual([e.source, e.technical, e.sheets, e.status], ['Autoodświeżanie', 'Clock trigger t1', '1 arkusz\nDane K1 (10 wierszy)', 'OK']);
     const text = fs.readFileSync(path.join(ROOT, 'ScheduleRefresh.js'), 'utf8');
     assert.ok(/RefreshAll\.scheduled\(ScheduleRefresh\.triggerText_\(e\.triggerUid,false\)\)/.test(text) && /RefreshAll\.scheduled\(ScheduleRefresh\.triggerText_\(e\.triggerUid,true\)\)/.test(text));
     assert.ok(/logRetired_\(e\.triggerUid,false\)/.test(text) && /logRetired_\(e\.triggerUid,true\)/.test(text), 'both handlers log a retired trigger');

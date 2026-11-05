@@ -703,7 +703,7 @@ function buildLiveCheckVerifiers_(){
           return;
         }
         lcVerifyRefreshedConfig_(c,entry);
-        lcVerifyRefreshLog_(c,"Odświeżanie jednego arkusza",/^Menu: Pobierz dane dla tego arkusza/);
+        lcVerifyRefreshLog_(c,"Odświeżanie jednego arkusza",/^Menu: refresh one sheet/);
       }
     },
 
@@ -711,7 +711,7 @@ function buildLiveCheckVerifiers_(){
       needs: ["sheets","settingsSheet","indicators"],
       verify(c){
         const settings = c.now("settingsSheet");
-        lcVerifyRefreshLog_(c,"Odświeżanie wszystkich arkuszy",/^Menu: Pobierz dane dla wszystkich arkuszy/);
+        lcVerifyRefreshLog_(c,"Odświeżanie wszystkich arkuszy",/^Menu: refresh all sheets/);
         if(!settings.configs.length){ c.pass("no config sheets listed: nothing to refresh"); return; }
         settings.configs.forEach(entry => lcVerifyRefreshedConfig_(c,entry));
       }
@@ -1192,7 +1192,7 @@ function lcRefreshTriggerHoldsPermit_(c){
 function lcVerifyScheduledRefresh_(c){
   const uid = c.input.e.triggerUid;
   lcVerifyZoneLabels_(c,c.now("settingsSheet"));
-  lcVerifyRefreshLog_(c,"Autoodświeżanie",/^Trigger czasowy /);
+  lcVerifyRefreshLog_(c,"Autoodświeżanie",/^Clock trigger /);
   const triggerStillThere = lcTriggersSeen_().some(t => t.getUniqueId() === uid);
   const settings = c.now("settingsSheet");
   c.expect("permitted trigger stays installed",triggerStillThere,"trigger removed itself");
@@ -1222,7 +1222,7 @@ function lcVerifyRetiredRefresh_(c){
   const added = lcAddedSheets_(c).filter(n => n !== logName);
   const removed = lcSheetNames_(c.before.sheets).filter(n => !lcSheetNames_(c.now("sheets")).includes(n));
   c.expect("nothing refreshed: no sheet added or removed (the log sheet apart)",added.length == 0 && removed.length == 0,`added ${added.join(", ") || "-"}, removed ${removed.join(", ") || "-"}`);
-  lcVerifyRefreshLog_(c,"Autoodświeżanie",/nie zostało wykonane/);
+  lcVerifyRefreshLog_(c,"Autoodświeżanie",/no refresh was performed/);
   c.expectEqual("last refresh untouched",settings.lastRefresh && new Date(settings.lastRefresh).getTime(),c.before.settingsSheet.lastRefresh && new Date(c.before.settingsSheet.lastRefresh).getTime());
   c.expectEqual("permit untouched",c.settings().refreshPermit ?? null,c.before.settings?.refreshPermit ?? null);
 }

@@ -338,13 +338,13 @@ const ScheduleRefresh = {
 
   /** What the log says about the clock trigger that fired. */
   triggerText_(triggerUid, legacy){
-    return `Trigger czasowy ${triggerUid}${legacy ? " (stara wersja: funkcja autoRefresh)" : ""}`;
+    return `Clock trigger ${triggerUid}${legacy ? " (old version: autoRefresh function)" : ""}`;
   },
 
   /** A trigger that does not hold the permit deletes itself and refreshes nothing: that is an entry of the log too. */
   logRetired_(triggerUid, legacy){
     RefreshLog.logOnly(REFRESH_LOG_SOURCES.auto,
-      `${ScheduleRefresh.triggerText_(triggerUid,legacy)}. Zezwolenie na odświeżanie nie jest wydane dla tego triggera (wyłączone lub wydane dla innego): trigger został usunięty, odświeżanie nie zostało wykonane.`,
+      `${ScheduleRefresh.triggerText_(triggerUid,legacy)}. The refresh permit is not issued for this trigger (the refresh is switched off, or the permit is issued for another trigger): the trigger was deleted, no refresh was performed.`,
       "Odświeżanie nie zostało wykonane");
   },
 
