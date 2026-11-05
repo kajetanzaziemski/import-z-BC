@@ -67,3 +67,11 @@ Real files in a fresh Apps Script scope on fake Properties/Cache/Lock services a
 `Menu.js` keeps the entry points (one `Controller.run` with the action name each); `MenuActions` has the work: `analyseActive`, `refreshActive`, `estimateActive`, `insertWizard`, `authorise`, `logout`
 and the shared lookup of the config sheet of the active sheet (`activeConfigSheet`, `warnNotConfigSheet`). The `*_script` helpers (`refreshCurrentSheet_script`, `estimateForCurrentSheet_script`) are gone.
 Pinned by `tests/menu.test.js` (written before the move) and `tests/refresh.test.js`.
+
+
+## The user's list of time triggers (Refresh Registry.js, Auto Refresh Panel.js)
+A time trigger says nothing about itself: ScriptApp gives its id, handler and event type; no interval, no document, no last run (`getTriggerSourceId()` is null), while `getProjectTriggers()` lists the user's triggers of ALL documents.
+So each set-up writes a record to the USER properties, one property per trigger (`refreshTrigger:<id>`: document name / address / settings sheet gid / zone, interval, time of day, zone, set-up time, next planned run, last run, its duration and sheets,
+`seenAt`), a scheduled run updates it, replacing / switching off / retiring a trigger removes it. One property per trigger so that the runs of different documents never overwrite each other (CLAUDE.md: no whole-snapshot write-back).
+The list in the sidebar tab ("Arkusze, które odświeżasz automatycznie:") starts from the clock triggers that exist (three looks, as everywhere: the trigger list is unreliable) and adds the record; this document's trigger made before the registry existed gets its record from the
+permit; any other trigger without a record is listed as "Nieznany arkusz" with its id and handler (`autoRefresh` = an old version). A record whose trigger has not been seen for a week is dropped; a record never makes a trigger appear.

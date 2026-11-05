@@ -37,7 +37,59 @@ const AutoRefreshPanel = {
       };
     }
     out.sheet = AutoRefreshPanel.fromSheet_(now, tz, current, stamp);
+    out.triggers = AutoRefreshPanel.triggerList_(now, tz, permit);
     return out;
+  },
+
+  /**
+   * ALL of the user's time triggers (clock triggers of every document the add-on is used in), each with what is known about it: the registry's record
+   * (Refresh Registry.js) or, for this document's trigger made before the registry existed, the permit; for any other, only what the trigger itself says
+   * (its id and handler: ScriptApp gives a time trigger no interval, no document, no last run). Sorted: known by document name, unknown last.
+   * @returns {{items: Array, error: string|null}}
+   */
+  triggerList_(now, tz, permit){
+    try{
+      const seen = ScheduleRefresh.triggersSeen_().filter(t => String(t.getEventType()) == "CLOCK");
+      const ids = seen.map(t => t.getUniqueId());
+      try{ RefreshRegistry.ensureFromPermit(ids.includes(permit?.issuedFor) ? permit : null); RefreshRegistry.markSeen(ids,now.getTime()); }
+      catch(err){ dbgLog(`Refresh trigger records not kept up to date: ${err}`); }
+      const here = RefreshRegistry.document_().docId;
+      const items = seen.map(t => {
+        const id = t.getUniqueId(), rec = RefreshRegistry.get(id);
+        const zone = rec?.docTz || tz;
+        const hours = rec?.intervalHours, days = hours && hours % 24 === 0;
+        const every = !hours ? null : `${days ? hours / 24 : hours} ${SettingsGrid.unitName({freq: days ? hours / 24 : hours, unit: days ? "days" : "hrs"})}`
+          + (rec.startAt ? ` o ${rec.startAt}` : "") + (rec.startAt && rec.timeZone ? ` (${AutoRefreshPanel.zoneName_(rec.timeZone,now)})` : "");
+        return {
+          id: id,
+          handler: t.getHandlerFunction(),
+          known: !!rec?.docName || !!rec?.docId,
+          here: !!rec?.docId && rec.docId === here || (!!permit?.issuedFor && permit.issuedFor === id),
+          name: rec?.docName ?? null,
+          url: AutoRefreshPanel.safeUrl_(rec?.url, rec?.gid),
+          every: every,
+          last: rec?.lastRun ? SettingsGrid.stamp(new Date(rec.lastRun), zone) : null,
+          duration: AutoRefreshPanel.duration(rec?.lastDurationMs),
+          next: rec?.nextRefresh ? SettingsGrid.stamp(new Date(rec.nextRefresh), zone) : null
+        };
+      });
+      items.sort((a, b) => (b.known - a.known) || String(a.name ?? "").localeCompare(String(b.name ?? "")) || a.id.localeCompare(b.id));
+      return {items: items, error: null};
+    }catch(err){
+      dbgLog(`Auto refresh panel: trigger list not read: ${err}`);
+      return {items: [], error: String(err && err.message || err)};
+    }
+  },
+
+  /** The address of a spreadsheet (and of its settings sheet) for a link; anything that is not a Google spreadsheet address is dropped. */
+  safeUrl_(url, gid){
+    if(typeof url != "string" || !/^https:\/\/docs\.google\.com\/spreadsheets\/d\/[\w-]+/.test(url)) return null;
+    const base = url.split("#")[0];
+    return Number.isInteger(gid) ? `${base}#gid=${gid}` : base;
+  },
+
+  zoneName_(timeZone, now){
+    try{ return SettingsGrid.offsetName(now, timeZone); }catch(err){ return timeZone; }
   },
 
   /** "27 m 11 s", "5 s", "2 h 3 m 4 s"; null when the run did not record it. */

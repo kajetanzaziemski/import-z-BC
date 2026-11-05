@@ -389,7 +389,7 @@ module.exports = function register(t) {
   });
 
   // ---- jobs (intents): a run is reported under what it DID, via the technical trigger ---------------------------------------------------------
-  const JOB_FILES = ['Import Query.js', 'BulkSheet.js', 'ResultSheet.js', 'RefreshSheet.js', 'EstimateSheet.js', 'RefreshAll.js', 'ScheduleRefresh.js', 'AnalyseConfig.js', 'Router.js', 'Managed Sheets.js', 'Own Writes.js',
+  const JOB_FILES = ['Import Query.js', 'BulkSheet.js', 'ResultSheet.js', 'RefreshSheet.js', 'EstimateSheet.js', 'RefreshAll.js', 'Refresh Registry.js', 'ScheduleRefresh.js', 'AnalyseConfig.js', 'Router.js', 'Managed Sheets.js', 'Own Writes.js',
     'Data Type.js', 'Menu.js', 'Menu Actions.js', 'Sheet Coeditor.js', 'Grid.js', 'Grid Util.js', 'Config Grid.js'];
 
   test('live check jobs: every job the code announces (Controller.intent, the router\'s action table) is in the catalogue and has a verifier, and none is orphaned', () => {

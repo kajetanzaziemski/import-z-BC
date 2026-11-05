@@ -63,7 +63,18 @@ const ScheduleRefresh = {
     // Save the permit now, not when the run closes: writing the status message takes seconds and the sidebar polls the permit meanwhile
     // (a permit that still names the removed trigger reads as "nothing is set").
     Settings.store().saveArray();
+    ScheduleRefresh.register_(newTrigger.getUniqueId(),{intervalHours: intervalHrs, startAt: startAt ? `${startAt.hour}:${String(startAt.minute ?? 0).padStart(2,"0")}` : undefined,
+                                                      timeZone: startAt?.timeZone, setAt: Date.now(), nextRefresh: nextRefresh.getTime()});
     return {nextRefresh, intervalHrs};
+  },
+
+  /** The record of the user's trigger list (Refresh Registry.js). A failure there never fails the set-up or the run. */
+  register_(triggerId, how){
+    try{ RefreshRegistry.register(triggerId,how); }catch(err){ dbgLog(`Refresh trigger record not written: ${err}`); }
+  },
+
+  forget_(triggerId){
+    try{ RefreshRegistry.remove(triggerId); }catch(err){ dbgLog(`Refresh trigger record not removed: ${err}`); }
   },
 
   /** Builds and creates the time trigger: every `interval` days (at the hour of startAt) or hours, near the minute, in the zone of startAt. */
@@ -92,6 +103,8 @@ const ScheduleRefresh = {
       const startAt = m ? {hour: +m[1], minute: +m[2], timeZone: permit.timeZone ?? undefined} : null;
       const restored = ScheduleRefresh.createTrigger_(days ? "days" : "hrs", days ? permit.intervalHours / 24 : permit.intervalHours, startAt);
       MainSettings.updateRefreshPermit(Object.assign({}, permit, {issuedFor: restored.getUniqueId()}));
+      ScheduleRefresh.register_(restored.getUniqueId(),{intervalHours: permit.intervalHours, startAt: permit.startAt ?? undefined, timeZone: permit.timeZone ?? undefined,
+                                                       setAt: permit.lastRefresh, nextRefresh: permit.nextRefresh, lastRun: permit.lastRun, lastDurationMs: permit.lastDurationMs, lastSheets: permit.lastSheets});
     }catch(err){
       dbgLog(`The previous refresh trigger could not be put back: ${err}`);
       MainSettings.updateRefreshPermit(Object.assign({}, permit, {off: true}));
@@ -266,7 +279,12 @@ const ScheduleRefresh = {
     const extra = {lastDurationMs: Date.now() - started, lastSheets: sheets};
     const next = ScheduleRefresh.nextAfterRun_(MainSettings.getRefreshPermit(), started);
     if(next) extra.nextRefresh = next;
-    if(MainSettings.touchRefreshPermit(triggerUid,extra)) ScheduleRefresh.reportScheduled_();
+    const touched = MainSettings.touchRefreshPermit(triggerUid,extra);
+    try{
+      RefreshRegistry.ensureFromPermit(MainSettings.getRefreshPermit());
+      RefreshRegistry.touch(triggerUid,{lastRun: Date.now(), lastDurationMs: extra.lastDurationMs, lastSheets: sheets, nextRefresh: extra.nextRefresh});
+    }catch(err){ dbgLog(`Refresh trigger record not updated: ${err}`); }
+    if(touched) ScheduleRefresh.reportScheduled_();
   },
 
   /**
@@ -329,6 +347,7 @@ const ScheduleRefresh = {
   removeRefreshTrigger_(triggerUid){
     if(!triggerUid) return;
     try{ if(Store.cache.get("document","refreshTriggerSeen") === triggerUid) Store.cache.remove("document","refreshTriggerSeen"); }catch(err){}
+    ScheduleRefresh.forget_(triggerUid);
     ScheduleRefresh.triggersSeen_()
       .filter(t => t.getUniqueId() === triggerUid && ["autoRefresh","autoRefreshHandler"].includes(t.getHandlerFunction()))
       .forEach(t => ScriptApp.deleteTrigger(t));
@@ -346,6 +365,7 @@ const ScheduleRefresh = {
 
   /** Deletes the project trigger with this id (a time trigger removes itself this way). */
   removeTrigger(triggerUid){
+    ScheduleRefresh.forget_(triggerUid);
     ScheduleRefresh.triggersSeen_()
       .filter(t => t.getUniqueId() === triggerUid)
       .forEach(t => ScriptApp.deleteTrigger(t));

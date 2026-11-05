@@ -3,6 +3,7 @@
 //
 //   Store.get / set / remove (scope, key)        properties: strings, null deletes (HelperDataStore rules: bad scope / key / value type throw)
 //   Store.getJson / setJson (scope, key, ...)    a JSON value kept in one property
+//   Store.keys(scope, prefix)                    the keys of the properties that start with prefix (one property per record)
 //   Store.cache.get / set / remove (scope, key)  CacheService with a lifetime in seconds (set(scope, key, value, ttl))
 //   Store.optional.getCache / setCache           the cache when it may be missing: failures give null instead of an error
 //   Store.object(key, scope)                     StorageObject: keeps the keys it changed and merges them under a lock (the rule of
@@ -118,6 +119,11 @@ const Store = (function () {
       return raw ? JSON.parse(raw) : fallback;
     },
     setJson(scope, key, value) { HelperDataStore.setPropertyValue(scope, key, JSON.stringify(value)); return Store; },
+
+    /** The keys of the scope's properties that start with `prefix` (a family of records, one property each: no whole-snapshot write-back, see CLAUDE.md). */
+    keys(scope, prefix) {
+      return HelperDataStore['get' + cap(scope) + 'Properties']().getKeys().filter(k => k.indexOf(prefix) === 0);
+    },
 
     cache: cache,
 
