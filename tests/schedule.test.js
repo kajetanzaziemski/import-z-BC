@@ -14,7 +14,7 @@ const { FakePlatform } = require('./platform-fakes');
 const ROOT = path.join(__dirname, '..');
 const BASE = ['Custom errors.js', 'Helper Data Store.js', 'Store.js', 'Settings.js', 'Main Settings.js', 'Controller.js', 'Trigger Manager.js',
   'Global Add-on Settings.js', 'Quick Start.js', 'functions.js', 'Track onEdit Triggers.js', 'Status Manager.js', 'Agent Reconciler.js', 'Agents.js', 'Verify Agent.js', 'Data Type.js', 'Menu.js', 'Settings Sheet.js'];
-const USE_CASE_FILES = ['Import Query.js', 'BulkSheet.js', 'ResultSheet.js', 'RefreshSheet.js', 'EstimateSheet.js', 'RefreshAll.js', 'Refresh Registry.js', 'ScheduleRefresh.js'].filter(f => fs.existsSync(path.join(ROOT, f)));
+const USE_CASE_FILES = ['Import Query.js', 'BulkSheet.js', 'ResultSheet.js', 'RefreshSheet.js', 'EstimateSheet.js', 'RefreshAll.js', 'Refresh Registry.js', 'ScheduleRefresh.js', 'Grid.js'].filter(f => fs.existsSync(path.join(ROOT, f)));
 
 const FAKES = `
   globalThis.SheetCoeditor = class {
@@ -247,7 +247,7 @@ module.exports = function register(t) {
     sc.ex.eval(ZONES);
     sc.ex.eval(`globalThis.__tz = 'UTC'; globalThis.__sheet = true; globalThis.__adopt = []; globalThis.__says = ${JSON.stringify(sheetSays || { changed: false })};
       activeSpreadsheetTimeZone = () => __tz; settingsSheetExists = () => __sheet;
-      getMainSettings = () => ({ adoptTimeZone: plan => { const s = __says; if (!s.changed) { __adopt.push(['unchanged']); return { changed: false }; }
+      getMainSettings = () => ({ adoptTimeZone: plan => { globalThis.__serviceOnlyDuring = gridServiceOnly_; const s = __says; if (!s.changed) { __adopt.push(['unchanged']); return { changed: false }; }
           const convert = plan(s.info); const from = { hour: 17, minute: 30 }; const to = convert ? convert(from) : null; __adopt.push([!!convert, to]);
           return { changed: true, zoneChanged: s.info.zoneChanged, from, to }; },
         setRefreshMessage: r => __adopt.push(['message', r.ok]), getSheetListWithRefreshTrue: () => [] });`);
@@ -265,6 +265,19 @@ module.exports = function register(t) {
     assert.deepStrictEqual(triggers(sc.p).map(x => x.id), ['t1'], 'the trigger keeps its own zone and fires at the same moment');
     const rec = JSON.parse(sc.p.props.user['refreshTrigger:t1'] || '{}');
     assert.deepStrictEqual([rec.startAt, rec.timeZone, rec.docTz], ['16:30', 'UTC', 'UTC']);
+  });
+
+  test('time zone: the sheet is read and written through the Spreadsheet service only (onOpen may run where the Sheets advanced service cannot be called), and only for the time of the check', () => {
+    const sc = tzScenario({ settings: { timeZone: 'Europe/Warsaw', refreshPermit: PERMIT_WARSAW } }, { changed: true, info: { zoneChanged: true, lastKnown: true, fromOffset: 60, toOffset: 0 } });
+    assert.strictEqual(sc.ex.eval(`gridServiceOnly_`), false);
+    sc.ex.eval(`ScheduleRefresh.syncTimeZone()`);
+    assert.strictEqual(sc.ex.eval(`__serviceOnlyDuring`), true);
+    assert.strictEqual(sc.ex.eval(`gridServiceOnly_`), false, 'restored, also when the check fails');
+    const failing = tzScenario({ settings: { timeZone: 'Europe/Warsaw' } }, { changed: true, info: { zoneChanged: true, lastKnown: true, fromOffset: 60, toOffset: 0 } });
+    failing.ex.eval(`getMainSettings = () => ({ adoptTimeZone: () => { throw new Error('Sheets API not available'); } })`);
+    assert.doesNotThrow(() => failing.ex.eval(`ScheduleRefresh.syncTimeZone()`));
+    assert.strictEqual(failing.ex.eval(`gridServiceOnly_`), false);
+    assert.ok(failing.p.consoleErrors.some(m => /Time zone of the spreadsheet not synchronised/.test(m) && /Sheets API not available/.test(m)), 'a failure is not silent: ' + failing.p.consoleErrors.join('|'));
   });
 
   test('time zone: the sheet is the judge - no zone remembered anywhere: the offset in the label gives the conversion (UTC+1 -> UTC+0 is an hour back; across midnight too)', () => {

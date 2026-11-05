@@ -98,3 +98,6 @@ What the SHEET says decides; the properties are secondary. On every open the zon
   uses the zone the properties remember (the saved `timeZone`, else the permit's) when there is one, else the offset in the label. With no last refresh in the sheet to tell by, the remembered zone decides.
 Then the properties follow: the saved zone, the permit's start time and zone, the user's record; the status message is written again (its times are in the new zone). The trigger is not recreated: it keeps its own zone and fires at the same moment.
 The check never throws and builds no settings sheet that does not exist; an off refresh keeps its permit. The live check allows `importSettingsArray` to change in `onOpen` for this.
+
+The check reads and writes the sheet through the Spreadsheet service only (`Grid.serviceOnly(true)` for the time of the check): `onOpen` may run in the limited authorisation mode, where the Sheets advanced service cannot be called. A lastRefresh label that is
+no `UTC+N` (an older version wrote "CET") is rewritten but is not taken for a zone change. A failure is logged with `console.error` and noted on the live check run, never silent.

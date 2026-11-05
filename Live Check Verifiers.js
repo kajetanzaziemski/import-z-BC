@@ -421,6 +421,24 @@ function lcTriggersSeen_(){
 }
 
 /**
+ * The time zone labels in the settings sheet read the zone the spreadsheet is in: E of the refreshTime line the offset of now, E of the lastRefresh line the offset at the
+ * moment of the last refresh, both written as UTC+N (UTC+2, UTC-5, UTC+5:30). The labels are what the user sees; they are checked against the spreadsheet itself, not against
+ * anything the add-on remembers. A sheet without those lines (an older one) is skipped.
+ */
+function lcVerifyZoneLabels_(c,settings){
+  c.attempt("time zone labels in the settings sheet read the spreadsheet's zone",() => {
+    if(!settings.exists) return c.skip("time zone labels","no settings sheet");
+    const tz = c.spreadsheet().getSpreadsheetTimeZone();
+    const label = date => { const z = Utilities.formatDate(date,tz,"Z"); const h = parseInt(z.slice(1,3),10), m = z.slice(3); return `UTC${z[0]}${h}${m == "00" ? "" : ":" + m}`; };
+    if(settings.timeRow) c.expectEqual(`refreshTime zone label (spreadsheet zone ${tz})`,String(settings.timeZoneLabel ?? "").trim(),label(new Date()));
+    else c.skip("refreshTime zone label","the refreshTime line is not in this sheet yet");
+    const last = settings.lastRefresh;
+    if(Object.prototype.toString.call(last) === "[object Date]" && !isNaN(last)) c.expectEqual(`lastRefresh zone label (spreadsheet zone ${tz})`,String(settings.lastRefreshTz ?? "").trim(),label(last));
+    else c.skip("lastRefresh zone label","no last refresh in the sheet");
+  });
+}
+
+/**
  * The time trigger after the refresh frequency was edited. A time trigger is not bound to a document, so only the trigger THIS document's permit names
  * is replaced; other refresh triggers (other documents', or this document's old / legacy ones, which delete themselves when they fire) may be around.
  */
@@ -466,10 +484,12 @@ function buildLiveCheckVerifiers_(){
     // - - - - - - - - events - - - - - - - -
 
     onOpen: {
-      needs: ["sheets","docProps"],
+      needs: ["sheets","docProps","settingsSheet"],
       verify(c){
         // importSettingsArray may change: the spreadsheet's time zone is remembered (and, when it changed, the refresh permit follows it)
         lcVerifyNothingChanged_(c,["importSettingsArray"]);
+        // the labels the user sees must read the zone the spreadsheet is in NOW (this is where a changed zone is put right)
+        lcVerifyZoneLabels_(c,c.now("settingsSheet"));
         c.skip("menu built","the add-on menu is built before the controller runs and cannot be read back by a script");
         c.skip("warning shown when the agents are not active","the alert cannot be read back by a script");
       }
@@ -1022,12 +1042,14 @@ function lcJobVerifiers_(){
         const settings = c.now("settingsSheet");
         if(!c.expect("the edit touched the refresh frequency (number or unit)",lcRefreshFrequencyTouched_(c,settings),"the edited range does not cover the refresh frequency cells")) return;
         lcVerifyRefreshTrigger_(c,settings);
+        lcVerifyZoneLabels_(c,settings);
       }
     },
 
     "settings.refreshApply": {
       verify(c){
         lcVerifyRefreshTrigger_(c,c.now("settingsSheet"));
+        lcVerifyZoneLabels_(c,c.now("settingsSheet"));
       }
     },
 
@@ -1115,6 +1137,7 @@ function lcRefreshTriggerHoldsPermit_(c){
 /** A time trigger with the permit: it stays, the permit records the run, the settings sheet shows the time and the ticked sheets were refreshed. */
 function lcVerifyScheduledRefresh_(c){
   const uid = c.input.e.triggerUid;
+  lcVerifyZoneLabels_(c,c.now("settingsSheet"));
   const triggerStillThere = lcTriggersSeen_().some(t => t.getUniqueId() === uid);
   const settings = c.now("settingsSheet");
   c.expect("permitted trigger stays installed",triggerStillThere,"trigger removed itself");

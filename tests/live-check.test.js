@@ -366,6 +366,34 @@ module.exports = function register(t) {
     assert.strictEqual(verdict('requestAutoRefesh', 1501000), false);
   });
 
+  test('live check: the time zone labels in the settings sheet are verified against the spreadsheet\'s zone (onOpen, refresh frequency, apply, scheduled refresh) - wrong, legacy ("CET") or missing labels are a FAIL, a sheet without those lines is skipped', () => {
+    const p = new FakePlatform();
+    const ex = p.execution(FILES);
+    ex.eval(`Utilities.formatDate = (d, tz, pat) => { const m = ({ 'Asia/Tokyo': 540, 'Europe/Warsaw': 60 })[tz]; return (m < 0 ? '-' : '+') + String(Math.floor(Math.abs(m) / 60)).padStart(2, '0') + String(Math.abs(m) % 60).padStart(2, '0'); }`);
+    const plain = v => JSON.parse(JSON.stringify(v));
+    const D = 'new Date(1750000000000)';
+    const base = { exists: true, timeRow: 7, timeZoneLabel: 'UTC+9', lastRefresh: '__DATE__', lastRefreshTz: 'UTC+9' };
+    const run = (tz, over) => {
+      const settings = Object.assign({}, base, over);
+      const json = JSON.stringify(settings).replace('"__DATE__"', D);
+      return plain(ex.eval(`(() => { const res = []; const c = { attempt: (n, f) => f(), spreadsheet: () => ({ getSpreadsheetTimeZone: () => '${tz}' }),
+        expectEqual: (n, a, b) => res.push([n.split(' (')[0], a === b ? 'PASS' : 'FAIL']), skip: (n) => res.push([n, 'SKIP']) }; lcVerifyZoneLabels_(c, ${json}); return res; })()`));
+    };
+    assert.deepStrictEqual(run('Asia/Tokyo', {}), [['refreshTime zone label', 'PASS'], ['lastRefresh zone label', 'PASS']]);
+    assert.deepStrictEqual(run('Europe/Warsaw', {}), [['refreshTime zone label', 'FAIL'], ['lastRefresh zone label', 'FAIL']], 'the zone was changed and the labels still read the old one');
+    assert.deepStrictEqual(run('Asia/Tokyo', { lastRefreshTz: 'CET' }), [['refreshTime zone label', 'PASS'], ['lastRefresh zone label', 'FAIL']], 'an older version\'s label');
+    assert.deepStrictEqual(run('Asia/Tokyo', { timeZoneLabel: '' }), [['refreshTime zone label', 'FAIL'], ['lastRefresh zone label', 'PASS']]);
+    assert.deepStrictEqual(run('Asia/Tokyo', { timeRow: null, lastRefresh: null }), [['refreshTime zone label', 'SKIP'], ['lastRefresh zone label', 'SKIP']], 'an older sheet without the lines');
+    assert.deepStrictEqual(run('Asia/Tokyo', { exists: false }), [['time zone labels', 'SKIP']]);
+    const src = fs.readFileSync(path.join(ROOT, 'Live Check Verifiers.js'), 'utf8');
+    ['onOpen: {', '"settings.refreshFrequency": {', '"settings.refreshApply": {'].forEach(k => {
+      const at = src.indexOf(k); assert.ok(at > 0, k);
+      assert.ok(/lcVerifyZoneLabels_\(c,/.test(src.slice(at, at + 900)), k + ' verifies the zone labels');
+    });
+    assert.ok(/function lcVerifyScheduledRefresh_\(c\)\{[\s\S]*?lcVerifyZoneLabels_\(c,/.test(src), 'the scheduled refresh too');
+    assert.ok(/needs: \["sheets","docProps","settingsSheet"\],\s*verify\(c\)\{\s*\/\/ importSettingsArray may change/.test(src), 'onOpen reads the settings sheet');
+  });
+
   const THREE_ROWS = `ODataConnection.prototype.getDataArray = () => [['No'], ['C1'], ['C2']];`;
   const FMT = /number format uniform in every column/;
   test('live check, end to end: a result column whose number format differs between data rows -> FAIL naming the column and the actual formats (header shown, not judged)', () => {

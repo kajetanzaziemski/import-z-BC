@@ -267,6 +267,19 @@ module.exports = function register(t) {
     assert.strictEqual(v(7, 4), '17:30', 'the plan converted nothing here, so the time is left');
   }));
 
+  MODES.forEach(mode => test('retime: an older version\'s lastRefresh label ("CET") is rewritten as UTC+N but is NOT a zone change (no conversion of the time of day) [' + mode + ']', () => {
+    const s = scope(mode);
+    s.run(`globalThis.__ss = new SettingsSheet()`);
+    const sh = s.book.sheets['Ustawienia'];
+    sh.setValue(5, 4, s.book.toSerial(new Date(Date.UTC(2026, 10, 2, 8, 30))), ''); sh.cells['5,4'].fmt.numFmt = 'yyyy-mm-dd hh:mm';
+    sh.setValue(5, 5, 'CET', ''); sh.setValue(7, 5, 'UTC+9', ''); sh.setValue(7, 4, '17:30', '');
+    s.run(`globalThis.__ss = new SettingsSheet()`);
+    const out = plain(s.run(`(() => { let seen; const r = __ss.adoptTimeZone(i => { seen = i; return null; }); return [seen, r]; })()`));
+    assert.strictEqual(out[0].zoneChanged, false);
+    assert.deepStrictEqual([out[1].changed, out[1].zoneChanged], [true, false]);
+    assert.strictEqual((sh.cells['5,5'] || {}).v, 'UTC+9');
+  }));
+
   MODES.forEach(mode => test('retime: no last refresh in the sheet - the zone cannot be told from it (lastKnown false); a plan that answers null leaves the time and still relabels [' + mode + ']', () => {
     const s = scope(mode);
     s.run(`globalThis.__ss = new SettingsSheet()`);

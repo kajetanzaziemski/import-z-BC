@@ -192,8 +192,12 @@ const ScheduleRefresh = {
         if(info.fromOffset !== null) return at => ScheduleRefresh.shiftTimeOfDay_(at, info.toOffset - info.fromOffset);
         return null;
       };
-      const done = getMainSettings().adoptTimeZone(plan);
+      // onOpen may run in the limited authorisation mode, where the Sheets advanced service cannot be called: the sheet is read and written through the Spreadsheet service
+      let done;
+      Grid.serviceOnly(true);
+      try{ done = getMainSettings().adoptTimeZone(plan); }finally{ Grid.serviceOnly(false); }
       if(!done.changed) return false;
+      Controller.checkNote(`time zone: the labels in the settings sheet now read ${activeSpreadsheetTimeZone()}${done.to ? "; the time of day was converted" : ""}`);
       if(done.to && permit && !permit.off && permit.issuedFor){
         const startAt = `${done.to.hour}:${String(done.to.minute).padStart(2,"0")}`;
         MainSettings.updateRefreshPermit(Object.assign({}, permit, {startAt: startAt, timeZone: tz}));
@@ -204,7 +208,10 @@ const ScheduleRefresh = {
       if(done.zoneChanged || done.to) ScheduleRefresh.reportScheduled_();
       return true;
     }catch(err){
-      dbgLog(`Time zone of the spreadsheet not synchronised: ${err}`);
+      // never breaks the open - but never silent either: the execution log shows it and so does the live check
+      const text = `Time zone of the spreadsheet not synchronised: ${err && err.stack || err}`;
+      console.error(text);
+      try{ Controller.checkNote(text); }catch(e){}
       return false;
     }
   },

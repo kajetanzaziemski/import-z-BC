@@ -161,6 +161,11 @@ the point of the action.
 The sidebar button "Wyłącz autoodświeżanie" (action `requestTurnOffRefresh`): the verifier requires the frequency in the sheet to be cleaned and then applies the same trigger check as `settings.refreshFrequency` with an empty frequency
 (no refresh trigger left for this document's permit). `lcRefreshTriggerHoldsPermit_` now says a permit marked `off` holds nobody, matching the handlers: a trigger that fires after the refresh was switched off retires itself.
 
+## Time zone labels (hashes re-pinned)
+`lcVerifyZoneLabels_` checks what the user sees against the spreadsheet itself: E of the `refreshTime` line must read the spreadsheet's zone as `UTC+N` for now, E of the `lastRefresh` line the zone's offset at the moment of that last refresh (an older version's
+"CET" is a FAIL). It is part of `onOpen` (where a changed zone is put right; `onOpen` now also reads the settings sheet), `settings.refreshFrequency`, `settings.refreshApply` and the scheduled refresh. A sheet without those lines is skipped.
+A failure of the check in `onOpen` itself is no longer silent: it is `console.error` in the execution log and a note on the live check run.
+
 ## Quiet jobs
 `sheet.ignored`, `change.ignored` and `change.own` (`LIVE_CHECK_QUIET_JOBS`, `Live Check.js`) only look at an event and do nothing; they were most of the report. While they **pass** (or skip) nothing is logged, stored or shown, and their "running" placeholder
 is removed at once. One that fails or warns (an edit in a config sheet wrongly ignored) is recorded and shown like any other run. `settings.edit` and `agent.skipped` also do nothing but are still reported.

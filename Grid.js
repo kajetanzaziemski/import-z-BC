@@ -1061,9 +1061,19 @@ function serialToDate_(serial, tz) {
   return again.getTime() === d.getTime() ? d : again;
 }
 
+let gridServiceOnly_ = false;     // set for a stretch of code that runs where the Sheets advanced service is not available (see Grid.serviceOnly)
+
 function sheetsApiAvailable_() {
-  return USE_SHEETS_API && typeof Sheets !== 'undefined' && !!Sheets && !!Sheets.Spreadsheets;
+  return USE_SHEETS_API && !gridServiceOnly_ && typeof Sheets !== 'undefined' && !!Sheets && !!Sheets.Spreadsheets;
 }
+
+/**
+ * true = grids opened from now on use the Spreadsheet service only, whatever USE_SHEETS_API says. For code that runs in onOpen, where the add-on may be in the
+ * limited authorisation mode: the active spreadsheet can be read and written there, an advanced service cannot be called. A grid keeps the path it was opened with.
+ */
+Grid.serviceOnly = function (on) {
+  gridServiceOnly_ = !!on;
+};
 
 /**
  * Opens a grid on a sheet, or returns null when the sheet is missing. One read either way.

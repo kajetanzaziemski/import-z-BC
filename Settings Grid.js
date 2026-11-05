@@ -192,18 +192,21 @@ const SettingsGrid = {
         // What the SHEET says decides: the zone labels as they stand against what they should read for the zone the spreadsheet is in now.
         // lastRefresh holds a moment, so its label is the zone's offset AT THAT MOMENT: it differs only when the zone itself changed.
         // refreshTime is a time of day, labelled with the offset of now: it also differs when the daylight saving time began or ended.
-        const lastMismatch = !!lastDate && label(lastRow) !== SettingsGrid.offsetName(lastDate, tz);
+        const lastLabel = lastDate ? label(lastRow) : null;
+        const lastMismatch = !!lastDate && lastLabel !== SettingsGrid.offsetName(lastDate, tz);
+        // a label that is no UTC+N (an older version wrote the zone's short name, "CET") only needs rewriting: it says nothing about the zone before
+        const zoneChanged = lastMismatch && SettingsGrid.parseOffsetName(lastLabel) !== null;
         const timeLabel = timeRow ? label(timeRow) : null;
         const timeMismatch = !!timeRow && timeLabel !== SettingsGrid.offsetName(now, tz);
         if (!lastMismatch && !timeMismatch) return { changed: false };
         const at = timeRow ? SettingsGrid.parseTime(grid.getRange(timeRow, L.valueCol).getValue(), tz) : null;
-        const convert = at && plan ? plan({ zoneChanged: lastMismatch, lastKnown: !!lastDate, fromOffset: SettingsGrid.parseOffsetName(timeLabel), toOffset: SettingsGrid.offsetMinutes(now, tz) }) : null;
+        const convert = at && plan ? plan({ zoneChanged: zoneChanged, lastKnown: !!lastDate, fromOffset: SettingsGrid.parseOffsetName(timeLabel), toOffset: SettingsGrid.offsetMinutes(now, tz) }) : null;
         const to = convert ? convert(at) : null;
         if (lastMismatch) grid.getRange(lastRow, L.unitCol).setValue(SettingsGrid.offsetName(lastDate, tz));
         if (timeMismatch) grid.getRange(timeRow, L.unitCol).setValue(SettingsGrid.offsetName(now, tz));
         if (to) grid.getRange(timeRow, L.valueCol).setValue((to.hour * 60 + to.minute) / 1440);     // a time of day is a fraction of a day, shown by the cell's HH:mm
         save();
-        return { changed: true, zoneChanged: lastMismatch, from: at, to: to };
+        return { changed: true, zoneChanged: zoneChanged, from: at, to: to };
       },
       clearRefreshSettings() {
         ["refreshFrequency", "refreshTime"].forEach(key => { const row = keyRow(key); if (row) grid.getRange(row, L.valueCol).setValue(""); });
