@@ -162,32 +162,46 @@ const ScheduleRefresh = {
     return {hour: +hhmm.slice(0, 2), minute: +hhmm.slice(3)};
   },
 
+  /** A time of day moved by some minutes (across midnight too). */
+  shiftTimeOfDay_(at, minutes){
+    const total = (((at.hour * 60 + (at.minute ?? 0) + minutes) % 1440) + 1440) % 1440;
+    return {hour: Math.floor(total / 60), minute: total % 60};
+  },
+
   /**
-   * onOpen: the spreadsheet's time zone may have changed since the add-on last looked (File > Settings > Time zone; the sheet is reloaded when it is). Then the zone
-   * labels of the refreshTime and lastRefresh lines follow, and the time of day that was set is converted so that it stays the moment it was: 17:30 in UTC+1 reads
-   * 16:30 in UTC+0. The refresh permit and the user's record are brought along, and the status message is written again (its times are in the new zone). The trigger
-   * itself is left as it is: it keeps its own zone and fires at the same moment. The zone before is the one saved by this function, else the one the permit remembers
-   * (without either only the labels are corrected). Never throws: it is part of opening the document.
-   * @returns {boolean} true when something was changed
+   * onOpen: the labels in the settings sheet must read the spreadsheet's time zone (File > Settings > Time zone; the sheet is reloaded when it is changed). What the
+   * SHEET says decides (SettingsGrid retime): the zone labels (E of lastRefresh and refreshTime) are compared with what they should read now. A label that is out
+   * of date is rewritten as UTC+N; when the zone itself changed (the lastRefresh label, a label of a past moment, differs) the time of day of refreshTime is converted so
+   * that it stays the same moment: 17:30 in UTC+1 reads 16:30 in UTC+0. The conversion uses the zone the properties remember (the saved one, else the permit's) when there
+   * is one, else the offset in the label; where only the refreshTime label differs and lastRefresh agrees, it is the daylight saving time: relabelled only. The
+   * properties are secondary: they follow (the saved zone, the permit's start time and zone, the user's record) and the status message is written again. The trigger itself
+   * is left alone: it keeps its own zone and fires at the same moment. Never throws: it is part of opening the document.
+   * @returns {boolean} true when something in the sheet was changed
    */
   syncTimeZone(){
     try{
       const tz = activeSpreadsheetTimeZone();
       const permit = MainSettings.getRefreshPermit();
-      const known = Settings.lastTimeZone() ?? permit?.timeZone ?? null;
-      if(Settings.lastTimeZone() === tz) return false;
-      Settings.setLastTimeZone(tz);
+      const hint = Settings.lastTimeZone() ?? permit?.timeZone ?? null;
+      if(Settings.lastTimeZone() !== tz) Settings.setLastTimeZone(tz);
       if(!settingsSheetExists()) return false;
-      const convert = known && known !== tz ? at => ScheduleRefresh.convertTimeOfDay(at, known, tz) : null;
-      const done = getMainSettings().adoptTimeZone(convert);
+      const plan = info => {
+        const changed = info.zoneChanged || (!info.lastKnown && !!hint && hint !== tz);       // no last refresh to tell by: the remembered zone has to
+        if(!changed) return null;
+        if(hint && hint !== tz) return at => ScheduleRefresh.convertTimeOfDay(at, hint, tz);
+        if(info.fromOffset !== null) return at => ScheduleRefresh.shiftTimeOfDay_(at, info.toOffset - info.fromOffset);
+        return null;
+      };
+      const done = getMainSettings().adoptTimeZone(plan);
+      if(!done.changed) return false;
       if(done.to && permit && !permit.off && permit.issuedFor){
         const startAt = `${done.to.hour}:${String(done.to.minute).padStart(2,"0")}`;
         MainSettings.updateRefreshPermit(Object.assign({}, permit, {startAt: startAt, timeZone: tz}));
         try{ RefreshRegistry.put(permit.issuedFor,{startAt: startAt, timeZone: tz, docTz: tz}); }catch(err){ dbgLog(`Refresh trigger record not updated: ${err}`); }
-      }else if(permit?.issuedFor && !permit.off){
+      }else if(done.zoneChanged && permit?.issuedFor && !permit.off){
         try{ RefreshRegistry.put(permit.issuedFor,{docTz: tz}); }catch(err){}
       }
-      ScheduleRefresh.reportScheduled_();
+      if(done.zoneChanged || done.to) ScheduleRefresh.reportScheduled_();
       return true;
     }catch(err){
       dbgLog(`Time zone of the spreadsheet not synchronised: ${err}`);

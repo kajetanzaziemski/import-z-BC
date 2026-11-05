@@ -90,7 +90,11 @@ then runs the same set-up as after an edit: it finds no frequency, removes the t
 (empty or invalid frequency) switches it off the same way, only without cleaning the cells.
 
 ## The spreadsheet's time zone changes (`ScheduleRefresh.syncTimeZone`, called by `onOpen`)
-Changing File > Settings > Time zone reloads the sheet, so the check is made when the document opens: the zone the add-on last saw is kept in the import settings (`timeZone`; before that, the permit's zone). When it differs, the zone labels (E of `lastRefresh`
-and `refreshTime`) are rewritten as `UTC+N` for the new zone, the time of day of `refreshTime` is converted so that it stays the same MOMENT (17:30 in UTC+1 becomes 16:30 in UTC+0; stored as a fraction of a day, shown as HH:mm), the permit and the user's record follow
-(`startAt`, `timeZone`), the status message is written again (its times are in the new zone) and the new zone is remembered. The trigger is not recreated: it keeps its own zone and fires at the same moment. Nothing is known about the zone before (first open after
-an update, no permit zone): only the labels are corrected. The check never throws, builds no settings sheet that does not exist, and an off refresh keeps its permit untouched. The live check allows `importSettingsArray` to change in `onOpen` for this.
+What the SHEET says decides; the properties are secondary. On every open the zone labels (E of `lastRefresh` and `refreshTime`) are compared, in the sheet, with what they should read for the zone the spreadsheet is in now (`SettingsGrid.retime`):
+- `lastRefresh` holds a moment, so its label is the offset AT THAT MOMENT: it differs only when the zone itself changed. `refreshTime` holds a time of day, labelled with the offset of now: it also differs when the daylight saving time begins or ends.
+- Nothing differs: nothing is written.
+- Only the `refreshTime` label differs: relabelled (`UTC+N`), the time of day is NOT converted.
+- The `lastRefresh` label differs (the zone changed): both labels are rewritten and the time of day of `refreshTime` is converted so that it stays the same MOMENT (17:30 in UTC+1 reads 16:30 in UTC+0; stored as a fraction of a day, shown as HH:mm). The conversion
+  uses the zone the properties remember (the saved `timeZone`, else the permit's) when there is one, else the offset in the label. With no last refresh in the sheet to tell by, the remembered zone decides.
+Then the properties follow: the saved zone, the permit's start time and zone, the user's record; the status message is written again (its times are in the new zone). The trigger is not recreated: it keeps its own zone and fires at the same moment.
+The check never throws and builds no settings sheet that does not exist; an off refresh keeps its permit. The live check allows `importSettingsArray` to change in `onOpen` for this.

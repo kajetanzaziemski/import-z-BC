@@ -231,26 +231,52 @@ module.exports = function register(t) {
     assert.strictEqual(sh.cells['8,3'].fmt.bg, '#fff2cc');
   }));
 
-  MODES.forEach(mode => test('retime (the spreadsheet\'s zone changed): the zone labels of lastRefresh and refreshTime follow, the time of day is replaced by the converted one (a fraction of a day, shown as HH:mm); no conversion = the time is left [' + mode + ']', () => {
+  MODES.forEach(mode => test('retime: judged from the labels IN THE SHEET - in order: nothing is touched; the zone changed (lastRefresh label differs): labels rewritten, the time converted by the plan; only the refreshTime label differs (daylight saving time): relabelled, no conversion [' + mode + ']', () => {
     const s = scope(mode);
     s.run(`globalThis.__ss = new SettingsSheet()`);
     s.run(`{ const f = Utilities.formatDate; const wall = (d, tz) => { const z = f(d, tz, 'Z'); return new Date(d.getTime() + (z[0] === '-' ? -1 : 1) * (+z.slice(1, 3) * 60 + +z.slice(3)) * 60000).toISOString(); };
       Utilities.formatDate = (d, tz, p) => p === 'yyyy-MM-dd' ? wall(d, tz).slice(0, 10) : p === 'HH:mm' ? wall(d, tz).slice(11, 16) : f(d, tz, p); }`);
     const sh = s.book.sheets['Ustawienia'];
     const v = (r, c) => (sh.cells[r + ',' + c] || {}).v ?? '';
-    sh.setValue(7, 4, '17:30', '');
-    sh.setValue(5, 4, s.book.toSerial(new Date(Date.UTC(2026, 10, 2, 8, 30))), '');
-    sh.cells['5,4'].fmt.numFmt = 'yyyy-mm-dd hh:mm'; sh.setValue(5, 5, 'UTC+1', ''); sh.setValue(7, 5, 'UTC+1', '');
+    const set = (lastLabel, timeLabel, time) => {
+      sh.setValue(5, 4, s.book.toSerial(new Date(Date.UTC(2026, 10, 2, 8, 30))), ''); sh.cells['5,4'].fmt.numFmt = 'yyyy-mm-dd hh:mm';
+      sh.setValue(5, 5, lastLabel, ''); sh.setValue(7, 5, timeLabel, ''); sh.setValue(7, 4, time, '');
+      s.run(`globalThis.__ss = new SettingsSheet()`);
+    };
+    const run = () => { s.run(`globalThis.__seen = []; globalThis.__out = __ss.adoptTimeZone(info => { __seen.push(info); return info.zoneChanged ? (at => ({ hour: (at.hour + 8) % 24, minute: at.minute })) : null; })`); return { out: plain(s.run(`__out`)), seen: plain(s.run(`__seen`)) }; };
+
+    set('UTC+9', 'UTC+9', '17:30');                                                            // the sheet reads the zone it is in (the sim's: UTC+9)
+    let r = run();
+    assert.deepStrictEqual([r.out, r.seen], [{ changed: false }, []], 'nothing differs: nothing is asked, nothing written');
+    assert.strictEqual(v(7, 4), '17:30');
+
+    set('UTC+1', 'UTC+1', '17:30');                                                            // the zone changed
+    r = run();
+    assert.deepStrictEqual(r.seen, [{ zoneChanged: true, lastKnown: true, fromOffset: 60, toOffset: 540 }]);
+    assert.deepStrictEqual(r.out, { changed: true, zoneChanged: true, from: { hour: 17, minute: 30 }, to: { hour: 1, minute: 30 } });
+    assert.deepStrictEqual([v(5, 5), v(7, 5)], ['UTC+9', 'UTC+9']);
+    assert.ok(Math.abs(v(7, 4) - 90 / 1440) < 1e-9, 'a fraction of a day: ' + v(7, 4));
     s.run(`globalThis.__ss = new SettingsSheet()`);
-    const out = plain(s.run(`__ss.adoptTimeZone(at => ({ hour: at.hour - 1, minute: at.minute }))`));
-    assert.deepStrictEqual(out, { from: { hour: 17, minute: 30 }, to: { hour: 16, minute: 30 } });
-    assert.deepStrictEqual([v(5, 5), v(7, 5)], ['UTC+9', 'UTC+9'], 'the sim\'s zone is UTC+9');
-    assert.ok(Math.abs(v(7, 4) - (16 * 60 + 30) / 1440) < 1e-9, 'a fraction of a day: ' + v(7, 4));
+    assert.deepStrictEqual(plain(s.run(`__ss.getRefreshStartAt()`)).hour, 1, 'it reads back as 01:30');
+
+    set('UTC+9', 'UTC+8', '17:30');                                                            // only the time label: the daylight saving time
+    r = run();
+    assert.deepStrictEqual(r.seen, [{ zoneChanged: false, lastKnown: true, fromOffset: 480, toOffset: 540 }]);
+    assert.deepStrictEqual([r.out.changed, r.out.zoneChanged], [true, false]);
+    assert.strictEqual(v(7, 5), 'UTC+9');
+    assert.strictEqual(v(7, 4), '17:30', 'the plan converted nothing here, so the time is left');
+  }));
+
+  MODES.forEach(mode => test('retime: no last refresh in the sheet - the zone cannot be told from it (lastKnown false); a plan that answers null leaves the time and still relabels [' + mode + ']', () => {
+    const s = scope(mode);
     s.run(`globalThis.__ss = new SettingsSheet()`);
-    assert.deepStrictEqual(plain(s.run(`__ss.getRefreshStartAt()`)).hour, 16, 'it reads back as 16:30');
-    const none = plain(s.run(`__ss.adoptTimeZone(null)`));
-    assert.strictEqual(none.to, null);
-    assert.ok(Math.abs(v(7, 4) - (16 * 60 + 30) / 1440) < 1e-9, 'left as it was');
+    const sh = s.book.sheets['Ustawienia'];
+    sh.setValue(7, 5, 'UTC+1', ''); sh.setValue(7, 4, '17:30', '');
+    s.run(`globalThis.__ss = new SettingsSheet()`);
+    const seen = plain(s.run(`(() => { let info; const out = __ss.adoptTimeZone(i => { info = i; return null; }); return [info, out]; })()`));
+    assert.deepStrictEqual(seen[0], { zoneChanged: false, lastKnown: false, fromOffset: 60, toOffset: 540 });
+    assert.deepStrictEqual([seen[1].changed, seen[1].to], [true, null]);
+    assert.strictEqual((sh.cells['7,5'] || {}).v, 'UTC+9');
   }));
 
   MODES.forEach(mode => test('row 3 is where the config list starts: the first config line takes it and the general settings lines (and the message) move down, found by key [' + mode + ']', () => {

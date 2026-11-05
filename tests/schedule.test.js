@@ -241,19 +241,22 @@ module.exports = function register(t) {
     assert.deepStrictEqual(conv({ hour: 9, minute: 0 }, 'UTC', 'UTC'), { hour: 9, minute: 0 });
   });
 
-  /** The settings object of the time zone tests: the sheet exists, adoptTimeZone gets the conversion and answers what the sheet did */
-  function tzScenario(over) {
+  /** The settings object of the time zone tests: the sheet exists; adoptTimeZone gets the plan and is told what the SHEET says (cfg: the info the grid would give, and the answer) */
+  function tzScenario(over, sheetSays) {
     const sc = scenario(Object.assign({ settings: {} }, over));
     sc.ex.eval(ZONES);
-    sc.ex.eval(`globalThis.__tz = 'UTC'; globalThis.__sheet = true; globalThis.__adopt = [];
+    sc.ex.eval(`globalThis.__tz = 'UTC'; globalThis.__sheet = true; globalThis.__adopt = []; globalThis.__says = ${JSON.stringify(sheetSays || { changed: false })};
       activeSpreadsheetTimeZone = () => __tz; settingsSheetExists = () => __sheet;
-      getMainSettings = () => ({ adoptTimeZone: convert => { const from = { hour: 17, minute: 30 }; const to = convert ? convert(from) : null; __adopt.push([!!convert, to]); return { from, to }; },
+      getMainSettings = () => ({ adoptTimeZone: plan => { const s = __says; if (!s.changed) { __adopt.push(['unchanged']); return { changed: false }; }
+          const convert = plan(s.info); const from = { hour: 17, minute: 30 }; const to = convert ? convert(from) : null; __adopt.push([!!convert, to]);
+          return { changed: true, zoneChanged: s.info.zoneChanged, from, to }; },
         setRefreshMessage: r => __adopt.push(['message', r.ok]), getSheetListWithRefreshTrue: () => [] });`);
     return sc;
   }
+  const PERMIT_WARSAW = { issuedFor: 't1', lastRefresh: Date.now(), intervalHours: 24, nextRefresh: Date.now() + 3600000, startAt: '17:30', timeZone: 'Europe/Warsaw' };
 
-  test('time zone: onOpen after a change - the time of day is converted, the permit and the user record follow (start time, zone), the status message is written again, the new zone is remembered; the trigger is left alone', () => {
-    const sc = tzScenario({ settings: { timeZone: 'Europe/Warsaw', refreshPermit: { issuedFor: 't1', lastRefresh: Date.now(), intervalHours: 24, nextRefresh: Date.now() + HOUR_MS, startAt: '17:30', timeZone: 'Europe/Warsaw' } } });
+  test('time zone: the sheet says the zone changed - the time of day is converted by the remembered zone (exact); the permit and the user record follow, the status message is written again, the zone is remembered; the trigger is left alone', () => {
+    const sc = tzScenario({ settings: { timeZone: 'Europe/Warsaw', refreshPermit: PERMIT_WARSAW } }, { changed: true, info: { zoneChanged: true, lastKnown: true, fromOffset: 60, toOffset: 0 } });
     sc.p.triggers.push(NAMED('t1'));
     assert.strictEqual(sc.ex.eval(`ScheduleRefresh.syncTimeZone()`), true);
     sc.save();
@@ -264,29 +267,52 @@ module.exports = function register(t) {
     assert.deepStrictEqual([rec.startAt, rec.timeZone, rec.docTz], ['16:30', 'UTC', 'UTC']);
   });
 
-  test('time zone: nothing changed -> nothing is read or written; the first time (no zone remembered) only the labels are corrected and the zone is remembered; the permit\'s zone is the zone before when nothing is remembered', () => {
-    const same = tzScenario({ settings: { timeZone: 'UTC' } });
-    assert.strictEqual(same.ex.eval(`ScheduleRefresh.syncTimeZone()`), false);
-    assert.deepStrictEqual(plain(same.ex.eval(`__adopt`)), []);
-    const first = tzScenario();
-    assert.strictEqual(first.ex.eval(`ScheduleRefresh.syncTimeZone()`), true);
-    first.save();
-    assert.deepStrictEqual(plain(first.ex.eval(`__adopt`)), [[false, null]], 'no zone before: no conversion');
-    assert.strictEqual(first.stored().timeZone, 'UTC');
-    const fromPermit = tzScenario({ settings: { refreshPermit: { issuedFor: 't1', lastRefresh: 1, intervalHours: 24, startAt: '17:30', timeZone: 'Europe/Warsaw', nextRefresh: Date.now() + HOUR_MS } } });
-    fromPermit.ex.eval(`ScheduleRefresh.syncTimeZone()`);
-    assert.deepStrictEqual(plain(fromPermit.ex.eval(`__adopt[0]`)), [true, { hour: 16, minute: 30 }]);
+  test('time zone: the sheet is the judge - no zone remembered anywhere: the offset in the label gives the conversion (UTC+1 -> UTC+0 is an hour back; across midnight too)', () => {
+    const sc = tzScenario({}, { changed: true, info: { zoneChanged: true, lastKnown: true, fromOffset: 60, toOffset: 0 } });
+    sc.ex.eval(`ScheduleRefresh.syncTimeZone()`);
+    assert.deepStrictEqual(plain(sc.ex.eval(`__adopt[0]`)), [true, { hour: 16, minute: 30 }]);
+    const wrap = tzScenario({}, { changed: true, info: { zoneChanged: true, lastKnown: true, fromOffset: 60, toOffset: 540 } });
+    wrap.ex.eval(`ScheduleRefresh.syncTimeZone()`);
+    assert.deepStrictEqual(plain(wrap.ex.eval(`__adopt[0]`)), [true, { hour: 1, minute: 30 }]);
+    const none = tzScenario({}, { changed: true, info: { zoneChanged: true, lastKnown: true, fromOffset: null, toOffset: 0 } });
+    none.ex.eval(`ScheduleRefresh.syncTimeZone()`);
+    assert.deepStrictEqual(plain(none.ex.eval(`__adopt[0]`)), [false, null], 'an unreadable label: no conversion');
   });
 
-  test('time zone: no settings sheet -> only the zone is remembered, nothing is built; a failure never breaks the open; a refresh that is off keeps its permit', () => {
-    const none = tzScenario({ settings: { timeZone: 'Europe/Warsaw' } });
+  test('time zone: only the refreshTime label differs (the daylight saving time) - relabelled, the time of day is NOT converted, the permit and the message are left alone, whatever the properties remember', () => {
+    const sc = tzScenario({ settings: { timeZone: 'Europe/Warsaw', refreshPermit: PERMIT_WARSAW } }, { changed: true, info: { zoneChanged: false, lastKnown: true, fromOffset: 60, toOffset: 120 } });
+    assert.strictEqual(sc.ex.eval(`ScheduleRefresh.syncTimeZone()`), true);
+    sc.save();
+    assert.deepStrictEqual(plain(sc.ex.eval(`__adopt`)), [[false, null]]);
+    assert.strictEqual(permit(sc).startAt, '17:30');
+  });
+
+  test('time zone: no last refresh in the sheet to tell by - the remembered zone decides (differs: converted; same or none: left)', () => {
+    const differs = tzScenario({ settings: { timeZone: 'Europe/Warsaw' } }, { changed: true, info: { zoneChanged: false, lastKnown: false, fromOffset: 60, toOffset: 0 } });
+    differs.ex.eval(`ScheduleRefresh.syncTimeZone()`);
+    assert.deepStrictEqual(plain(differs.ex.eval(`__adopt[0]`)), [true, { hour: 16, minute: 30 }]);
+    const same = tzScenario({ settings: { timeZone: 'UTC' } }, { changed: true, info: { zoneChanged: false, lastKnown: false, fromOffset: 0, toOffset: 0 } });
+    same.ex.eval(`ScheduleRefresh.syncTimeZone()`);
+    assert.deepStrictEqual(plain(same.ex.eval(`__adopt[0]`)), [false, null]);
+  });
+
+  test('time zone: the sheet already reads the right zone - nothing is written, even when the properties are out of date (they are brought up to date); no settings sheet - nothing is built', () => {
+    const sc = tzScenario({ settings: { timeZone: 'Europe/Warsaw', refreshPermit: PERMIT_WARSAW } }, { changed: false });
+    assert.strictEqual(sc.ex.eval(`ScheduleRefresh.syncTimeZone()`), false);
+    sc.save();
+    assert.deepStrictEqual(plain(sc.ex.eval(`__adopt`)), [['unchanged']]);
+    assert.deepStrictEqual([sc.stored().timeZone, permit(sc).startAt], ['UTC', '17:30'], 'the saved zone follows; the permit is not touched');
+    const none = tzScenario({ settings: { timeZone: 'Europe/Warsaw' } }, { changed: false });
     none.ex.eval(`__sheet = false`);
     assert.strictEqual(none.ex.eval(`ScheduleRefresh.syncTimeZone()`), false);
     assert.deepStrictEqual(plain(none.ex.eval(`__adopt`)), []);
+  });
+
+  test('time zone: a failure never breaks the open; a refresh that is off keeps its permit', () => {
     const broken = tzScenario({ settings: { timeZone: 'Europe/Warsaw' } });
     broken.ex.eval(`getMainSettings = () => { throw new Error('sheet unreadable'); }`);
     assert.doesNotThrow(() => broken.ex.eval(`ScheduleRefresh.syncTimeZone()`));
-    const off = tzScenario({ settings: { timeZone: 'Europe/Warsaw', refreshPermit: { issuedFor: 't1', lastRefresh: 1, intervalHours: 24, startAt: '17:30', timeZone: 'Europe/Warsaw', off: true } } });
+    const off = tzScenario({ settings: { timeZone: 'Europe/Warsaw', refreshPermit: Object.assign({}, PERMIT_WARSAW, { off: true }) } }, { changed: true, info: { zoneChanged: true, lastKnown: true, fromOffset: 60, toOffset: 0 } });
     off.ex.eval(`ScheduleRefresh.syncTimeZone()`);
     off.save();
     assert.deepStrictEqual([permit(off).startAt, permit(off).timeZone], ['17:30', 'Europe/Warsaw']);

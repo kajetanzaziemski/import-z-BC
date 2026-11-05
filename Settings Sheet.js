@@ -40,9 +40,9 @@ class SettingsSheet{
     return isInRange(this.refreshTimePos,5,range);
   }
 
-  /** The spreadsheet's time zone changed (see ScheduleRefresh.syncTimeZone): the zone labels follow, the time of day is converted by `convert`. */
-  adoptTimeZone(convert){
-    return this.grid.retime(convert);
+  /** The zone labels follow the spreadsheet's time zone, judged from what the sheet says now; `plan` may give the conversion of the time of day (see SettingsGrid retime). */
+  adoptTimeZone(plan){
+    return this.grid.retime(plan);
   }
 
   /** The refresh is switched off on purpose: the frequency and the time of day are cleared in the sheet (and in what this object remembers of them). */

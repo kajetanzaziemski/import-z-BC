@@ -63,6 +63,18 @@ const SettingsGrid = {
     return `UTC${off[0]}${h}${m == "00" ? "" : ":" + m}`;
   },
 
+  /** The offset of the zone at that moment, in minutes (Utilities.formatDate "Z" gives "+0200"). */
+  offsetMinutes(date, timeZone) {
+    const z = Utilities.formatDate(date, timeZone, "Z");
+    return (z[0] == "-" ? -1 : 1) * (parseInt(z.slice(1, 3), 10) * 60 + parseInt(z.slice(3), 10));
+  },
+
+  /** "UTC+5:30" -> 330; null when the text is not such a label. */
+  parseOffsetName(text) {
+    const m = /^UTC([+-])(\d{1,2})(?::(\d{2}))?$/.exec(String(text ?? "").trim());
+    return m ? (m[1] == "-" ? -1 : 1) * (+m[2] * 60 + (m[3] ? +m[3] : 0)) : null;
+  },
+
   /** "2026-11-29 17:00:00 UTC+2" */
   stamp(date, timeZone) {
     return `${Utilities.formatDate(date, timeZone, "yyyy-MM-dd HH:mm:ss")} ${SettingsGrid.offsetName(date, timeZone)}`;
@@ -122,7 +134,8 @@ const SettingsGrid = {
    *   addLastRefreshRow()           a lastRefresh line after the last row; returns its row number
    *   writeLastRefresh(row, time)   time into D, the time zone's name into E
    *   refreshTime()                 {hour, minute, timeZone} from the refreshTime line (D): "17:30", "5:30 PM", a time value; null when empty, not a time or no such line
-   *   retime(convert)               the spreadsheet's time zone changed: the zone labels of lastRefresh and refreshTime rewritten; the time of day of refreshTime replaced by convert({hour, minute}) when it gives one; returns { from, to }
+   *   retime(plan)                  makes the zone labels of lastRefresh and refreshTime (column E) read what they should for the spreadsheet's zone now - judged from the labels in the sheet;
+   *                                 plan({zoneChanged, lastKnown, fromOffset, toOffset}) may give a function that converts the time of day of refreshTime; returns { changed, zoneChanged, from, to }
    *   clearRefreshSettings()        the frequency number and the time of day cleared (D of refreshFrequency and refreshTime; the unit and the zone label stay)
    *   restoreTimeZoneLabel(previous)  the zone label (E of refreshTime) back to `previous`, or to the zone as it is now when that is null
    *   writeRefreshMessage(report)   the refreshStatus line (C:E merged): green when the refresh was set up, red when not (see ScheduleRefresh.apply);
@@ -169,23 +182,28 @@ const SettingsGrid = {
         const at = row ? SettingsGrid.parseTime(grid.getRange(row, L.valueCol).getValue(), grid.getTimeZone()) : null;
         return at && { hour: at.hour, minute: at.minute, timeZone: grid.getTimeZone() };      // the time is in the spreadsheet's time zone
       },
-      retime(convert) {
-        const tz = grid.getTimeZone();
-        const lastRow = keyRow("lastRefresh");
-        if (lastRow) {
-          const t = grid.getRange(lastRow, L.valueCol).getValue();
-          if (Object.prototype.toString.call(t) === "[object Date]" && !isNaN(t)) grid.getRange(lastRow, L.unitCol).setValue(SettingsGrid.offsetName(t, tz));
-        }
-        let from = null, to = null;
-        const timeRow = keyRow("refreshTime");
-        if (timeRow) {
-          grid.getRange(timeRow, L.unitCol).setValue(SettingsGrid.offsetName(new Date(), tz));
-          from = SettingsGrid.parseTime(grid.getRange(timeRow, L.valueCol).getValue(), tz);
-          to = from && convert ? convert(from) : null;
-          if (to) grid.getRange(timeRow, L.valueCol).setValue((to.hour * 60 + to.minute) / 1440);     // a time of day is a fraction of a day, shown by the cell's HH:mm
-        }
+      retime(plan) {
+        const tz = grid.getTimeZone(), now = new Date();
+        const lastRow = keyRow("lastRefresh"), timeRow = keyRow("refreshTime");
+        const isDate = t => Object.prototype.toString.call(t) === "[object Date]" && !isNaN(t);
+        const lastValue = lastRow ? grid.getRange(lastRow, L.valueCol).getValue() : null;
+        const lastDate = isDate(lastValue) ? lastValue : null;
+        const label = row => String(grid.getRange(row, L.unitCol).getValue() ?? "").trim();
+        // What the SHEET says decides: the zone labels as they stand against what they should read for the zone the spreadsheet is in now.
+        // lastRefresh holds a moment, so its label is the zone's offset AT THAT MOMENT: it differs only when the zone itself changed.
+        // refreshTime is a time of day, labelled with the offset of now: it also differs when the daylight saving time began or ended.
+        const lastMismatch = !!lastDate && label(lastRow) !== SettingsGrid.offsetName(lastDate, tz);
+        const timeLabel = timeRow ? label(timeRow) : null;
+        const timeMismatch = !!timeRow && timeLabel !== SettingsGrid.offsetName(now, tz);
+        if (!lastMismatch && !timeMismatch) return { changed: false };
+        const at = timeRow ? SettingsGrid.parseTime(grid.getRange(timeRow, L.valueCol).getValue(), tz) : null;
+        const convert = at && plan ? plan({ zoneChanged: lastMismatch, lastKnown: !!lastDate, fromOffset: SettingsGrid.parseOffsetName(timeLabel), toOffset: SettingsGrid.offsetMinutes(now, tz) }) : null;
+        const to = convert ? convert(at) : null;
+        if (lastMismatch) grid.getRange(lastRow, L.unitCol).setValue(SettingsGrid.offsetName(lastDate, tz));
+        if (timeMismatch) grid.getRange(timeRow, L.unitCol).setValue(SettingsGrid.offsetName(now, tz));
+        if (to) grid.getRange(timeRow, L.valueCol).setValue((to.hour * 60 + to.minute) / 1440);     // a time of day is a fraction of a day, shown by the cell's HH:mm
         save();
-        return { from: from, to: to };
+        return { changed: true, zoneChanged: lastMismatch, from: at, to: to };
       },
       clearRefreshSettings() {
         ["refreshFrequency", "refreshTime"].forEach(key => { const row = keyRow(key); if (row) grid.getRange(row, L.valueCol).setValue(""); });
