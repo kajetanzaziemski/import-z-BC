@@ -185,16 +185,24 @@ module.exports = function register(t) {
     assert.strictEqual(items(same)[0].name, 'Nazwa z rekordu');
   });
 
-  test('list: the permit of this document names a trigger that is not among the user\'s (set up by another user, used lately): it is listed from the document\'s data, marked foreign, and no record of it is made in the user\'s properties; a permit unused for long is not listed', () => {
-    const sc = scenario({ permit: permit({ issuedFor: 'theirs', lastRun: NOW - 2 * HOUR, lastDurationMs: 90000, issuedBy: 'someone-else' }), triggers: ['mine'], sheet: { freq: { freq: 1, unit: 'days' } } });
-    const list = items(sc);
-    assert.deepStrictEqual(list.map(x => [x.id, x.foreign, x.known]), [['theirs', true, true], ['mine', false, false]]);
-    assert.deepStrictEqual([list[0].name, list[0].every, list[0].duration, list[0].here, list[0].handler], ['Faktury 2026', '1 dzień o 17:30', '1 m 30 s', true, null]);
+  test('list: another user\'s trigger that refreshes this document is NOT listed (it is not this user\'s); the current settings still show it as foreign, and no record of it is made in the user\'s properties', () => {
+    const sc = scenario({ permit: permit({ issuedFor: 'theirs', lastRun: NOW - 2 * HOUR, issuedBy: 'someone-else' }), triggers: ['mine'], sheet: { freq: { freq: 1, unit: 'days' } } });
+    const info = sc.info();
+    assert.deepStrictEqual(info.triggers.items.map(x => x.id), ['mine']);
+    assert.strictEqual(info.current.foreign, true, 'the panel\'s current settings say whose it is');
     assert.ok(!records(sc).includes('refreshTrigger:theirs'));
-    const old = scenario({ permit: permit({ issuedFor: 'theirs', lastRefresh: NOW - 100 * HOUR, lastRun: NOW - 90 * HOUR, issuedBy: 'someone-else' }), triggers: ['mine'] });
-    assert.deepStrictEqual(items(old).map(x => x.id), ['mine']);
-    const off = scenario({ permit: permit({ issuedFor: 'theirs', lastRun: NOW - HOUR, off: true }), triggers: [] });
-    assert.deepStrictEqual(items(off), []);
+    assert.deepStrictEqual(items(scenario({ permit: permit({ issuedFor: 'theirs', lastRun: NOW - HOUR }), triggers: [] })), [], 'nothing of the user\'s: an empty list');
+  });
+
+  test('why-dialog: the note opens a modeless dialog with the explanation; it is an ordinary run; the text is HTML-escaped', () => {
+    const sc = scenario();
+    sc.ex.eval(`globalThis.__dlg = []; SpreadsheetApp.getUi = () => ({ alert() {}, showModelessDialog: (h, t) => __dlg.push([h.html, t, h.w, h.h]) });
+      HtmlService = { createHtmlOutput: html => { const o = { html, setWidth(w) { o.w = w; return o; }, setHeight(h) { o.h = h; return o; } }; return o; } };`);
+    sc.ex.eval(`showRefreshHelp()`);
+    const [html, title] = plain(sc.ex.eval(`__dlg[0]`));
+    assert.strictEqual(title, 'Dlaczego nie widzę tego arkusza?');
+    assert.ok(html.includes('Ten arkusz jest odświeżany automatycznie zgodnie z informacjami w panelu. Jeśli nie widzisz go na liście arkuszy oznacza to, że automatyczne odświeżanie jest wykonywane przez innego użytkownika.'));
+    assert.ok(/Controller\.run\("requestShowRefreshHelp"/.test(fs.readFileSync(path.join(ROOT, 'Auto Refresh Panel.js'), 'utf8')));
   });
 
   test('list: a record whose trigger is not there is not listed (a record never makes a trigger exist); it is dropped after a week unseen, kept before', () => {
@@ -273,7 +281,8 @@ module.exports = function register(t) {
     assert.ok(/Arkusze, które odświeżasz automatycznie:/.test(html) && /renderTriggerList\(info\.triggers\)/.test(html));
     assert.ok(/'<a href="' \+ escapeHtml\(t\.url\) \+ '" target="_blank" rel="noopener">'/.test(html));
     assert.ok(/Odświeżanie co: /.test(html) && /Ostatnio odświeżone: /.test(html));
-    assert.ok(/Trigger innego użytkownika \(dane z dokumentu\)/.test(html));
+    assert.ok(/info\.current && info\.current\.foreign\) \{\s*html \+= '<p><a href="#" onclick="showRefreshHelp\(\); return false;">Dlaczego nie widzę tego arkusza\?<\/a><\/p>'/.test(html), 'the note only when another user\'s trigger refreshes this document');
+    assert.ok(!/Trigger innego użytkownika/.test(html), 'it is not listed');
     assert.ok(/escapeHtml\(t\.id\)/.test(html) && /escapeHtml\(t\.handler\)/.test(html) && /escapeHtml\(t\.name\)/.test(html));
   });
 

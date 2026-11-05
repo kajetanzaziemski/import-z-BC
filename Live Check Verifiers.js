@@ -703,6 +703,11 @@ function buildLiveCheckVerifiers_(){
       verify(c){ lcVerifyNothingChanged_(c); }
     },
 
+    requestShowRefreshHelp: {
+      needs: ["sheets","docProps"],
+      verify(c){ lcVerifyNothingChanged_(c); }
+    },
+
     requestApplyRefreshSettings: {
       needs: ["docProps","settingsSheet"],
       verify(c){ /* the job (settings.refreshApply) says what it did */ }

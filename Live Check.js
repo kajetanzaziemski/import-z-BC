@@ -556,6 +556,7 @@ const LIVE_CHECK_ENTRY_POINTS = [
   {action: "requestChangeAddonStatus",        entry: "sidebar: changeAddonStatus(newStatus)"},
   {action: "requestPermitsInfo",              entry: "sidebar: getPermitsInfo()"},
   {action: "requestAutoRefreshInfo",        entry: "sidebar: getAutoRefreshInfo()"},
+  {action: "requestShowRefreshHelp",        entry: "sidebar: showRefreshHelp()"},
   {action: "requestApplyRefreshSettings",   entry: "sidebar: applyRefreshSettings()"},
   {action: "forceAgentRefresh",               entry: "sidebar / closing action: forceAgentRefresh()"},
   {action: "requestDeleteAllAgents",          entry: "sidebar: deleteAllAgents()"},

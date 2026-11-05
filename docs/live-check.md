@@ -144,7 +144,7 @@ Every platform entry goes through `Controller.run` now (`docs/controller.md`): `
 
 ## The sidebar button (job `settings.refreshApply`, hash of `Live Check.js` and `Live Check Verifiers.js` re-pinned)
 `applyRefreshSettings()` (action `requestApplyRefreshSettings`) sets the time trigger up from the settings sheet, like editing the frequency; the job `settings.refreshApply` is judged by the same check as `settings.refreshFrequency`
-(`lcVerifyRefreshTrigger_`: the trigger of the previous permit is gone, a new `autoRefreshHandler` trigger exists for the new permit, the interval matches the sheet). `getAutoRefreshInfo()` (action `requestAutoRefreshInfo`: tab opened, refresh button, after applying) only reads: the check is that no sheet and no document property changed.
+(`lcVerifyRefreshTrigger_`: the trigger of the previous permit is gone, a new `autoRefreshHandler` trigger exists for the new permit, the interval matches the sheet). `getAutoRefreshInfo()` (action `requestAutoRefreshInfo`: tab opened, refresh button, after applying) only reads: the check is that no sheet and no document property changed. `showRefreshHelp()` (action `requestShowRefreshHelp`, the dialog "Dlaczego nie widzę tego arkusza?") is judged the same way.
 
 ## Trigger lists (hash of `Live Check Verifiers.js` re-pinned)
 In a sidebar call `ScriptApp.getProjectTriggers()` was seen to return 8 triggers and, two seconds later, 2 of them. The refresh-trigger checks (`lcVerifyRefreshTrigger_`, scheduled / retired refresh) therefore take the union of three looks

@@ -44,8 +44,8 @@ const AutoRefreshPanel = {
   /**
    * ALL of the user's time triggers (clock triggers of every document the add-on is used in), each with what is known about it: the registry's record
    * (Refresh Registry.js) or, for any other trigger, only what the trigger itself says (its id and handler: ScriptApp gives a time trigger no interval, no
-   * document, no last run). For THIS document the document's permit (document properties) fills in what the user's record lacks and brings it up to date; and
-   * when the permit names a trigger that is not the user's own (another user of the document set it up) that trigger is listed too, from the permit.
+   * document, no last run). For THIS document the document's permit (document properties) fills in what the user's record lacks and brings it up to date.
+   * A trigger of ANOTHER user that refreshes this document is not listed (it is not this user's): the tab says so in a note with a dialog (REFRESH_WHY_MESSAGE).
    * Sorted: known by document name, unknown last.
    * @returns {{items: Array, error: string|null}}
    */
@@ -67,7 +67,6 @@ const AutoRefreshPanel = {
           handler: handler,
           known: !!rec?.docName || !!rec?.docId,
           here: !!rec?.docId && rec.docId === doc.docId || (!!permit?.issuedFor && permit.issuedFor === id),
-          foreign: false,
           name: rec?.docName ?? null,
           url: AutoRefreshPanel.safeUrl_(rec?.url, rec?.gid),
           every: every,
@@ -77,9 +76,6 @@ const AutoRefreshPanel = {
         }, extra);
       };
       const items = seen.map(t => item(t.getUniqueId(), t.getHandlerFunction(), RefreshRegistry.get(t.getUniqueId())));
-      if(permit?.issuedFor && !own && current?.active && permit.intervalHours){
-        items.push(item(permit.issuedFor, null, Object.assign({}, doc, RefreshRegistry.fromPermit(permit)), {foreign: true}));
-      }
       items.sort((a, b) => (b.known - a.known) || String(a.name ?? "").localeCompare(String(b.name ?? "")) || a.id.localeCompare(b.id));
       return {items: items, error: null};
     }catch(err){
@@ -134,12 +130,28 @@ const AutoRefreshPanel = {
     }
   },
 
+  /** The explanation for a user who does not see this document in the list because another user's trigger refreshes it. */
+  showWhyDialog(){
+    const text = REFRESH_WHY_MESSAGE.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    const html = HtmlService.createHtmlOutput(`<div style="font-family:Arial,sans-serif;font-size:13px;padding:8px">${text}</div>`).setWidth(380).setHeight(150);
+    SpreadsheetApp.getUi().showModelessDialog(html,REFRESH_WHY_TITLE);
+  },
+
   /** The button: the same as editing the frequency in the settings sheet (job settings.refreshApply for the live check). */
   apply(){
     Controller.intent("settings.refreshApply",{sheet: null, changeType: null});
     getMainSettings().setRefreshTrigger();
   }
 };
+
+const REFRESH_WHY_TITLE = "Dlaczego nie widzę tego arkusza?";
+const REFRESH_WHY_MESSAGE = "Ten arkusz jest odświeżany automatycznie zgodnie z informacjami w panelu. " +
+  "Jeśli nie widzisz go na liście arkuszy oznacza to, że automatyczne odświeżanie jest wykonywane przez innego użytkownika.";
+
+/** Sidebar: the note "Dlaczego nie widzę tego arkusza?" - a modeless dialog (it may later give way to a link to the manual). */
+function showRefreshHelp(){
+  return Controller.run("requestShowRefreshHelp",() => AutoRefreshPanel.showWhyDialog());
+}
 
 /** Sidebar: the tab is opened, the refresh button, after applying. Read only. */
 function getAutoRefreshInfo(){

@@ -246,6 +246,10 @@
         }
 
         html += '<hr /><h1> Arkusze, które odświeżasz automatycznie: </h1>' + renderTriggerList(info.triggers);
+        // this document is refreshed by another user's trigger: it is not in the list, and the note says why
+        if (info.current && info.current.foreign) {
+          html += '<p><a href="#" onclick="showRefreshHelp(); return false;">Dlaczego nie widzę tego arkusza?</a></p>';
+        }
         html += '<p class="gray">Strefa czasowa: ' + escapeHtml(info.zone) + '</p>';
         html += '<details><summary class="gray">Szczegóły techniczne</summary><pre style="white-space:pre-wrap;font-size:11px">' + escapeHtml(JSON.stringify(info.diag, null, 1)) + '</pre></details>';
         document.getElementById('refreshInfo-panel').innerHTML = html;
@@ -261,8 +265,7 @@
           var lines = [];
           lines.push('Odświeżanie co: ' + (t.every ? escapeHtml(t.every) : '<span class="gray">brak danych</span>'));
           lines.push('Ostatnio odświeżone: ' + (t.last ? escapeHtml(t.last) + (t.duration ? ' (' + escapeHtml(t.duration) + ')' : '') : '<span class="gray">brak danych</span>'));
-          if (t.foreign) lines.push('<span class="gray">Trigger innego użytkownika (dane z dokumentu)</span>');
-          else if (!t.known) lines.push('<span class="gray">Trigger ' + escapeHtml(t.id) + ', funkcja ' + escapeHtml(t.handler) + (t.handler === 'autoRefresh' ? ' (stara wersja)' : '') + '</span>');
+          if (!t.known) lines.push('<span class="gray">Trigger ' + escapeHtml(t.id) + ', funkcja ' + escapeHtml(t.handler) + (t.handler === 'autoRefresh' ? ' (stara wersja)' : '') + '</span>');
           return '<li><b>' + title + '</b>' + (t.here ? ' <span class="gray">(ten dokument)</span>' : '') + '<br />' + lines.join('<br />') + '</li>';
         }).join('') + '</ul>';
       }
@@ -272,6 +275,15 @@
         if (btn) { btn.disabled = false; btn.innerHTML = 'Odśwież'; }
         document.getElementById('refreshInfo-panel').innerHTML =
           '<p id="status">Błąd pobierania danych: ' + escapeHtml(error.message) + '</p>';
+      }
+
+      function showRefreshHelp() {
+        google.script.run
+          .withFailureHandler(function (error) {
+            var box = document.getElementById('applyRefreshError');
+            if (box) box.innerHTML = "<font color='red'>Błąd: " + escapeHtml(error.message) + "</font>";
+          })
+          .showRefreshHelp();
       }
 
       function applyRefreshSettings() {
