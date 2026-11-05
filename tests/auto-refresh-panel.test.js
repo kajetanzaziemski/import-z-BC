@@ -234,6 +234,15 @@ module.exports = function register(t) {
     assert.strictEqual(sc.p.triggers.length, 1);
   });
 
+  test('page: the order of the tab - current settings (with the button to change them, no header of its own), the last refresh, the list of triggers, the zone, and the technical details at the very bottom', () => {
+    const html = fs.readFileSync(path.join(ROOT, 'New Status Sidebar.html'), 'utf8');
+    const body = html.slice(html.indexOf('function showRefreshInfo(info)'), html.indexOf('function renderTriggerList'));
+    const at = t => { const i = body.indexOf(t); assert.ok(i >= 0, t); return i; };
+    const order = ['Aktualne ustawienia:', 'id="applyRefreshBtn"', 'id="applyRefreshError"', 'Ostatnio odświeżone:', 'Arkusze, które odświeżasz automatycznie:', 'Strefa czasowa:', 'Szczegóły techniczne'].map(at);
+    assert.deepStrictEqual(order, [...order].sort((a, b) => a - b));
+    assert.ok(!/Zmień ustawienia/.test(html), 'no separate header for changing the settings');
+  });
+
   test('page: the section "Arkusze, które odświeżasz automatycznie:" shows the document as a link in a new tab, under it how often and the last refresh; everything is escaped', () => {
     const html = fs.readFileSync(path.join(ROOT, 'New Status Sidebar.html'), 'utf8');
     assert.ok(/Arkusze, które odświeżasz automatycznie:/.test(html) && /renderTriggerList\(info\.triggers\)/.test(html));

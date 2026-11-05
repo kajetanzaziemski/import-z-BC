@@ -223,17 +223,7 @@
           html += '<p>Odświeżanie automatyczne jest wyłączone.</p>';
         }
 
-        if (info.last) {
-          html += '<h1> Ostatnio odświeżone: </h1><p>' + escapeHtml(info.last.at) +
-            (info.last.duration ? '. Czas odświeżania: ' + escapeHtml(info.last.duration) : '') + '.</p>';
-          if (info.last.sheets && info.last.sheets.length) {
-            html += '<p>Odświeżone arkusze:</p><ul>' +
-              info.last.sheets.map(function (n) { return '<li>' + escapeHtml(n) + '</li>'; }).join('') + '</ul>';
-          }
-        }
-
-        html += '<hr /><h1> Arkusze, które odświeżasz automatycznie: </h1>' + renderTriggerList(info.triggers);
-        html += '<hr /><h1> Zmień ustawienia: </h1>';
+        // changing the settings belongs to the current settings: the button right under them, with no header of its own
         var sh = info.sheet;
         if (!sh || !sh.available) {
           html += '<p class="gray">' + (sh && sh.error ? 'Nie udało się odczytać arkusza ustawień.' : 'Arkusz ustawień jeszcze nie istnieje.') + '</p>';
@@ -244,7 +234,19 @@
             : '(odświeżanie co ' + escapeHtml(sh.every) + (sh.startAt ? ' o ' + escapeHtml(sh.startAt) : '') + '; nast. odśw. ' + escapeHtml(sh.next) + ')') + '</p>';
           if (!sh.differs) html += '<p class="gray">Ustawienia w arkuszu są takie same jak aktualne.</p>';
         }
-        html += '<p class="gray">Strefa czasowa: ' + escapeHtml(info.zone) + '</p><div id="applyRefreshError"></div>';
+        html += '<div id="applyRefreshError"></div>';
+
+        if (info.last) {
+          html += '<h1> Ostatnio odświeżone: </h1><p>' + escapeHtml(info.last.at) +
+            (info.last.duration ? '. Czas odświeżania: ' + escapeHtml(info.last.duration) : '') + '.</p>';
+          if (info.last.sheets && info.last.sheets.length) {
+            html += '<p>Odświeżone arkusze:</p><ul>' +
+              info.last.sheets.map(function (n) { return '<li>' + escapeHtml(n) + '</li>'; }).join('') + '</ul>';
+          }
+        }
+
+        html += '<hr /><h1> Arkusze, które odświeżasz automatycznie: </h1>' + renderTriggerList(info.triggers);
+        html += '<p class="gray">Strefa czasowa: ' + escapeHtml(info.zone) + '</p>';
         html += '<details><summary class="gray">Szczegóły techniczne</summary><pre style="white-space:pre-wrap;font-size:11px">' + escapeHtml(JSON.stringify(info.diag, null, 1)) + '</pre></details>';
         document.getElementById('refreshInfo-panel').innerHTML = html;
       }
