@@ -172,6 +172,31 @@ module.exports = function register(t) {
     assert.strictEqual(JSON.parse(sc.p.props.user['refreshTrigger:tHere']).docName, 'Faktury 2026');
   });
 
+  test('list: this document\'s trigger - the user\'s record is brought up to date from the document\'s permit when it differs (settings) or is older (last run); a current record is left alone; seenAt is kept', () => {
+    const sc = scenario({ permit: permit({ issuedFor: 'tHere', intervalHours: 48, startAt: '9:15', timeZone: 'Europe/Warsaw', lastRun: NOW - HOUR, lastDurationMs: 5000, lastSheets: ['R1'] }), triggers: ['tHere'], sheet: { freq: { freq: 1, unit: 'days' } } });
+    setRecord(sc, 'tHere', rec({ docName: 'Stara nazwa', intervalHours: 24, startAt: '17:30', lastRun: NOW - 40 * HOUR, seenAt: NOW - 5 * 60000 }));
+    const it = items(sc)[0];
+    assert.deepStrictEqual([it.name, it.every, it.duration], ['Faktury 2026', '2 dni o 9:15 (UTC+1)', '5 s'], 'the permit is where this document\'s trigger is true');
+    const stored = JSON.parse(sc.p.props.user['refreshTrigger:tHere']);
+    assert.deepStrictEqual([stored.intervalHours, stored.startAt, stored.lastRun, stored.seenAt], [48, '9:15', NOW - HOUR, NOW - 5 * 60000]);
+    // a record that is as new as the permit is not rewritten
+    const same = scenario({ permit: permit({ issuedFor: 'tHere', lastRun: NOW - HOUR }), triggers: ['tHere'] });
+    setRecord(same, 'tHere', rec({ docName: 'Nazwa z rekordu', lastRun: NOW - HOUR, seenAt: NOW }));
+    assert.strictEqual(items(same)[0].name, 'Nazwa z rekordu');
+  });
+
+  test('list: the permit of this document names a trigger that is not among the user\'s (set up by another user, used lately): it is listed from the document\'s data, marked foreign, and no record of it is made in the user\'s properties; a permit unused for long is not listed', () => {
+    const sc = scenario({ permit: permit({ issuedFor: 'theirs', lastRun: NOW - 2 * HOUR, lastDurationMs: 90000, issuedBy: 'someone-else' }), triggers: ['mine'], sheet: { freq: { freq: 1, unit: 'days' } } });
+    const list = items(sc);
+    assert.deepStrictEqual(list.map(x => [x.id, x.foreign, x.known]), [['theirs', true, true], ['mine', false, false]]);
+    assert.deepStrictEqual([list[0].name, list[0].every, list[0].duration, list[0].here, list[0].handler], ['Faktury 2026', '1 dzień o 17:30', '1 m 30 s', true, null]);
+    assert.ok(!records(sc).includes('refreshTrigger:theirs'));
+    const old = scenario({ permit: permit({ issuedFor: 'theirs', lastRefresh: NOW - 100 * HOUR, lastRun: NOW - 90 * HOUR, issuedBy: 'someone-else' }), triggers: ['mine'] });
+    assert.deepStrictEqual(items(old).map(x => x.id), ['mine']);
+    const off = scenario({ permit: permit({ issuedFor: 'theirs', lastRun: NOW - HOUR, off: true }), triggers: [] });
+    assert.deepStrictEqual(items(off), []);
+  });
+
   test('list: a record whose trigger is not there is not listed (a record never makes a trigger exist); it is dropped after a week unseen, kept before', () => {
     const sc = scenario({ triggers: ['tA'] });
     setRecord(sc, 'tA', rec({}));
@@ -248,6 +273,7 @@ module.exports = function register(t) {
     assert.ok(/Arkusze, które odświeżasz automatycznie:/.test(html) && /renderTriggerList\(info\.triggers\)/.test(html));
     assert.ok(/'<a href="' \+ escapeHtml\(t\.url\) \+ '" target="_blank" rel="noopener">'/.test(html));
     assert.ok(/Odświeżanie co: /.test(html) && /Ostatnio odświeżone: /.test(html));
+    assert.ok(/Trigger innego użytkownika \(dane z dokumentu\)/.test(html));
     assert.ok(/escapeHtml\(t\.id\)/.test(html) && /escapeHtml\(t\.handler\)/.test(html) && /escapeHtml\(t\.name\)/.test(html));
   });
 

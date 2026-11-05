@@ -37,42 +37,49 @@ const AutoRefreshPanel = {
       };
     }
     out.sheet = AutoRefreshPanel.fromSheet_(now, tz, current, stamp);
-    out.triggers = AutoRefreshPanel.triggerList_(now, tz, permit);
+    out.triggers = AutoRefreshPanel.triggerList_(now, tz, permit, current);
     return out;
   },
 
   /**
    * ALL of the user's time triggers (clock triggers of every document the add-on is used in), each with what is known about it: the registry's record
-   * (Refresh Registry.js) or, for this document's trigger made before the registry existed, the permit; for any other, only what the trigger itself says
-   * (its id and handler: ScriptApp gives a time trigger no interval, no document, no last run). Sorted: known by document name, unknown last.
+   * (Refresh Registry.js) or, for any other trigger, only what the trigger itself says (its id and handler: ScriptApp gives a time trigger no interval, no
+   * document, no last run). For THIS document the document's permit (document properties) fills in what the user's record lacks and brings it up to date; and
+   * when the permit names a trigger that is not the user's own (another user of the document set it up) that trigger is listed too, from the permit.
+   * Sorted: known by document name, unknown last.
    * @returns {{items: Array, error: string|null}}
    */
-  triggerList_(now, tz, permit){
+  triggerList_(now, tz, permit, current){
     try{
       const seen = ScheduleRefresh.triggersSeen_().filter(t => String(t.getEventType()) == "CLOCK");
       const ids = seen.map(t => t.getUniqueId());
-      try{ RefreshRegistry.ensureFromPermit(ids.includes(permit?.issuedFor) ? permit : null); RefreshRegistry.markSeen(ids,now.getTime()); }
+      const own = !!permit?.issuedFor && ids.includes(permit.issuedFor);
+      try{ if(own) RefreshRegistry.syncFromPermit(permit); RefreshRegistry.markSeen(ids,now.getTime()); }
       catch(err){ dbgLog(`Refresh trigger records not kept up to date: ${err}`); }
-      const here = RefreshRegistry.document_().docId;
-      const items = seen.map(t => {
-        const id = t.getUniqueId(), rec = RefreshRegistry.get(id);
-        const zone = rec?.docTz || tz;
+      const doc = RefreshRegistry.document_();
+      const item = (id, handler, rec, extra) => {
         const hours = rec?.intervalHours, days = hours && hours % 24 === 0;
+        const zone = rec?.docTz || tz;
         const every = !hours ? null : `${days ? hours / 24 : hours} ${SettingsGrid.unitName({freq: days ? hours / 24 : hours, unit: days ? "days" : "hrs"})}`
           + (rec.startAt ? ` o ${rec.startAt}` : "") + (rec.startAt && rec.timeZone ? ` (${AutoRefreshPanel.zoneName_(rec.timeZone,now)})` : "");
-        return {
+        return Object.assign({
           id: id,
-          handler: t.getHandlerFunction(),
+          handler: handler,
           known: !!rec?.docName || !!rec?.docId,
-          here: !!rec?.docId && rec.docId === here || (!!permit?.issuedFor && permit.issuedFor === id),
+          here: !!rec?.docId && rec.docId === doc.docId || (!!permit?.issuedFor && permit.issuedFor === id),
+          foreign: false,
           name: rec?.docName ?? null,
           url: AutoRefreshPanel.safeUrl_(rec?.url, rec?.gid),
           every: every,
           last: rec?.lastRun ? SettingsGrid.stamp(new Date(rec.lastRun), zone) : null,
           duration: AutoRefreshPanel.duration(rec?.lastDurationMs),
           next: rec?.nextRefresh ? SettingsGrid.stamp(new Date(rec.nextRefresh), zone) : null
-        };
-      });
+        }, extra);
+      };
+      const items = seen.map(t => item(t.getUniqueId(), t.getHandlerFunction(), RefreshRegistry.get(t.getUniqueId())));
+      if(permit?.issuedFor && !own && current?.active && permit.intervalHours){
+        items.push(item(permit.issuedFor, null, Object.assign({}, doc, RefreshRegistry.fromPermit(permit)), {foreign: true}));
+      }
       items.sort((a, b) => (b.known - a.known) || String(a.name ?? "").localeCompare(String(b.name ?? "")) || a.id.localeCompare(b.id));
       return {items: items, error: null};
     }catch(err){

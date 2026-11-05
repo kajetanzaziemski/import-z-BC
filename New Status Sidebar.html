@@ -261,7 +261,8 @@
           var lines = [];
           lines.push('Odświeżanie co: ' + (t.every ? escapeHtml(t.every) : '<span class="gray">brak danych</span>'));
           lines.push('Ostatnio odświeżone: ' + (t.last ? escapeHtml(t.last) + (t.duration ? ' (' + escapeHtml(t.duration) + ')' : '') : '<span class="gray">brak danych</span>'));
-          if (!t.known) lines.push('<span class="gray">Trigger ' + escapeHtml(t.id) + ', funkcja ' + escapeHtml(t.handler) + (t.handler === 'autoRefresh' ? ' (stara wersja)' : '') + '</span>');
+          if (t.foreign) lines.push('<span class="gray">Trigger innego użytkownika (dane z dokumentu)</span>');
+          else if (!t.known) lines.push('<span class="gray">Trigger ' + escapeHtml(t.id) + ', funkcja ' + escapeHtml(t.handler) + (t.handler === 'autoRefresh' ? ' (stara wersja)' : '') + '</span>');
           return '<li><b>' + title + '</b>' + (t.here ? ' <span class="gray">(ten dokument)</span>' : '') + '<br />' + lines.join('<br />') + '</li>';
         }).join('') + '</ul>';
       }

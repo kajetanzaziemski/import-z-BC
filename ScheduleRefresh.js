@@ -281,7 +281,7 @@ const ScheduleRefresh = {
     if(next) extra.nextRefresh = next;
     const touched = MainSettings.touchRefreshPermit(triggerUid,extra);
     try{
-      RefreshRegistry.ensureFromPermit(MainSettings.getRefreshPermit());
+      RefreshRegistry.syncFromPermit(MainSettings.getRefreshPermit());
       RefreshRegistry.touch(triggerUid,{lastRun: Date.now(), lastDurationMs: extra.lastDurationMs, lastSheets: sheets, nextRefresh: extra.nextRefresh});
     }catch(err){ dbgLog(`Refresh trigger record not updated: ${err}`); }
     if(touched) ScheduleRefresh.reportScheduled_();

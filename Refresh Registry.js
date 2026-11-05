@@ -68,15 +68,29 @@ const RefreshRegistry = {
     Store.setJson("user",REFRESH_REGISTRY_PREFIX + triggerId,Object.assign(RefreshRegistry.document_(),how));
   },
 
-  /** The record of this document's trigger as the refresh permit remembers it, if there is no record yet (triggers made before the registry existed). */
-  ensureFromPermit(permit){
+  /** What the refresh permit of this document (document properties, shared by all users of the document) says about its trigger, as record fields. */
+  fromPermit(permit){
+    return {intervalHours: permit.intervalHours, startAt: permit.startAt ?? undefined, timeZone: permit.timeZone ?? undefined, setAt: permit.lastRefresh,
+            nextRefresh: permit.nextRefresh, lastRun: permit.lastRun, lastDurationMs: permit.lastDurationMs, lastSheets: permit.lastSheets};
+  },
+
+  /** The record is replaced as a whole (put() only adds to it: a field that is gone from the new data would stay). */
+  replace(triggerId, fields){
+    Object.keys(fields).forEach(k => { if(fields[k] === undefined) delete fields[k]; });
+    Store.setJson("user",REFRESH_REGISTRY_PREFIX + triggerId,fields);
+  },
+
+  /**
+   * This user's trigger of THIS document: the user's record is made or brought up to date from the document's permit when it is missing, has no document, or
+   * differs in the settings or has an older last run (another user of the document, or an older version of the add-on, may have written the permit; the
+   * permit is where this document's trigger is kept true). Called only for a trigger that is among the user's.
+   */
+  syncFromPermit(permit){
     if(!permit?.issuedFor || !permit.intervalHours || permit.off) return;
-    const rec = RefreshRegistry.get(permit.issuedFor);
-    if(rec && rec.docId) return;
-    RefreshRegistry.put(permit.issuedFor,Object.assign(RefreshRegistry.document_(),{
-      intervalHours: permit.intervalHours, startAt: permit.startAt ?? undefined, timeZone: permit.timeZone ?? undefined, setAt: permit.lastRefresh,
-      nextRefresh: permit.nextRefresh, lastRun: permit.lastRun, lastDurationMs: permit.lastDurationMs, lastSheets: permit.lastSheets
-    }));
+    const id = permit.issuedFor, rec = RefreshRegistry.get(id);
+    const fromPermit = RefreshRegistry.fromPermit(permit);
+    const stale = !rec || !rec.docId || rec.intervalHours !== permit.intervalHours || (rec.startAt ?? null) !== (permit.startAt ?? null) || (permit.lastRun ?? 0) > (rec.lastRun ?? 0);
+    if(stale) RefreshRegistry.replace(id,Object.assign(RefreshRegistry.document_(),fromPermit,rec?.seenAt ? {seenAt: rec.seenAt} : {}));
   },
 
   /** A scheduled run of this trigger finished: the record gets the run (and the document's name / address as they are now). */
