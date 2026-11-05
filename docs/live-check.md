@@ -171,6 +171,10 @@ A failure of the check in `onOpen` itself is no longer silent: it is `console.er
 It is part of `menuRefreshCurrentSheet` (a config sheet), `menuRefreshAll`, the scheduled refresh, and the retired trigger (whose entry says nothing was refreshed; the retired check no longer fails on the log sheet that entry may have made). The sidebar functions
 `getRefreshLogSheetName` / `setRefreshLogSheetName` are `requestRefreshLogSheetName` / `requestSetRefreshLogSheetName` (a refused name - already a sheet of the add-on, or over 100 characters - is an expected error).
 
+## Many edits at once (hashes re-pinned)
+`lcVerifyRefreshTrigger_` also requires that exactly one refresh trigger belongs to this document - the permit's - judged by the user's records in the user properties (`lcDocumentsRefreshTriggers_`), none when the refresh is off. A set-up that dropped out for a newer edit
+(note "refresh set-up dropped") is skipped: the newer run is judged on its own.
+
 ## Quiet jobs
 `sheet.ignored`, `change.ignored` and `change.own` (`LIVE_CHECK_QUIET_JOBS`, `Live Check.js`) only look at an event and do nothing; they were most of the report. While they **pass** (or skip) nothing is logged, stored or shown, and their "running" placeholder
 is removed at once. One that fails or warns (an edit in a config sheet wrongly ignored) is recorded and shown like any other run. `settings.edit` and `agent.skipped` also do nothing but are still reported.

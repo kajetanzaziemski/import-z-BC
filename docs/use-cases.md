@@ -120,3 +120,13 @@ Look of the log sheet (`Refresh Log Grid.js`): headers grey (`#cccccc`, the grey
 their content, "Odświeżone arkusze" is 300 px (width and freeze are set when the sheet is made, never again, so the user's changes stay); "Odświeżone arkusze" starts with "N arkusze:" (no colon for "0 arkuszy": nothing follows). The start and end carry
 their time zone IN THE FORMAT of the cell (`yyyy-mm-dd hh:mm:ss "UTC+1"`, the offset of that moment): a cell keeps the wall clock of the spreadsheet's zone, so an old entry stays true when the zone is changed later. Needed in Grid.js: `setFontFamily`,
 `setColumnWidth`, `freezeRows`.
+
+## Many edits at once ("the last one makes sure")
+Typing a frequency fires an edit per keystroke, each running `ScheduleRefresh.apply` at the same time, each wanting to create or delete time triggers. `apply` therefore runs under `runLatestOnly` (functions.js) with the flag `refreshSetup`, like the co-edit of a config
+sheet: every run writes its ticket, takes the script lock, and an OLDER run drops out as soon as it sees a newer ticket (nothing changed, a note "refresh set-up dropped: a newer edit took over" for the live check). The newest run
+(`applyNewest_`) re-reads the settings sheet from the server under the lock (`SettingsSheet.reloadRefreshSettings`: what the sheet says now, not what the run read when it started), sets up (`setUp`), and then makes sure (`reconcile_`):
+- ONE trigger: the triggers the user's records say belong to this document (`docId`; a time trigger has none of its own) are deleted with their records, except the permit's - this is how the trigger of an earlier run that died half way is found, because the record is
+  written right after the trigger is made, before the permit; triggers of other documents and triggers with no record are left alone;
+- a VALID permit: issued for a trigger that exists (three looks), not off, with the interval and the time of day the settings ask for; with the refresh off, no trigger of this document is left;
+- a result that is not right is set up once more; if it still is not, the error says what is wrong (`Odświeżanie nie zostało ustawione poprawnie (...)`) and the message is red. A run that never gets the lock (90 s) reports a failure: nobody else will set up for it.
+The live check judges the same (exactly the permit's trigger among this document's records; none when off) and skips a dropped run.

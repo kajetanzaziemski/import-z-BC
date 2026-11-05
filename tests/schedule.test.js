@@ -51,7 +51,7 @@ module.exports = function register(t) {
     return { p, ex, log, cfg, calls: () => plain(log), stored,
       save: () => ex.eval(`getImportSettings().saveArray()`),
       /** the settings sheet object with a given refresh frequency, without reading any sheet */
-      settingsSheet: freq => ex.eval(`(() => { const s = Object.create(SettingsSheet.prototype); s.sheet = { getParent: () => ({}) }; s.settings = []; s.refreshFrequency = ${JSON.stringify(freq)}; return s; })()`) };
+      settingsSheet: freq => ex.eval(`(() => { const s = Object.create(SettingsSheet.prototype); s.reloadRefreshSettings = () => {}; s.sheet = { getParent: () => ({}) }; s.settings = []; s.refreshFrequency = ${JSON.stringify(freq)}; return s; })()`) };
   }
   const triggers = p => p.triggers.map(x => ({ id: x.id, fn: x.fn, type: x.type, params: x.params }));
   const permit = sc => sc.stored().refreshPermit;
@@ -226,6 +226,109 @@ module.exports = function register(t) {
     legacy.ex.eval(`autoRefresh(${event('trig-L')})`);
     assert.deepStrictEqual(legacy.calls(), []);
     assert.deepStrictEqual(triggers(legacy.p), []);
+  });
+
+  // ---- many edits at once: only the newest sets up, and makes sure ------------------------------------------------------------------------------------
+  /** A settings object for apply(): what it reads when it starts (freq, startAt) and what the sheet says when it is read again under the lock (fresh) */
+  function applySettings(sc, first, fresh, hooks) {
+    sc.ex.eval(`globalThis.__reads = 0; globalThis.__msgs = []; globalThis.__notes = []; Controller.checkNote = n => __notes.push(n);
+      globalThis.__st = { freq: ${JSON.stringify(first)}, at: null, fresh: ${JSON.stringify(fresh || null)} };
+      globalThis.__ss = { getRefreshFrequency: () => __st.freq, getRefreshStartAt: () => __st.at,
+        reloadRefreshSettings: () => { __reads++; if (__st.fresh) __st.freq = __st.fresh; ${hooks && hooks.onReload || ''} },
+        setRefreshMessage: r => __msgs.push(r), toastRefreshError() {} };`);
+  }
+
+  test('set-up: runs under the newest-only lock "refreshSetup" and re-reads the sheet under the lock - what the sheet says NOW is set up, not what this run read when it started', () => {
+    const sc = scenario();
+    applySettings(sc, { freq: 2, unit: 'hrs' }, { freq: 6, unit: 'hrs' });
+    sc.ex.eval(`ScheduleRefresh.apply(__ss)`);
+    assert.strictEqual(sc.ex.eval(`__reads`), 1);
+    assert.deepStrictEqual(triggers(sc.p).map(x => x.params), [{ everyHours: 6 }]);
+    assert.ok(sc.p.props.document.refreshSetup, 'the ticket of the newest run is in the document properties');
+    assert.deepStrictEqual(plain(sc.ex.eval(`__msgs.map(m => [m.ok, m.frequency.freq])`)), [[true, 6]]);
+  });
+
+  test('set-up: an older run that finds a newer one when it has the lock drops out - nothing changed, no message, a note for the live check', () => {
+    const sc = scenario({ settings: PERMIT('old') });
+    sc.p.triggers.push(NAMED('old'));
+    applySettings(sc, { freq: 2, unit: 'hrs' }, null, { onReload: `Store.set('document', 'refreshSetup', 'a-newer-run');` });      // a newer edit starts while this one reads
+    sc.ex.eval(`ScheduleRefresh.apply(__ss)`);
+    assert.deepStrictEqual(triggers(sc.p).map(x => x.id), ['old'], 'the trigger that was there is untouched');
+    sc.save();
+    assert.strictEqual(permit(sc).issuedFor, 'old');
+    assert.deepStrictEqual(plain(sc.ex.eval(`__msgs`)), []);
+    assert.deepStrictEqual(plain(sc.ex.eval(`__notes`)), ['refresh set-up dropped: a newer edit took over']);
+  });
+
+  test('set-up: a run that cannot get the lock in time reports a failure (red message, error) - nobody else will set up for it', () => {
+    const sc = scenario();
+    sc.p.lockHeld = true;
+    applySettings(sc, { freq: 2, unit: 'hrs' });
+    assert.throws(() => sc.ex.eval(`ScheduleRefresh.apply(__ss)`), /poprzednia zmiana ustawień trwa zbyt długo/);
+    assert.deepStrictEqual(plain(sc.ex.eval(`__msgs.map(m => m.ok)`)), [false]);
+    assert.deepStrictEqual(triggers(sc.p), []);
+  });
+
+  const DOC_REC = (over) => JSON.stringify(Object.assign({ docId: 'ss-1', docName: 'Faktury', intervalHours: 6, setAt: 1 }, over));
+
+  test('set-up: the newest run leaves ONE time trigger for this document - the triggers the records say are this document\'s (left by earlier runs) are deleted with their records; other documents\' and unknown triggers stay', () => {
+    const sc = scenario({ settings: PERMIT('t-old') });
+    ['t-old', 't-orphan1', 't-orphan2', 't-otherdoc', 't-unknown'].forEach(id => sc.p.triggers.push(NAMED(id)));
+    sc.p.props.user['refreshTrigger:t-old'] = DOC_REC();
+    sc.p.props.user['refreshTrigger:t-orphan1'] = DOC_REC();
+    sc.p.props.user['refreshTrigger:t-orphan2'] = DOC_REC({ setAt: 2 });
+    sc.p.props.user['refreshTrigger:t-otherdoc'] = DOC_REC({ docId: 'doc-B' });
+    applySettings(sc, { freq: 6, unit: 'hrs' });
+    sc.ex.eval(`ScheduleRefresh.apply(__ss)`);
+    sc.save();
+    assert.deepStrictEqual(triggers(sc.p).map(x => x.id).sort(), ['t-otherdoc', 't-unknown', 'trig-1']);
+    assert.deepStrictEqual(Object.keys(sc.p.props.user).filter(k => k.startsWith('refreshTrigger:')).sort(), ['refreshTrigger:t-otherdoc', 'refreshTrigger:trig-1']);
+    assert.strictEqual(permit(sc).issuedFor, 'trig-1');
+    assert.deepStrictEqual(plain(sc.ex.eval(`__msgs.map(m => m.ok)`)), [true]);
+  });
+
+  test('set-up: with the refresh switched off none of this document\'s refresh triggers is left (the permit is marked off)', () => {
+    const sc = scenario({ settings: PERMIT('t-old') });
+    ['t-old', 't-orphan', 't-otherdoc'].forEach(id => sc.p.triggers.push(NAMED(id)));
+    sc.p.props.user['refreshTrigger:t-old'] = DOC_REC();
+    sc.p.props.user['refreshTrigger:t-orphan'] = DOC_REC();
+    sc.p.props.user['refreshTrigger:t-otherdoc'] = DOC_REC({ docId: 'doc-B' });
+    applySettings(sc, { freq: '', unit: 'hrs' });
+    sc.ex.eval(`ScheduleRefresh.apply(__ss)`);
+    sc.save();
+    assert.deepStrictEqual(triggers(sc.p).map(x => x.id), ['t-otherdoc']);
+    assert.strictEqual(permit(sc).off, true);
+    assert.deepStrictEqual(plain(sc.ex.eval(`__msgs.map(m => [m.ok, m.off])`)), [[true, true]]);
+  });
+
+  test('set-up: the result is checked - a trigger that vanished right after it was made is made again (once); a set-up that cannot be made right is an error with the reasons, and a red message', () => {
+    const flaky = scenario();
+    applySettings(flaky, { freq: 3, unit: 'hrs' });
+    flaky.ex.eval(`{ const real = ScheduleRefresh.setUp; let n = 0; ScheduleRefresh.setUp = function (...a) { const r = real.apply(this, a); if (++n == 1) ScriptApp.getProjectTriggers().forEach(t => ScriptApp.deleteTrigger(t)); return r; }; }`);
+    flaky.ex.eval(`ScheduleRefresh.apply(__ss)`);
+    flaky.save();
+    assert.deepStrictEqual(triggers(flaky.p).map(x => x.params), [{ everyHours: 3 }], 'one trigger in the end');
+    assert.strictEqual(permit(flaky).issuedFor, triggers(flaky.p)[0].id);
+    assert.deepStrictEqual(plain(flaky.ex.eval(`__msgs.map(m => m.ok)`)), [true]);
+
+    const broken = scenario();
+    applySettings(broken, { freq: 3, unit: 'hrs' });
+    broken.ex.eval(`{ const real = ScheduleRefresh.setUp; ScheduleRefresh.setUp = function (...a) { const r = real.apply(this, a); ScriptApp.getProjectTriggers().forEach(t => ScriptApp.deleteTrigger(t)); return r; }; }`);
+    assert.throws(() => broken.ex.eval(`ScheduleRefresh.apply(__ss)`), /nie zostało ustawione poprawnie \(brak triggera czasowego\)/);
+    assert.deepStrictEqual(plain(broken.ex.eval(`__msgs.map(m => m.ok)`)), [false]);
+  });
+
+  test('set-up: the permit must match the settings (interval, time of day) - checked by wanted_ / reconcile_; a record is written at once after the trigger is made', () => {
+    const sc = scenario();
+    const w = (f, at) => plain(sc.ex.eval(`ScheduleRefresh.wanted_(${JSON.stringify(f)}, ${JSON.stringify(at)})`));
+    assert.deepStrictEqual(w({ freq: 2, unit: 'days' }, { hour: 9, minute: 5 }), { hours: 48, startAt: '9:05' });
+    assert.deepStrictEqual(w({ freq: '3', unit: 'hrs' }, null), { hours: 3, startAt: null });
+    assert.strictEqual(w({ freq: '', unit: 'hrs' }, null), null);
+    assert.strictEqual(w({ freq: 3, unit: null }, null), null);
+    const text = fs.readFileSync(path.join(ROOT, 'ScheduleRefresh.js'), 'utf8');
+    assert.ok(/newTrigger = ScheduleRefresh\.createTrigger_[\s\S]*?ScheduleRefresh\.register_\(newTrigger\.getUniqueId\(\)[\s\S]*?MainSettings\.setRefreshPermit\(newTrigger/.test(text), 'the record before the permit');
+    sc.settingsSheet({ freq: 3, unit: 'hrs' }).setRefreshTrigger();
+    assert.ok(sc.p.props.user['refreshTrigger:trig-1'], 'the record of the trigger');
   });
 
   // ---- the spreadsheet's time zone changes (onOpen) -------------------------------------------------------------------------------------------

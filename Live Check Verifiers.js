@@ -477,10 +477,25 @@ function lcVerifyZoneLabels_(c,settings){
 }
 
 /**
+ * The refresh triggers (among `timers`) that the user's records (user properties, one per trigger) say belong to THIS document. A time trigger has no document of its
+ * own, so the records are the only way to tell; a trigger without a record is not counted.
+ */
+function lcDocumentsRefreshTriggers_(c,timers){
+  const props = PropertiesService.getUserProperties(), here = c.spreadsheet().getId();
+  return props.getKeys().filter(k => k.indexOf("refreshTrigger:") == 0).map(k => {
+    try{ return {id: k.slice("refreshTrigger:".length), rec: JSON.parse(props.getProperty(k))}; }catch(err){ return null; }
+  }).filter(x => x && x.rec && x.rec.docId === here && timers.some(t => t.getUniqueId() === x.id)).map(x => x.id);
+}
+
+/**
  * The time trigger after the refresh frequency was edited. A time trigger is not bound to a document, so only the trigger THIS document's permit names
  * is replaced; other refresh triggers (other documents', or this document's old / legacy ones, which delete themselves when they fire) may be around.
  */
 function lcVerifyRefreshTrigger_(c,settings){
+  if(c.notes.some(n => /refresh set-up dropped/.test(n))){      // many edits at once: only the newest sets up (runLatestOnly) and it is judged on its own
+    c.skip("refresh trigger matches the settings sheet","a newer edit took over the set-up");
+    return;
+  }
   c.attempt("refresh trigger matches the settings sheet",() => {
     const timers = lcTriggersSeen_().filter(t => ["autoRefresh","autoRefreshHandler"].includes(t.getHandlerFunction()));
     const permit = c.settings().refreshPermit;
@@ -489,6 +504,8 @@ function lcVerifyRefreshTrigger_(c,settings){
     const unitOk = settings.unit === "godzin" || settings.unit === "dni";
     if(!settings.freq || !unitOk){
       c.expect("refresh frequency empty / unit unknown: no refresh trigger is left for this document",!(permit && permit.issuedFor && timers.some(t => t.getUniqueId() === permit.issuedFor)),`the permit still names an installed trigger: ${permit && permit.issuedFor}`);
+      const left = lcDocumentsRefreshTriggers_(c,timers);
+      c.expect("the refresh is off: none of this document's refresh triggers is left",left.length == 0,`left: ${left.join(", ")}`);
       return;
     }
     const named = permit && permit.issuedFor ? timers.find(t => t.getUniqueId() === permit.issuedFor) : null;
@@ -496,6 +513,8 @@ function lcVerifyRefreshTrigger_(c,settings){
     c.expect("trigger is time-based",named.getEventType() === ScriptApp.EventType.CLOCK,String(named.getEventType()));
     c.expect("permit issued for the new trigger",!!previous ? permit.issuedFor !== previous.issuedFor : true,`the permit still names ${permit.issuedFor}`);
     c.expectEqual("permit interval in hours",permit.intervalHours,settings.unit === "dni" ? 24 * settings.freq : settings.freq);
+    const mine = lcDocumentsRefreshTriggers_(c,timers);
+    c.expectEqual("this document has exactly one refresh trigger: the permit's",mine.length == 0 ? [named.getUniqueId()] : mine,[named.getUniqueId()]);
     const others = timers.filter(t => t.getUniqueId() !== named.getUniqueId());
     if(others.length) c.pass("other refresh triggers are left alone",`${others.length}: other documents', or old ones of this document that delete themselves when they fire`);
   });

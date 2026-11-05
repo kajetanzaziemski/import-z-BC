@@ -433,6 +433,22 @@ module.exports = function register(t) {
     assert.ok(/function lcVerifyScheduledRefresh_\(c\)\{[\s\S]*?lcVerifyRefreshLog_\(c,"Autoodświeżanie"/.test(src) && /function lcVerifyRetiredRefresh_\(c\)\{[\s\S]*?lcVerifyRefreshLog_\(c,"Autoodświeżanie",\/no refresh was performed\//.test(src));
   });
 
+  test('live check: this document\'s refresh triggers are told by the user\'s records - exactly the permit\'s one must exist, none with the refresh off; a set-up that was dropped for a newer edit is skipped', () => {
+    const p = new FakePlatform();
+    const ex = p.execution(FILES);
+    p.props.user['refreshTrigger:a'] = JSON.stringify({ docId: 'ss-1' });
+    p.props.user['refreshTrigger:b'] = JSON.stringify({ docId: 'ss-1' });
+    p.props.user['refreshTrigger:c'] = JSON.stringify({ docId: 'doc-B' });
+    p.props.user['refreshTrigger:gone'] = JSON.stringify({ docId: 'ss-1' });
+    p.props.user['refreshTrigger:bad'] = '{not json';
+    const ids = ex.eval(`lcDocumentsRefreshTriggers_({ spreadsheet: () => ({ getId: () => 'ss-1' }) }, ['a', 'b', 'c', 'bad'].map(id => ({ getUniqueId: () => id }))).sort()`);
+    assert.deepStrictEqual(Array.from(ids), ['a', 'b'], 'this document\'s, among the triggers that exist');
+    const res = ex.eval(`(() => { const out = []; const c = { notes: ['refresh set-up dropped: a newer edit took over'], skip: (n, why) => out.push(['skip', n]), attempt: () => out.push(['judged']) }; lcVerifyRefreshTrigger_(c, {}); return out; })()`);
+    assert.deepStrictEqual(Array.from(res).map(r => Array.from(r)), [['skip', 'refresh trigger matches the settings sheet']]);
+    const src = fs.readFileSync(path.join(ROOT, 'Live Check Verifiers.js'), 'utf8');
+    assert.ok(/this document has exactly one refresh trigger/.test(src) && /the refresh is off: none of this document's refresh triggers is left/.test(src));
+  });
+
   const THREE_ROWS = `ODataConnection.prototype.getDataArray = () => [['No'], ['C1'], ['C2']];`;
   const FMT = /number format uniform in every column/;
   test('live check, end to end: a result column whose number format differs between data rows -> FAIL naming the column and the actual formats (header shown, not judged)', () => {

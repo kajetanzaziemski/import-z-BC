@@ -40,6 +40,20 @@ class SettingsSheet{
     return isInRange(this.refreshTimePos,5,range);
   }
 
+  /** Reads the sheet again (from the server: edits made meanwhile by other executions are in) and forgets what was read before. */
+  reloadRefreshSettings(){
+    this.readAgain_(true);
+  }
+
+  readAgain_(reopen){
+    if(reopen) this.grid = SettingsGrid.open(MainSettings.getSettingsSheetName());
+    this.settings = this.grid.rows();
+    this.lastConfigSheetPos = 2; this.lastRefreshPos = null; this.refreshFrequencyPos = null; this.refreshTimePos = null;
+    this.sheetList = this.readSheetList();
+    this.refreshFrequency = this.readRefreshFrequency();
+    this.lastRefresh = this.readLastRefresh();
+  }
+
   /** The zone labels follow the spreadsheet's time zone, judged from what the sheet says now; `plan` may give the conversion of the time of day (see SettingsGrid retime). */
   adoptTimeZone(plan){
     return this.grid.retime(plan);
@@ -198,9 +212,7 @@ class SettingsSheet{
     if(!this.grid) return;
     this.grid.writeRefreshMessage(report);
     // the lines it may have added moved the rest down: read the sheet again
-    this.settings = this.grid.rows();
-    this.lastConfigSheetPos = 2; this.lastRefreshPos = null; this.refreshFrequencyPos = null; this.refreshTimePos = null;
-    this.sheetList = this.readSheetList();
+    this.readAgain_(false);
   }
 
   createObjectFromList(itemsNames,list){

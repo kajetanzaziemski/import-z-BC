@@ -46,6 +46,7 @@ const ScheduleRefresh = {
       throw new Error(`Nieprawidłowa częstotliwość odświeżania: "${frequency.freq}" (potrzebna liczba całkowita większa od zera).`);
     }
     const intervalHrs = frequency.unit == "days" ? 24 * interval : interval;
+    const nextRefresh = ScheduleRefresh.nextRefresh(new Date(), frequency.unit, interval, startAt);
 
     ScheduleRefresh.removeRefreshTrigger_(permit?.issuedFor);
     let newTrigger;
@@ -55,16 +56,17 @@ const ScheduleRefresh = {
       ScheduleRefresh.restoreAfterFailure_(permit);
       throw err;
     }
+    // The record of the new trigger is written at once, before the permit: if this run dies from here on, the trigger can still be told to be this document's
+    // (the reconciliation that a later set-up makes finds it by its record and removes it).
+    ScheduleRefresh.register_(newTrigger.getUniqueId(),{intervalHours: intervalHrs, startAt: startAt ? `${startAt.hour}:${String(startAt.minute ?? 0).padStart(2,"0")}` : undefined,
+                                                      timeZone: startAt?.timeZone, setAt: Date.now(), nextRefresh: nextRefresh.getTime()});
     // Issue a permit for this trigger. This will override any other permits, so all old triggers will automatically uninstall.
     MainSettings.setRefreshPermit(newTrigger.getUniqueId(),intervalHrs);
-    const nextRefresh = ScheduleRefresh.nextRefresh(new Date(), frequency.unit, interval, startAt);
     const issued = MainSettings.getRefreshPermit();
     MainSettings.updateRefreshPermit(Object.assign({}, issued, {issuedBy: ScheduleRefresh.ownerToken_(true), nextRefresh: nextRefresh.getTime(), startAt: startAt ? `${startAt.hour}:${String(startAt.minute ?? 0).padStart(2,"0")}` : null, timeZone: startAt?.timeZone ?? null}));
     // Save the permit now, not when the run closes: writing the status message takes seconds and the sidebar polls the permit meanwhile
     // (a permit that still names the removed trigger reads as "nothing is set").
     Settings.store().saveArray();
-    ScheduleRefresh.register_(newTrigger.getUniqueId(),{intervalHours: intervalHrs, startAt: startAt ? `${startAt.hour}:${String(startAt.minute ?? 0).padStart(2,"0")}` : undefined,
-                                                      timeZone: startAt?.timeZone, setAt: Date.now(), nextRefresh: nextRefresh.getTime()});
     return {nextRefresh, intervalHrs};
   },
 
@@ -223,14 +225,82 @@ const ScheduleRefresh = {
    * @param settings the settings sheet object (getMainSettings())
    */
   apply(settings){
-    let result;
+    let outcome;
     try{
-      result = ScheduleRefresh.setUp(settings.getRefreshFrequency(), settings.getRefreshStartAt());
+      // Many edits can run at once (every keystroke of a number is an edit), each creating or deleting time triggers. Only the NEWEST run completes (runLatestOnly:
+      // the older ones drop out, nothing changed); it re-reads the sheet under the lock, sets the trigger up and makes sure the result is right (reconcile_).
+      outcome = runLatestOnly(isLatest => ScheduleRefresh.applyNewest_(settings,isLatest),"refreshSetup");
     }catch(err){
       ScheduleRefresh.report_(settings,{ok:false,when:new Date(),current:ScheduleRefresh.current()});
       throw err;
     }
-    ScheduleRefresh.report_(settings,{ok:true,off:!result,when:new Date(),frequency:settings.getRefreshFrequency(),next:result?.nextRefresh ?? null});
+    if(outcome === "dropped"){
+      Controller.checkNote("refresh set-up dropped: a newer edit took over");        // the newer run sets up and writes the message
+    }else if(outcome === "timeout"){
+      ScheduleRefresh.report_(settings,{ok:false,when:new Date(),current:ScheduleRefresh.current()});
+      throw new Error("Nie udało się ustawić odświeżania: poprzednia zmiana ustawień trwa zbyt długo.");
+    }
+  },
+
+  /** The work of the newest run, with the lock. Returns false when a newer run took over before anything was changed. */
+  applyNewest_(settings, isLatest){
+    if(typeof settings.reloadRefreshSettings == "function") settings.reloadRefreshSettings();      // what the sheet says NOW, not what this run read when it started
+    if(!isLatest()) return false;
+    const frequency = settings.getRefreshFrequency(), startAt = settings.getRefreshStartAt();
+    let result = ScheduleRefresh.setUp(frequency,startAt);
+    const wanted = ScheduleRefresh.wanted_(frequency,startAt);
+    let problems = ScheduleRefresh.reconcile_(wanted);
+    if(problems.length){                                                                              // once more from scratch
+      dbgLog(`Refresh set-up not right (${problems.join(", ")}): once more.`);
+      result = ScheduleRefresh.setUp(frequency,startAt);
+      problems = ScheduleRefresh.reconcile_(wanted);
+      if(problems.length) throw new Error(`Odświeżanie nie zostało ustawione poprawnie (${problems.join(", ")}).`);
+    }
+    ScheduleRefresh.report_(settings,{ok:true,off:!result,when:new Date(),frequency:frequency,next:result?.nextRefresh ?? null});
+    return true;
+  },
+
+  /** What the settings ask for, as the permit and the trigger must show it: { hours, startAt: "17:30"|null }, or null when the refresh is to be off. */
+  wanted_(frequency, startAt){
+    const n = typeof frequency?.freq == "string" && frequency.freq.trim() !== "" ? Number(frequency.freq) : frequency?.freq;
+    if(!n || (frequency.unit != "days" && frequency.unit != "hrs")) return null;
+    return {hours: frequency.unit == "days" ? 24 * n : n, startAt: startAt ? `${startAt.hour}:${String(startAt.minute ?? 0).padStart(2,"0")}` : null};
+  },
+
+  /**
+   * After a set-up: is the result what the settings ask for, and is it the ONLY refresh trigger of this document? The triggers that belong to this document are the
+   * ones the user's records name (Refresh Registry.js; a time trigger has no document of its own): every one of them but the permit's is deleted. Then the
+   * permit must be valid (issued for a trigger that exists, not off, the interval and the time of day of the settings); with the refresh off no trigger of this
+   * document may be left. Triggers are asked for three times (the list is not reliable, see isInstalled_). Returns what is still wrong (nothing = right);
+   * a check that cannot be made (the properties are down) finds nothing wrong rather than failing a set-up that worked.
+   */
+  reconcile_(wanted){
+    const problems = [];
+    try{
+      const permit = MainSettings.getRefreshPermit();
+      const here = RefreshRegistry.document_().docId;
+      const triggers = ScheduleRefresh.triggersSeen_().filter(t => ["autoRefresh","autoRefreshHandler"].includes(t.getHandlerFunction()));
+      const ids = triggers.map(t => t.getUniqueId());
+      const keeper = wanted ? permit?.issuedFor : null;
+      if(here){
+        RefreshRegistry.all().filter(r => r.docId === here && r.id !== keeper && ids.includes(r.id)).forEach(r => {
+          triggers.filter(t => t.getUniqueId() === r.id).forEach(t => ScriptApp.deleteTrigger(t));
+          ScheduleRefresh.forget_(r.id);
+          dbgLog(`Another refresh trigger of this document removed: ${r.id}`);
+        });
+      }
+      if(wanted){
+        if(!permit?.issuedFor || permit.off) problems.push("brak ważnego zezwolenia");
+        else if(permit.intervalHours !== wanted.hours) problems.push("zezwolenie ma inną częstotliwość niż ustawienia");
+        else if((permit.startAt ?? null) !== wanted.startAt) problems.push("zezwolenie ma inną godzinę niż ustawienia");
+        else if(!ids.includes(permit.issuedFor)) problems.push("brak triggera czasowego");
+      }else if(permit?.issuedFor && !permit.off && ids.includes(permit.issuedFor)){
+        problems.push("trigger nadal istnieje");
+      }
+    }catch(err){
+      dbgLog(`Refresh set-up not verified: ${err}`);
+    }
+    return problems;
   },
 
   /**
