@@ -88,3 +88,9 @@ The button in the Auto-odświeżanie tab (`turnOffRefresh` -> `AutoRefreshPanel.
 then runs the same set-up as after an edit: it finds no frequency, removes the trigger, marks the permit `off`, forgets the user's record and writes the yellow message "Odświeżanie zostało wyłączone". A trigger that is still around after that
 (another user's, or one an incomplete trigger list hid from the removal) retires itself when it fires: a permit marked `off` holds nobody (`run` / `runLegacy`; the live check's `lcRefreshTriggerHoldsPermit_` agrees). Breaking the settings by an edit
 (empty or invalid frequency) switches it off the same way, only without cleaning the cells.
+
+## The spreadsheet's time zone changes (`ScheduleRefresh.syncTimeZone`, called by `onOpen`)
+Changing File > Settings > Time zone reloads the sheet, so the check is made when the document opens: the zone the add-on last saw is kept in the import settings (`timeZone`; before that, the permit's zone). When it differs, the zone labels (E of `lastRefresh`
+and `refreshTime`) are rewritten as `UTC+N` for the new zone, the time of day of `refreshTime` is converted so that it stays the same MOMENT (17:30 in UTC+1 becomes 16:30 in UTC+0; stored as a fraction of a day, shown as HH:mm), the permit and the user's record follow
+(`startAt`, `timeZone`), the status message is written again (its times are in the new zone) and the new zone is remembered. The trigger is not recreated: it keeps its own zone and fires at the same moment. Nothing is known about the zone before (first open after
+an update, no permit zone): only the labels are corrected. The check never throws, builds no settings sheet that does not exist, and an off refresh keeps its permit untouched. The live check allows `importSettingsArray` to change in `onOpen` for this.

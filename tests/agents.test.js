@@ -9,7 +9,7 @@ const assert = require('assert');
 const { FakePlatform } = require('./platform-fakes');
 
 const FILES = ['Custom errors.js', 'Helper Data Store.js', 'Store.js', 'Settings.js', 'Main Settings.js', 'Controller.js', 'Trigger Manager.js',
-  'Global Add-on Settings.js', 'Quick Start.js', 'functions.js', 'Track onEdit Triggers.js', 'Status Manager.js', 'Agent Reconciler.js', 'Agents.js', 'Verify Agent.js', 'Settings Sheet.js'];
+  'Global Add-on Settings.js', 'Quick Start.js', 'functions.js', 'Track onEdit Triggers.js', 'Status Manager.js', 'Agent Reconciler.js', 'Agents.js', 'Verify Agent.js', 'Settings Sheet.js', 'ScheduleRefresh.js', 'Refresh Registry.js'];
 
 // Captured from the code before the regroup (PRINT_AGENT_GOLDEN=1 node tests/run.js prints them again).
 const STORY = {

@@ -43,7 +43,8 @@ module.exports = function register(t) {
         getSheetListWithRefreshTrue: () => [{ configSheet: 'K1', resultSheet: 'Dane K1', refresh: true }, { configSheet: 'K3', resultSheet: 'Dane K3', refresh: true }],
         setLastRefresh() {}, setRefreshTrigger: () => __log.push(['setRefreshTrigger']), clearRefreshSettings: () => __log.push(['clearRefreshSettings'])
       });
-      RefreshAll.scheduled = () => { __log.push(['refreshed']); Date.now = (n => () => n += 27 * 60000 + 11000)(Date.now()); };`);
+      globalThis.__clock = Date.now(); Date.now = () => __clock;           // a fixed clock: the refresh below takes exactly 27 m 11 s
+      RefreshAll.scheduled = () => { __log.push(['refreshed']); __clock += 27 * 60000 + 11000; };`);
     return { p, ex, log, info: () => plain(ex.eval(`AutoRefreshPanel.info(new Date(${NOW}))`)), stored: () => JSON.parse(p.props.document.importSettingsArray),
       save: () => ex.eval(`getImportSettings().saveArray()`) };
   }

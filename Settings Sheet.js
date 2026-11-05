@@ -2,7 +2,7 @@
 // to refresh. It does not touch the spreadsheet itself: the cells are read and written through SettingsGrid (Settings Grid.js).
 const TIME_ZONE_EDIT_MESSAGE = "Godzina odświeżania jest ustawiana wg. strefy czasowej dokumentu, więc tej wartości nie można zmienić tutaj (przywrócono poprzednią).\n\n" +
   "Aby zmienić strefę czasową dokumentu wejdź w: Plik -> Ustawienia -> Ogólne -> Strefa czasowa.\n" +
-  "Potem zapisz ponownie godzinę lub częstotliwość odświeżania, żeby nowa strefa zaczęła obowiązywać.";
+  "Po zmianie strefy dodatek przeliczy godzinę odświeżania tak, żeby wypadała w tym samym momencie (przy ponownym otwarciu dokumentu).";
 
 class SettingsSheet{
   constructor(){
@@ -38,6 +38,11 @@ class SettingsSheet{
   /** Is the edited range (part of) the time zone label: column E of the refreshTime line? */
   isRefreshTimeZoneCell(range){
     return isInRange(this.refreshTimePos,5,range);
+  }
+
+  /** The spreadsheet's time zone changed (see ScheduleRefresh.syncTimeZone): the zone labels follow, the time of day is converted by `convert`. */
+  adoptTimeZone(convert){
+    return this.grid.retime(convert);
   }
 
   /** The refresh is switched off on purpose: the frequency and the time of day are cleared in the sheet (and in what this object remembers of them). */

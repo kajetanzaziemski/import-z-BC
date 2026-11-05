@@ -1,3 +1,14 @@
+/** The time zone of the active spreadsheet (File > Settings > Time zone), e.g. "Europe/Warsaw". */
+function activeSpreadsheetTimeZone(){
+  return SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone();
+}
+
+/** Does the settings sheet exist (it is never created by asking)? */
+function settingsSheetExists(){
+  const name = MainSettings.getSettingsSheetName();
+  return !!name && !!SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name);
+}
+
 /** A dialog with a message in the active spreadsheet. */
 function alertMessage(message){
   SpreadsheetApp.getUi().alert(message);

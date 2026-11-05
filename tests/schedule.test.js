@@ -227,6 +227,76 @@ module.exports = function register(t) {
     assert.deepStrictEqual(triggers(legacy.p), []);
   });
 
+  // ---- the spreadsheet's time zone changes (onOpen) -------------------------------------------------------------------------------------------
+  const ZONES = `{ const off = { 'Europe/Warsaw': 60, 'UTC': 0, 'Asia/Tokyo': 540 };
+    Utilities.formatDate = (d, tz, p) => { const m = off[tz]; const w = new Date(d.getTime() + m * 60000).toISOString();
+      return p === 'Z' ? (m < 0 ? '-' : '+') + String(Math.floor(Math.abs(m) / 60)).padStart(2, '0') + String(Math.abs(m) % 60).padStart(2, '0') : p === 'yyyy-MM-dd' ? w.slice(0, 10) : p === 'HH:mm' ? w.slice(11, 16) : w.slice(0, 19).replace('T', ' '); }; }`;
+
+  test('time zone: a time of day is converted so that it stays the same moment (17:30 in Warsaw = 16:30 in UTC = 02:30 the next day in Tokyo)', () => {
+    const sc = scenario(); sc.ex.eval(ZONES);
+    const conv = (at, from, to) => plain(sc.ex.eval(`ScheduleRefresh.convertTimeOfDay(${JSON.stringify(at)}, '${from}', '${to}', new Date(Date.UTC(2026, 10, 2, 10, 0)))`));
+    assert.deepStrictEqual(conv({ hour: 17, minute: 30 }, 'Europe/Warsaw', 'UTC'), { hour: 16, minute: 30 });
+    assert.deepStrictEqual(conv({ hour: 17, minute: 30 }, 'Europe/Warsaw', 'Asia/Tokyo'), { hour: 1, minute: 30 });
+    assert.deepStrictEqual(conv({ hour: 0, minute: 15 }, 'Asia/Tokyo', 'UTC'), { hour: 15, minute: 15 });
+    assert.deepStrictEqual(conv({ hour: 9, minute: 0 }, 'UTC', 'UTC'), { hour: 9, minute: 0 });
+  });
+
+  /** The settings object of the time zone tests: the sheet exists, adoptTimeZone gets the conversion and answers what the sheet did */
+  function tzScenario(over) {
+    const sc = scenario(Object.assign({ settings: {} }, over));
+    sc.ex.eval(ZONES);
+    sc.ex.eval(`globalThis.__tz = 'UTC'; globalThis.__sheet = true; globalThis.__adopt = [];
+      activeSpreadsheetTimeZone = () => __tz; settingsSheetExists = () => __sheet;
+      getMainSettings = () => ({ adoptTimeZone: convert => { const from = { hour: 17, minute: 30 }; const to = convert ? convert(from) : null; __adopt.push([!!convert, to]); return { from, to }; },
+        setRefreshMessage: r => __adopt.push(['message', r.ok]), getSheetListWithRefreshTrue: () => [] });`);
+    return sc;
+  }
+
+  test('time zone: onOpen after a change - the time of day is converted, the permit and the user record follow (start time, zone), the status message is written again, the new zone is remembered; the trigger is left alone', () => {
+    const sc = tzScenario({ settings: { timeZone: 'Europe/Warsaw', refreshPermit: { issuedFor: 't1', lastRefresh: Date.now(), intervalHours: 24, nextRefresh: Date.now() + HOUR_MS, startAt: '17:30', timeZone: 'Europe/Warsaw' } } });
+    sc.p.triggers.push(NAMED('t1'));
+    assert.strictEqual(sc.ex.eval(`ScheduleRefresh.syncTimeZone()`), true);
+    sc.save();
+    assert.deepStrictEqual(plain(sc.ex.eval(`__adopt`)), [[true, { hour: 16, minute: 30 }], ['message', true]]);
+    assert.deepStrictEqual([permit(sc).startAt, permit(sc).timeZone, sc.stored().timeZone], ['16:30', 'UTC', 'UTC']);
+    assert.deepStrictEqual(triggers(sc.p).map(x => x.id), ['t1'], 'the trigger keeps its own zone and fires at the same moment');
+    const rec = JSON.parse(sc.p.props.user['refreshTrigger:t1'] || '{}');
+    assert.deepStrictEqual([rec.startAt, rec.timeZone, rec.docTz], ['16:30', 'UTC', 'UTC']);
+  });
+
+  test('time zone: nothing changed -> nothing is read or written; the first time (no zone remembered) only the labels are corrected and the zone is remembered; the permit\'s zone is the zone before when nothing is remembered', () => {
+    const same = tzScenario({ settings: { timeZone: 'UTC' } });
+    assert.strictEqual(same.ex.eval(`ScheduleRefresh.syncTimeZone()`), false);
+    assert.deepStrictEqual(plain(same.ex.eval(`__adopt`)), []);
+    const first = tzScenario();
+    assert.strictEqual(first.ex.eval(`ScheduleRefresh.syncTimeZone()`), true);
+    first.save();
+    assert.deepStrictEqual(plain(first.ex.eval(`__adopt`)), [[false, null]], 'no zone before: no conversion');
+    assert.strictEqual(first.stored().timeZone, 'UTC');
+    const fromPermit = tzScenario({ settings: { refreshPermit: { issuedFor: 't1', lastRefresh: 1, intervalHours: 24, startAt: '17:30', timeZone: 'Europe/Warsaw', nextRefresh: Date.now() + HOUR_MS } } });
+    fromPermit.ex.eval(`ScheduleRefresh.syncTimeZone()`);
+    assert.deepStrictEqual(plain(fromPermit.ex.eval(`__adopt[0]`)), [true, { hour: 16, minute: 30 }]);
+  });
+
+  test('time zone: no settings sheet -> only the zone is remembered, nothing is built; a failure never breaks the open; a refresh that is off keeps its permit', () => {
+    const none = tzScenario({ settings: { timeZone: 'Europe/Warsaw' } });
+    none.ex.eval(`__sheet = false`);
+    assert.strictEqual(none.ex.eval(`ScheduleRefresh.syncTimeZone()`), false);
+    assert.deepStrictEqual(plain(none.ex.eval(`__adopt`)), []);
+    const broken = tzScenario({ settings: { timeZone: 'Europe/Warsaw' } });
+    broken.ex.eval(`getMainSettings = () => { throw new Error('sheet unreadable'); }`);
+    assert.doesNotThrow(() => broken.ex.eval(`ScheduleRefresh.syncTimeZone()`));
+    const off = tzScenario({ settings: { timeZone: 'Europe/Warsaw', refreshPermit: { issuedFor: 't1', lastRefresh: 1, intervalHours: 24, startAt: '17:30', timeZone: 'Europe/Warsaw', off: true } } });
+    off.ex.eval(`ScheduleRefresh.syncTimeZone()`);
+    off.save();
+    assert.deepStrictEqual([permit(off).startAt, permit(off).timeZone], ['17:30', 'Europe/Warsaw']);
+  });
+
+  test('time zone: onOpen runs the check (an authorised, ordinary run)', () => {
+    const text = fs.readFileSync(path.join(ROOT, 'Quick Start.js'), 'utf8');
+    assert.ok(/Controller\.run\("onOpen",\(\) => \{ ManagedSheets\.warmUp\(\); ScheduleRefresh\.syncTimeZone\(\);/.test(text));
+  });
+
   test('schedule: current() - a permit issued by THIS user whose trigger is gone (deleted by hand) is not set; one issued by another user (other token) or by an old version (no token) and used lately is "foreign"', () => {
     const lately = Date.now();
     const base = { issuedFor: 'gone', lastRefresh: lately, lastRun: lately, intervalHours: 24 };

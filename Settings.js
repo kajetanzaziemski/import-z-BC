@@ -28,6 +28,10 @@ const Settings = {
   settingsSheetName() { return Settings.get("importSheetName"); },
   setSettingsSheetName(name) { return Settings.set("importSheetName", name); },
 
+  /** The time zone of the spreadsheet as the add-on last saw it (the sheet's zone labels and the time of day are in it; see ScheduleRefresh.syncTimeZone). */
+  lastTimeZone() { return Settings.get("timeZone"); },
+  setLastTimeZone(timeZone) { return Settings.set("timeZone", timeZone); },
+
   refreshPermit() { return Settings.get("refreshPermit"); },
   /** A permit for one time-based trigger: only that trigger may refresh (the others delete themselves). */
   issueRefreshPermit(issuedForId, intervalHoursValue) {

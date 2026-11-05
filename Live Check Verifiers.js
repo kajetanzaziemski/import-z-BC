@@ -468,7 +468,8 @@ function buildLiveCheckVerifiers_(){
     onOpen: {
       needs: ["sheets","docProps"],
       verify(c){
-        lcVerifyNothingChanged_(c);
+        // importSettingsArray may change: the spreadsheet's time zone is remembered (and, when it changed, the refresh permit follows it)
+        lcVerifyNothingChanged_(c,["importSettingsArray"]);
         c.skip("menu built","the add-on menu is built before the controller runs and cannot be read back by a script");
         c.skip("warning shown when the agents are not active","the alert cannot be read back by a script");
       }

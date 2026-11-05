@@ -231,6 +231,28 @@ module.exports = function register(t) {
     assert.strictEqual(sh.cells['8,3'].fmt.bg, '#fff2cc');
   }));
 
+  MODES.forEach(mode => test('retime (the spreadsheet\'s zone changed): the zone labels of lastRefresh and refreshTime follow, the time of day is replaced by the converted one (a fraction of a day, shown as HH:mm); no conversion = the time is left [' + mode + ']', () => {
+    const s = scope(mode);
+    s.run(`globalThis.__ss = new SettingsSheet()`);
+    s.run(`{ const f = Utilities.formatDate; const wall = (d, tz) => { const z = f(d, tz, 'Z'); return new Date(d.getTime() + (z[0] === '-' ? -1 : 1) * (+z.slice(1, 3) * 60 + +z.slice(3)) * 60000).toISOString(); };
+      Utilities.formatDate = (d, tz, p) => p === 'yyyy-MM-dd' ? wall(d, tz).slice(0, 10) : p === 'HH:mm' ? wall(d, tz).slice(11, 16) : f(d, tz, p); }`);
+    const sh = s.book.sheets['Ustawienia'];
+    const v = (r, c) => (sh.cells[r + ',' + c] || {}).v ?? '';
+    sh.setValue(7, 4, '17:30', '');
+    sh.setValue(5, 4, s.book.toSerial(new Date(Date.UTC(2026, 10, 2, 8, 30))), '');
+    sh.cells['5,4'].fmt.numFmt = 'yyyy-mm-dd hh:mm'; sh.setValue(5, 5, 'UTC+1', ''); sh.setValue(7, 5, 'UTC+1', '');
+    s.run(`globalThis.__ss = new SettingsSheet()`);
+    const out = plain(s.run(`__ss.adoptTimeZone(at => ({ hour: at.hour - 1, minute: at.minute }))`));
+    assert.deepStrictEqual(out, { from: { hour: 17, minute: 30 }, to: { hour: 16, minute: 30 } });
+    assert.deepStrictEqual([v(5, 5), v(7, 5)], ['UTC+9', 'UTC+9'], 'the sim\'s zone is UTC+9');
+    assert.ok(Math.abs(v(7, 4) - (16 * 60 + 30) / 1440) < 1e-9, 'a fraction of a day: ' + v(7, 4));
+    s.run(`globalThis.__ss = new SettingsSheet()`);
+    assert.deepStrictEqual(plain(s.run(`__ss.getRefreshStartAt()`)).hour, 16, 'it reads back as 16:30');
+    const none = plain(s.run(`__ss.adoptTimeZone(null)`));
+    assert.strictEqual(none.to, null);
+    assert.ok(Math.abs(v(7, 4) - (16 * 60 + 30) / 1440) < 1e-9, 'left as it was');
+  }));
+
   MODES.forEach(mode => test('row 3 is where the config list starts: the first config line takes it and the general settings lines (and the message) move down, found by key [' + mode + ']', () => {
     const s = scope(mode);
     s.run(`globalThis.__ss = new SettingsSheet(); __ss.addNewSheetInfo('N', 'Dane N', true)`);

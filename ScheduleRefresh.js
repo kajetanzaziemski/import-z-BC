@@ -135,21 +135,64 @@ const ScheduleRefresh = {
     return next;
   },
 
+  /** The moment at which the clock of `tz` shows hh:mm on the given day (month 1-12): its UTC reading minus the offset of tz (twice: the offset may change on that day). */
+  momentAtWall_(y, m, d, hour, minute, tz){
+    const wall = Date.UTC(y, m - 1, d, hour, minute);
+    const offset = t => { const z = Utilities.formatDate(new Date(t), tz, "Z"); return (z[0] == "-" ? -1 : 1) * (+z.slice(1,3) * 60 + +z.slice(3)) * 60000; };
+    return new Date(wall - offset(wall - offset(wall)));
+  },
+
   /** The next HH:mm ahead in the time zone of startAt (today or tomorrow), as a moment. */
   nextDailyIn_(now, startAt){
     const tz = startAt.timeZone;
     const [y, m, d] = Utilities.formatDate(now, tz, "yyyy-MM-dd").split("-").map(Number);
-    const momentAt = (yy, mm, dd) => {              // the wall time hh:mm of that day in tz: its UTC reading minus the offset of tz at that moment (twice: the offset may change on the day)
-      const wall = Date.UTC(yy, mm - 1, dd, startAt.hour, startAt.minute ?? 0);
-      const offset = t => { const z = Utilities.formatDate(new Date(t), tz, "Z"); return (z[0] == "-" ? -1 : 1) * (+z.slice(1,3) * 60 + +z.slice(3)) * 60000; };
-      return new Date(wall - offset(wall - offset(wall)));
-    };
-    let next = momentAt(y, m, d);
+    let next = ScheduleRefresh.momentAtWall_(y, m, d, startAt.hour, startAt.minute ?? 0, tz);
     if(next <= now){
       const tomorrow = new Date(Date.UTC(y, m - 1, d + 1));
-      next = momentAt(tomorrow.getUTCFullYear(), tomorrow.getUTCMonth() + 1, tomorrow.getUTCDate());
+      next = ScheduleRefresh.momentAtWall_(tomorrow.getUTCFullYear(), tomorrow.getUTCMonth() + 1, tomorrow.getUTCDate(), startAt.hour, startAt.minute ?? 0, tz);
     }
     return next;
+  },
+
+  /** What the clock of toTz shows at the moment when the clock of fromTz shows `at` ({hour, minute}) today. */
+  convertTimeOfDay(at, fromTz, toTz, ref = new Date()){
+    const [y, m, d] = Utilities.formatDate(ref, fromTz, "yyyy-MM-dd").split("-").map(Number);
+    const moment = ScheduleRefresh.momentAtWall_(y, m, d, at.hour, at.minute ?? 0, fromTz);
+    const hhmm = Utilities.formatDate(moment, toTz, "HH:mm");
+    return {hour: +hhmm.slice(0, 2), minute: +hhmm.slice(3)};
+  },
+
+  /**
+   * onOpen: the spreadsheet's time zone may have changed since the add-on last looked (File > Settings > Time zone; the sheet is reloaded when it is). Then the zone
+   * labels of the refreshTime and lastRefresh lines follow, and the time of day that was set is converted so that it stays the moment it was: 17:30 in UTC+1 reads
+   * 16:30 in UTC+0. The refresh permit and the user's record are brought along, and the status message is written again (its times are in the new zone). The trigger
+   * itself is left as it is: it keeps its own zone and fires at the same moment. The zone before is the one saved by this function, else the one the permit remembers
+   * (without either only the labels are corrected). Never throws: it is part of opening the document.
+   * @returns {boolean} true when something was changed
+   */
+  syncTimeZone(){
+    try{
+      const tz = activeSpreadsheetTimeZone();
+      const permit = MainSettings.getRefreshPermit();
+      const known = Settings.lastTimeZone() ?? permit?.timeZone ?? null;
+      if(Settings.lastTimeZone() === tz) return false;
+      Settings.setLastTimeZone(tz);
+      if(!settingsSheetExists()) return false;
+      const convert = known && known !== tz ? at => ScheduleRefresh.convertTimeOfDay(at, known, tz) : null;
+      const done = getMainSettings().adoptTimeZone(convert);
+      if(done.to && permit && !permit.off && permit.issuedFor){
+        const startAt = `${done.to.hour}:${String(done.to.minute).padStart(2,"0")}`;
+        MainSettings.updateRefreshPermit(Object.assign({}, permit, {startAt: startAt, timeZone: tz}));
+        try{ RefreshRegistry.put(permit.issuedFor,{startAt: startAt, timeZone: tz, docTz: tz}); }catch(err){ dbgLog(`Refresh trigger record not updated: ${err}`); }
+      }else if(permit?.issuedFor && !permit.off){
+        try{ RefreshRegistry.put(permit.issuedFor,{docTz: tz}); }catch(err){}
+      }
+      ScheduleRefresh.reportScheduled_();
+      return true;
+    }catch(err){
+      dbgLog(`Time zone of the spreadsheet not synchronised: ${err}`);
+      return false;
+    }
   },
 
   /**

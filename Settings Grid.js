@@ -122,6 +122,7 @@ const SettingsGrid = {
    *   addLastRefreshRow()           a lastRefresh line after the last row; returns its row number
    *   writeLastRefresh(row, time)   time into D, the time zone's name into E
    *   refreshTime()                 {hour, minute, timeZone} from the refreshTime line (D): "17:30", "5:30 PM", a time value; null when empty, not a time or no such line
+   *   retime(convert)               the spreadsheet's time zone changed: the zone labels of lastRefresh and refreshTime rewritten; the time of day of refreshTime replaced by convert({hour, minute}) when it gives one; returns { from, to }
    *   clearRefreshSettings()        the frequency number and the time of day cleared (D of refreshFrequency and refreshTime; the unit and the zone label stay)
    *   restoreTimeZoneLabel(previous)  the zone label (E of refreshTime) back to `previous`, or to the zone as it is now when that is null
    *   writeRefreshMessage(report)   the refreshStatus line (C:E merged): green when the refresh was set up, red when not (see ScheduleRefresh.apply);
@@ -167,6 +168,24 @@ const SettingsGrid = {
         const row = keyRow("refreshTime");
         const at = row ? SettingsGrid.parseTime(grid.getRange(row, L.valueCol).getValue(), grid.getTimeZone()) : null;
         return at && { hour: at.hour, minute: at.minute, timeZone: grid.getTimeZone() };      // the time is in the spreadsheet's time zone
+      },
+      retime(convert) {
+        const tz = grid.getTimeZone();
+        const lastRow = keyRow("lastRefresh");
+        if (lastRow) {
+          const t = grid.getRange(lastRow, L.valueCol).getValue();
+          if (Object.prototype.toString.call(t) === "[object Date]" && !isNaN(t)) grid.getRange(lastRow, L.unitCol).setValue(SettingsGrid.offsetName(t, tz));
+        }
+        let from = null, to = null;
+        const timeRow = keyRow("refreshTime");
+        if (timeRow) {
+          grid.getRange(timeRow, L.unitCol).setValue(SettingsGrid.offsetName(new Date(), tz));
+          from = SettingsGrid.parseTime(grid.getRange(timeRow, L.valueCol).getValue(), tz);
+          to = from && convert ? convert(from) : null;
+          if (to) grid.getRange(timeRow, L.valueCol).setValue((to.hour * 60 + to.minute) / 1440);     // a time of day is a fraction of a day, shown by the cell's HH:mm
+        }
+        save();
+        return { from: from, to: to };
       },
       clearRefreshSettings() {
         ["refreshFrequency", "refreshTime"].forEach(key => { const row = keyRow(key); if (row) grid.getRange(row, L.valueCol).setValue(""); });
