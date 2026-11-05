@@ -214,6 +214,19 @@ module.exports = function register(t) {
     assert.deepStrictEqual(plain(sc.ex.eval(`ScheduleRefresh.current()`)), { active: false });
   });
 
+  test('trigger: a trigger the permit names but marks OFF (the refresh was switched off) does not refresh - it deletes itself (both handlers)', () => {
+    const sc = scenario({ settings: { refreshPermit: { issuedFor: 'trig-A', lastRefresh: 1, intervalHours: 6, off: true } } });
+    sc.p.triggers.push(NAMED('trig-A'));
+    sc.ex.eval(`autoRefreshHandler(${event('trig-A')})`);
+    assert.deepStrictEqual(sc.calls(), []);
+    assert.deepStrictEqual(triggers(sc.p), []);
+    const legacy = scenario({ settings: { refreshPermit: { issuedFor: 'trig-L', lastRefresh: 1, intervalHours: 6, off: true } } });
+    legacy.p.triggers.push(NAMED('trig-L', 'autoRefresh'));
+    legacy.ex.eval(`autoRefresh(${event('trig-L')})`);
+    assert.deepStrictEqual(legacy.calls(), []);
+    assert.deepStrictEqual(triggers(legacy.p), []);
+  });
+
   test('schedule: current() - a permit issued by THIS user whose trigger is gone (deleted by hand) is not set; one issued by another user (other token) or by an old version (no token) and used lately is "foreign"', () => {
     const lately = Date.now();
     const base = { issuedFor: 'gone', lastRefresh: lately, lastRun: lately, intervalHours: 24 };

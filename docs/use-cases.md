@@ -82,3 +82,9 @@ Last resort: only THIS document's last refresh. When the record has no last run,
 Menu Narzędzia programisty -> Triggery odświeżania opens a sidebar (`Refresh Triggers Sidebar.html`) with the same list as the tab (every time trigger of the user: document, frequency, last refresh, id and handler) and a button "Usuń trigger" per entry
 (a second press within 4 s confirms). `forceDeleteRefreshTrigger(id)` -> `ScheduleRefresh.forceDelete` deletes the time trigger and NOTHING ELSE - not the permit, not the user's record, not the sighting cache, not the status message: it exists to test what the
 add-on does when a trigger goes missing (a test pins that the properties and the cache are unchanged). Only a time trigger can be deleted this way, never an agent.
+
+## Switching the refresh off on purpose ("Wyłącz autoodświeżanie")
+The button in the Auto-odświeżanie tab (`turnOffRefresh` -> `AutoRefreshPanel.turnOff`, job `settings.refreshOff`; a second press within 4 s confirms) cleans the frequency number and the time of day in the settings sheet (the unit and the zone label stay),
+then runs the same set-up as after an edit: it finds no frequency, removes the trigger, marks the permit `off`, forgets the user's record and writes the yellow message "Odświeżanie zostało wyłączone". A trigger that is still around after that
+(another user's, or one an incomplete trigger list hid from the removal) retires itself when it fires: a permit marked `off` holds nobody (`run` / `runLegacy`; the live check's `lcRefreshTriggerHoldsPermit_` agrees). Breaking the settings by an edit
+(empty or invalid frequency) switches it off the same way, only without cleaning the cells.

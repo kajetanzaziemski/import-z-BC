@@ -180,6 +180,17 @@ const AutoRefreshPanel = {
     SpreadsheetApp.getUi().showModelessDialog(html,REFRESH_WHY_TITLE);
   },
 
+  /**
+   * "Wyłącz autoodświeżanie": the refresh is switched off on purpose. The frequency and the time of day are cleaned in the sheet, then the same set-up as after
+   * an edit runs - it finds no frequency, removes the trigger, marks the permit off and writes the yellow "wyłączone" message.
+   */
+  turnOff(){
+    Controller.intent("settings.refreshOff",{sheet: null, changeType: null});
+    const settings = getMainSettings();
+    settings.clearRefreshSettings();
+    settings.setRefreshTrigger();
+  },
+
   /** The button: the same as editing the frequency in the settings sheet (job settings.refreshApply for the live check). */
   apply(){
     Controller.intent("settings.refreshApply",{sheet: null, changeType: null});
@@ -210,6 +221,11 @@ function getRefreshTriggerList(){
 function forceDeleteRefreshTrigger(triggerId){
   Controller.checkInput("requestForceDeleteTrigger",{id: triggerId});
   return Controller.run("requestForceDeleteTrigger",() => AutoRefreshPanel.forceDeleteTrigger(triggerId));
+}
+
+/** Sidebar button "Wyłącz autoodświeżanie". */
+function turnOffRefresh(){
+  return Controller.run("requestTurnOffRefresh",() => AutoRefreshPanel.turnOff());
 }
 
 /** Sidebar button "Ustaw wg. danych w arkuszu". */

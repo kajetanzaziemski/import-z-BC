@@ -234,6 +234,8 @@
             : '(odświeżanie co ' + escapeHtml(sh.every) + (sh.startAt ? ' o ' + escapeHtml(sh.startAt) : '') + '; nast. odśw. ' + escapeHtml(sh.next) + ')') + '</p>';
           if (!sh.differs) html += '<p class="gray">Ustawienia w arkuszu są takie same jak aktualne.</p>';
         }
+        // switching it off on purpose (the settings in the sheet are cleaned, the trigger removed): a second press within 4 s confirms
+        html += '<p><button id="turnOffRefreshBtn" onclick="turnOffRefresh()"' + (info.current ? '' : ' disabled') + '> Wyłącz autoodświeżanie </button></p>';
         html += '<div id="applyRefreshError"></div>';
 
         if (info.last) {
@@ -284,6 +286,31 @@
             if (box) box.innerHTML = "<font color='red'>Błąd: " + escapeHtml(error.message) + "</font>";
           })
           .showRefreshHelp();
+      }
+
+      var turnOffArmed = false;
+      var turnOffTimer = null;
+
+      function turnOffRefresh() {
+        var btn = document.getElementById('turnOffRefreshBtn');
+        if (!turnOffArmed) {
+          turnOffArmed = true;
+          btn.innerHTML = ' Na pewno? Kliknij ponownie ';
+          if (turnOffTimer) clearTimeout(turnOffTimer);
+          turnOffTimer = setTimeout(function () { turnOffArmed = false; var b = document.getElementById('turnOffRefreshBtn'); if (b) b.innerHTML = ' Wyłącz autoodświeżanie '; }, 4000);
+          return;
+        }
+        turnOffArmed = false;
+        if (turnOffTimer) clearTimeout(turnOffTimer);
+        btn.disabled = true; btn.innerHTML = 'Wyłączanie...';
+        google.script.run
+          .withSuccessHandler(function () { loadRefreshInfo(); })
+          .withFailureHandler(function (error) {
+            loadRefreshInfo();
+            var box = document.getElementById('applyRefreshError');
+            if (box) box.innerHTML = "<font color='red'>Błąd: " + escapeHtml(error.message) + "</font>";
+          })
+          .turnOffRefresh();
       }
 
       function applyRefreshSettings() {

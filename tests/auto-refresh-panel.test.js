@@ -41,7 +41,7 @@ module.exports = function register(t) {
       getMainSettings = () => ({
         getRefreshFrequency: () => __cfg.sheet.freq, getRefreshStartAt: () => __cfg.sheet.at ?? null,
         getSheetListWithRefreshTrue: () => [{ configSheet: 'K1', resultSheet: 'Dane K1', refresh: true }, { configSheet: 'K3', resultSheet: 'Dane K3', refresh: true }],
-        setLastRefresh() {}, setRefreshTrigger: () => __log.push(['setRefreshTrigger'])
+        setLastRefresh() {}, setRefreshTrigger: () => __log.push(['setRefreshTrigger']), clearRefreshSettings: () => __log.push(['clearRefreshSettings'])
       });
       RefreshAll.scheduled = () => { __log.push(['refreshed']); Date.now = (n => () => n += 27 * 60000 + 11000)(Date.now()); };`);
     return { p, ex, log, info: () => plain(ex.eval(`AutoRefreshPanel.info(new Date(${NOW}))`)), stored: () => JSON.parse(p.props.document.importSettingsArray),
@@ -365,6 +365,21 @@ module.exports = function register(t) {
     assert.ok(/info\.current && info\.current\.foreign\) \{\s*html \+= '<p><a href="#" onclick="showRefreshHelp\(\); return false;">Dlaczego nie widzę tego arkusza\?<\/a><\/p>'/.test(html), 'the note only when another user\'s trigger refreshes this document');
     assert.ok(!/Trigger innego użytkownika/.test(html), 'it is not listed');
     assert.ok(/escapeHtml\(t\.id\)/.test(html) && /escapeHtml\(t\.handler\)/.test(html) && /escapeHtml\(t\.name\)/.test(html));
+  });
+
+  test('panel: "Wyłącz autoodświeżanie" is an ordinary run (job settings.refreshOff): the settings in the sheet are cleaned first, then the set-up runs (it finds no frequency: trigger removed, permit off, yellow message)', () => {
+    const sc = scenario({ sheet: { freq: { freq: 1, unit: 'days' } } });
+    sc.ex.eval(`globalThis.__jobs = []; Controller.intent = n => __jobs.push(n)`);
+    sc.ex.eval(`turnOffRefresh()`);
+    assert.deepStrictEqual(plain(sc.log), [['clearRefreshSettings'], ['setRefreshTrigger']]);
+    assert.deepStrictEqual(plain(sc.ex.eval(`__jobs`)), ['settings.refreshOff']);
+    assert.ok(/Controller\.run\("requestTurnOffRefresh"/.test(fs.readFileSync(path.join(ROOT, 'Auto Refresh Panel.js'), 'utf8')));
+  });
+
+  test('page: the button "Wyłącz autoodświeżanie" is active only when something is set, needs a second press within 4 s, and sits with the current settings', () => {
+    const html = fs.readFileSync(path.join(ROOT, 'New Status Sidebar.html'), 'utf8');
+    assert.ok(/id="turnOffRefreshBtn" onclick="turnOffRefresh\(\)"' \+ \(info\.current \? '' : ' disabled'\)/.test(html));
+    assert.ok(/Wyłącz autoodświeżanie/.test(html) && /Na pewno\? Kliknij ponownie/.test(html) && /\.turnOffRefresh\(\)/.test(html));
   });
 
   test('panel: reading it never writes (no permit saved, no trigger changed)', () => {

@@ -157,6 +157,10 @@ An edit of the zone label (E of the `refreshTime` line) is undone and answered w
 `requestRefreshTriggersSidebar` (menu) and `requestRefreshTriggerList` only read (no sheet, no document property changes). `requestForceDeleteTrigger` is judged on: the trigger is gone, no sheet and no document property changed - the missing cleanup is
 the point of the action.
 
+## Job `settings.refreshOff` (hashes re-pinned)
+The sidebar button "Wyłącz autoodświeżanie" (action `requestTurnOffRefresh`): the verifier requires the frequency in the sheet to be cleaned and then applies the same trigger check as `settings.refreshFrequency` with an empty frequency
+(no refresh trigger left for this document's permit). `lcRefreshTriggerHoldsPermit_` now says a permit marked `off` holds nobody, matching the handlers: a trigger that fires after the refresh was switched off retires itself.
+
 ## Quiet jobs
 `sheet.ignored`, `change.ignored` and `change.own` (`LIVE_CHECK_QUIET_JOBS`, `Live Check.js`) only look at an event and do nothing; they were most of the report. While they **pass** (or skip) nothing is logged, stored or shown, and their "running" placeholder
 is removed at once. One that fails or warns (an edit in a config sheet wrongly ignored) is recorded and shown like any other run. `settings.edit` and `agent.skipped` also do nothing but are still reported.

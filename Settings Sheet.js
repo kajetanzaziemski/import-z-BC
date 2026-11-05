@@ -40,6 +40,13 @@ class SettingsSheet{
     return isInRange(this.refreshTimePos,5,range);
   }
 
+  /** The refresh is switched off on purpose: the frequency and the time of day are cleared in the sheet (and in what this object remembers of them). */
+  clearRefreshSettings(){
+    if(!this.refreshFrequencyPos) this.readSheetList();
+    this.grid.clearRefreshSettings();
+    this.refreshFrequency = this.readRefreshFrequency();
+  }
+
   /**
    * The label is information only: the time of day is set in the time zone of the document, whatever stands there. An edit is undone (to what the cell held,
    * else to the zone as it is now) and one dialog tells where the zone is changed.

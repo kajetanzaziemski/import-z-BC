@@ -723,6 +723,11 @@ function buildLiveCheckVerifiers_(){
       }
     },
 
+    requestTurnOffRefresh: {
+      needs: ["docProps","settingsSheet"],
+      verify(c){ /* the job (settings.refreshOff) says what it did */ }
+    },
+
     requestShowRefreshHelp: {
       needs: ["sheets","docProps"],
       verify(c){ lcVerifyNothingChanged_(c); }
@@ -1025,6 +1030,14 @@ function lcJobVerifiers_(){
       }
     },
 
+    "settings.refreshOff": {
+      verify(c){
+        const settings = c.now("settingsSheet");
+        c.expect("the refresh frequency in the settings sheet is cleaned",!settings.freq,`the sheet still says ${JSON.stringify(settings.freq)}`);
+        lcVerifyRefreshTrigger_(c,settings);
+      }
+    },
+
     "settings.timeZoneCell": {
       verify(c){
         if(lcSkipUnpoweredChange_(c)) return;
@@ -1093,6 +1106,8 @@ function lcJobVerifiers_(){
 function lcRefreshTriggerHoldsPermit_(c){
   const uid = c.input.e && c.input.e.triggerUid;
   const beforePermit = c.before.settings?.refreshPermit ?? null;
+  // a permit marked off (the refresh was switched off) holds nobody: a trigger that is still around retires
+  if(beforePermit && beforePermit.off) return false;
   return c.input.legacy ? (!beforePermit || beforePermit.issuedFor === uid) : (!!beforePermit && beforePermit.issuedFor === uid);
 }
 

@@ -215,6 +215,22 @@ module.exports = function register(t) {
     assert.ok(/strefy czasowej dokumentu/.test(text) && /Plik -> Ustawienia -> Ogólne -> Strefa czasowa/.test(text), text);
   }));
 
+  MODES.forEach(mode => test('clearRefreshSettings: the number and the time of day are cleared (the unit and the zone label stay), what the object remembers is cleared too; switching off then writes the yellow message [' + mode + ']', () => {
+    const s = scope(mode);
+    s.run(`globalThis.__ss = new SettingsSheet(); Utilities.formatDate = (d, tz, p) => p === 'Z' ? '+0200' : 'x'`);
+    const sh = s.book.sheets['Ustawienia'];
+    sh.setValue(6, 4, 3, ''); sh.setValue(7, 4, '17:30', '');
+    s.run(`globalThis.__ss = new SettingsSheet()`);
+    assert.deepStrictEqual(plain(s.run(`__ss.getRefreshFrequency()`)), { freq: 3, unit: 'hrs' });
+    s.run(`__ss.clearRefreshSettings()`);
+    const v = (r, c) => (sh.cells[r + ',' + c] || {}).v ?? '';
+    assert.deepStrictEqual([v(6, 4), v(6, 5), v(7, 4), v(7, 5)], ['', 'godzin', '', 'UTC+9']);
+    assert.deepStrictEqual(plain(s.run(`__ss.getRefreshFrequency()`)), { freq: '', unit: 'hrs' }, 'what the object remembers');
+    assert.strictEqual(s.run(`__ss.getRefreshStartAt()`), null);
+    s.run(`__ss.setRefreshMessage({ ok: true, off: true, when: new Date(1750000000000), frequency: { freq: '', unit: 'hrs' }, next: null })`);
+    assert.strictEqual(sh.cells['8,3'].fmt.bg, '#fff2cc');
+  }));
+
   MODES.forEach(mode => test('row 3 is where the config list starts: the first config line takes it and the general settings lines (and the message) move down, found by key [' + mode + ']', () => {
     const s = scope(mode);
     s.run(`globalThis.__ss = new SettingsSheet(); __ss.addNewSheetInfo('N', 'Dane N', true)`);
