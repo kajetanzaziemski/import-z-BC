@@ -366,7 +366,7 @@ module.exports = function register(t) {
     assert.strictEqual(verdict('requestAutoRefesh', 1501000), false);
   });
 
-  test('live check: the time zone labels in the settings sheet are verified against the spreadsheet\'s zone (onOpen, refresh frequency, apply, scheduled refresh) - wrong, legacy ("CET") or missing labels are a FAIL, a sheet without those lines is skipped', () => {
+  test('live check: the time zone labels in the settings sheet are verified against the spreadsheet\'s zone (onOpen, refresh frequency, apply, scheduled refresh) - a wrong or missing label is a FAIL, an older "CET" lastRefresh label and a sheet without those lines are skipped', () => {
     const p = new FakePlatform();
     const ex = p.execution(FILES);
     ex.eval(`Utilities.formatDate = (d, tz, pat) => { const m = ({ 'Asia/Tokyo': 540, 'Europe/Warsaw': 60 })[tz]; return (m < 0 ? '-' : '+') + String(Math.floor(Math.abs(m) / 60)).padStart(2, '0') + String(Math.abs(m) % 60).padStart(2, '0'); }`);
@@ -381,7 +381,8 @@ module.exports = function register(t) {
     };
     assert.deepStrictEqual(run('Asia/Tokyo', {}), [['refreshTime zone label', 'PASS'], ['lastRefresh zone label', 'PASS']]);
     assert.deepStrictEqual(run('Europe/Warsaw', {}), [['refreshTime zone label', 'FAIL'], ['lastRefresh zone label', 'FAIL']], 'the zone was changed and the labels still read the old one');
-    assert.deepStrictEqual(run('Asia/Tokyo', { lastRefreshTz: 'CET' }), [['refreshTime zone label', 'PASS'], ['lastRefresh zone label', 'FAIL']], 'an older version\'s label');
+    assert.deepStrictEqual(run('Asia/Tokyo', { lastRefreshTz: 'UTC-8' }), [['refreshTime zone label', 'PASS'], ['lastRefresh zone label', 'FAIL']], 'a UTC+N label of another zone');
+    assert.deepStrictEqual(run('Asia/Tokyo', { lastRefreshTz: 'CET' }).slice(0, 2), [['refreshTime zone label', 'PASS'], ['lastRefresh zone label', 'SKIP']], 'an older version\'s label: skipped, the next refresh rewrites it');
     assert.deepStrictEqual(run('Asia/Tokyo', { timeZoneLabel: '' }), [['refreshTime zone label', 'FAIL'], ['lastRefresh zone label', 'PASS']]);
     assert.deepStrictEqual(run('Asia/Tokyo', { timeRow: null, lastRefresh: null }), [['refreshTime zone label', 'SKIP'], ['lastRefresh zone label', 'SKIP']], 'an older sheet without the lines');
     assert.deepStrictEqual(run('Asia/Tokyo', { exists: false }), [['time zone labels', 'SKIP']]);

@@ -433,8 +433,10 @@ function lcVerifyZoneLabels_(c,settings){
     if(settings.timeRow) c.expectEqual(`refreshTime zone label (spreadsheet zone ${tz})`,String(settings.timeZoneLabel ?? "").trim(),label(new Date()));
     else c.skip("refreshTime zone label","the refreshTime line is not in this sheet yet");
     const last = settings.lastRefresh;
-    if(Object.prototype.toString.call(last) === "[object Date]" && !isNaN(last)) c.expectEqual(`lastRefresh zone label (spreadsheet zone ${tz})`,String(settings.lastRefreshTz ?? "").trim(),label(last));
-    else c.skip("lastRefresh zone label","no last refresh in the sheet");
+    const lastLabel = String(settings.lastRefreshTz ?? "").trim();
+    if(Object.prototype.toString.call(last) !== "[object Date]" || isNaN(last)) c.skip("lastRefresh zone label","no last refresh in the sheet");
+    else if(!/^UTC[+-]\d/.test(lastLabel)) c.skip("lastRefresh zone label",`the label ${JSON.stringify(lastLabel)} is an older version's (no UTC+N): it says nothing about the zone and is rewritten by the next refresh`);
+    else c.expectEqual(`lastRefresh zone label (spreadsheet zone ${tz})`,lastLabel,label(last));
     // The time itself: a cell keeps the wall clock, so after a change of the zone it still reads the old time unless the add-on put the moment right. The permit (a
     // document property) remembers the moment of the last scheduled run; the sheet writes its last refresh at the end of the same run, seconds later.
     const lastRun = c.settings().refreshPermit?.lastRun;

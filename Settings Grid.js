@@ -194,9 +194,10 @@ const SettingsGrid = {
         // lastRefresh holds a moment, so its label is the zone's offset AT THAT MOMENT: it differs only when the zone itself changed.
         // refreshTime is a time of day, labelled with the offset of now: it also differs when the daylight saving time began or ended.
         const lastLabel = lastDate ? label(lastRow) : null;
-        const lastMismatch = !!lastDate && lastLabel !== SettingsGrid.offsetName(lastDate, tz);
-        // a label that is no UTC+N (an older version wrote the zone's short name, "CET") only needs rewriting: it says nothing about the zone before
-        const zoneChanged = lastMismatch && SettingsGrid.parseOffsetName(lastLabel) !== null;
+        // A lastRefresh label that is no UTC+N (an older version wrote the zone's short name, "CET", or there is none) says nothing about the zone it was written in: the line is left
+        // as it is, label and time (the next refresh writes it again, in UTC+N). Only a UTC+N label that differs from the zone now is a change of the zone.
+        const lastMismatch = !!lastDate && SettingsGrid.parseOffsetName(lastLabel) !== null && lastLabel !== SettingsGrid.offsetName(lastDate, tz);
+        const zoneChanged = lastMismatch;
         const timeLabel = timeRow ? label(timeRow) : null;
         const timeMismatch = !!timeRow && timeLabel !== SettingsGrid.offsetName(now, tz);
         if (!lastMismatch && !timeMismatch) return { changed: false };
