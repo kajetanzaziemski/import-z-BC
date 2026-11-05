@@ -376,8 +376,8 @@ module.exports = function register(t) {
     const run = (tz, over) => {
       const settings = Object.assign({}, base, over);
       const json = JSON.stringify(settings).replace('"__DATE__"', D);
-      return plain(ex.eval(`(() => { const res = []; const c = { attempt: (n, f) => f(), spreadsheet: () => ({ getSpreadsheetTimeZone: () => '${tz}' }),
-        expectEqual: (n, a, b) => res.push([n.split(' (')[0], a === b ? 'PASS' : 'FAIL']), skip: (n) => res.push([n, 'SKIP']) }; lcVerifyZoneLabels_(c, ${json}); return res; })()`));
+      return plain(ex.eval(`(() => { const res = []; const c = { attempt: (n, f) => f(), spreadsheet: () => ({ getSpreadsheetTimeZone: () => '${tz}' }), settings: () => ({ refreshPermit: ${over && over.permit ? JSON.stringify(over.permit) : 'null'} }),
+        expectEqual: (n, a, b) => res.push([n.split(' (')[0], a === b ? 'PASS' : 'FAIL']), skip: (n) => res.push([n, 'SKIP']), expect: (n, ok) => res.push([n.split(' (')[0], ok ? 'PASS' : 'FAIL']) }; lcVerifyZoneLabels_(c, ${json}); return res; })()`));
     };
     assert.deepStrictEqual(run('Asia/Tokyo', {}), [['refreshTime zone label', 'PASS'], ['lastRefresh zone label', 'PASS']]);
     assert.deepStrictEqual(run('Europe/Warsaw', {}), [['refreshTime zone label', 'FAIL'], ['lastRefresh zone label', 'FAIL']], 'the zone was changed and the labels still read the old one');
@@ -385,6 +385,11 @@ module.exports = function register(t) {
     assert.deepStrictEqual(run('Asia/Tokyo', { timeZoneLabel: '' }), [['refreshTime zone label', 'FAIL'], ['lastRefresh zone label', 'PASS']]);
     assert.deepStrictEqual(run('Asia/Tokyo', { timeRow: null, lastRefresh: null }), [['refreshTime zone label', 'SKIP'], ['lastRefresh zone label', 'SKIP']], 'an older sheet without the lines');
     assert.deepStrictEqual(run('Asia/Tokyo', { exists: false }), [['time zone labels', 'SKIP']]);
+    // the TIME of the last refresh: the label can be right while the time still reads the old zone (the case that was reported)
+    const T = 'lastRefresh time is the moment of the last scheduled run';
+    assert.deepStrictEqual(run('Asia/Tokyo', { permit: { lastRun: 1750000000000 + 20000 } }).slice(2), [[T, 'PASS']], 'seconds apart');
+    assert.deepStrictEqual(run('Asia/Tokyo', { permit: { lastRun: 1750000000000 + 9 * 3600000 } }).slice(2), [[T, 'FAIL']], 'the time kept the old wall clock: hours apart');
+    assert.deepStrictEqual(run('Asia/Tokyo', {}).slice(2), [], 'no run remembered: nothing to compare with');
     const src = fs.readFileSync(path.join(ROOT, 'Live Check Verifiers.js'), 'utf8');
     ['onOpen: {', '"settings.refreshFrequency": {', '"settings.refreshApply": {'].forEach(k => {
       const at = src.indexOf(k); assert.ok(at > 0, k);

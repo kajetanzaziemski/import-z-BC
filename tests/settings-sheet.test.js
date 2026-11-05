@@ -253,7 +253,7 @@ module.exports = function register(t) {
     set('UTC+1', 'UTC+1', '17:30');                                                            // the zone changed
     r = run();
     assert.deepStrictEqual(r.seen, [{ zoneChanged: true, lastKnown: true, fromOffset: 60, toOffset: 540 }]);
-    assert.deepStrictEqual(r.out, { changed: true, zoneChanged: true, from: { hour: 17, minute: 30 }, to: { hour: 1, minute: 30 } });
+    assert.deepStrictEqual(r.out, { changed: true, zoneChanged: true, from: { hour: 17, minute: 30 }, to: { hour: 1, minute: 30 }, lastRefresh: '2026-11-02T16:30:00.000Z' }, 'the moment of the last refresh put right: 17:30 on the clock of UTC+1 is 16:30 UTC');
     assert.deepStrictEqual([v(5, 5), v(7, 5)], ['UTC+9', 'UTC+9']);
     assert.ok(Math.abs(v(7, 4) - 90 / 1440) < 1e-9, 'a fraction of a day: ' + v(7, 4));
     s.run(`globalThis.__ss = new SettingsSheet()`);
@@ -265,6 +265,33 @@ module.exports = function register(t) {
     assert.deepStrictEqual([r.out.changed, r.out.zoneChanged], [true, false]);
     assert.strictEqual(v(7, 5), 'UTC+9');
     assert.strictEqual(v(7, 4), '17:30', 'the plan converted nothing here, so the time is left');
+  }));
+
+  MODES.forEach(mode => test('retime: when the zone changed the TIME of the last refresh is put right too - the cell kept the old wall clock; the label said which zone it was (UTC-8 07:44 = 16:44 in UTC+1) [' + mode + ']', () => {
+    const s = scope(mode);
+    s.run(`globalThis.__ss = new SettingsSheet()`);
+    const sh = s.book.sheets['Ustawienia'];
+    const v = (r, c) => (sh.cells[r + ',' + c] || {}).v ?? '';
+    // the sim's spreadsheet is in UTC+9. The refresh happened at 15:44 UTC while the sheet was in UTC-8: the cell kept the wall clock 07:44 (as Nov 4), the label said UTC-8.
+    const put = (label) => { sh.setValue(5, 4, s.book.toSerial(new Date(Date.UTC(2026, 10, 3, 22, 44))), ''); sh.cells['5,4'].fmt.numFmt = 'yyyy-mm-dd hh:mm'; sh.setValue(5, 5, label, ''); sh.setValue(7, 5, label, ''); s.run(`globalThis.__ss = new SettingsSheet()`); };
+    put('UTC-8');
+    const out = plain(s.run(`__ss.adoptTimeZone(() => null)`));
+    assert.strictEqual(out.zoneChanged, true);
+    const truth = s.book.toSerial(new Date(Date.UTC(2026, 10, 4, 15, 44)));           // the moment, shown in UTC+9 (the sim\'s zone): 00:44 on Nov 5
+    assert.ok(Math.abs(v(5, 4) - truth) < 1e-6, `the moment: ${v(5, 4)} instead of ${truth}`);
+    assert.strictEqual(v(5, 5), 'UTC+9');
+    // an older version\'s label says nothing about the old zone: the time is left, the label rewritten
+    put('CET');
+    const was = v(5, 4);
+    s.run(`__ss.adoptTimeZone(() => null)`);
+    assert.strictEqual(v(5, 4), was);
+    assert.strictEqual(v(5, 5), 'UTC+9');
+    // a sheet that already reads the zone it is in is left alone (the time included)
+    put('UTC+9');
+    const same = v(5, 4);
+    s.run(`globalThis.__ss = new SettingsSheet()`);
+    s.run(`__ss.adoptTimeZone(() => null)`);
+    assert.strictEqual(v(5, 4), same);
   }));
 
   MODES.forEach(mode => test('retime: an older version\'s lastRefresh label ("CET") is rewritten as UTC+N but is NOT a zone change (no conversion of the time of day) [' + mode + ']', () => {

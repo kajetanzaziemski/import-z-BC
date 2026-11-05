@@ -101,3 +101,6 @@ The check never throws and builds no settings sheet that does not exist; an off 
 
 The check reads and writes the sheet through the Spreadsheet service only (`Grid.serviceOnly(true)` for the time of the check): `onOpen` may run in the limited authorisation mode, where the Sheets advanced service cannot be called. A lastRefresh label that is
 no `UTC+N` (an older version wrote "CET") is rewritten but is not taken for a zone change. A failure is logged with `console.error` and noted on the live check run, never silent.
+
+The time of the last refresh is put right too (`SettingsGrid.retime`): a cell keeps the wall-clock number, not the moment, so after a change of the zone `2026-11-04 07:44` still reads 07:44 but is another moment. The old label says in which zone it was written
+(`UTC-8`), so the moment is the wall reading minus that offset (15:44 UTC) and is written back; the sheet then shows it in the new zone (16:44 in UTC+1) with the label `UTC+1`. A label that is no `UTC+N` (an older version's "CET") cannot tell: only relabelled.

@@ -135,7 +135,8 @@ const SettingsGrid = {
    *   writeLastRefresh(row, time)   time into D, the time zone's name into E
    *   refreshTime()                 {hour, minute, timeZone} from the refreshTime line (D): "17:30", "5:30 PM", a time value; null when empty, not a time or no such line
    *   retime(plan)                  makes the zone labels of lastRefresh and refreshTime (column E) read what they should for the spreadsheet's zone now - judged from the labels in the sheet;
-   *                                 plan({zoneChanged, lastKnown, fromOffset, toOffset}) may give a function that converts the time of day of refreshTime; returns { changed, zoneChanged, from, to }
+   *                                 plan({zoneChanged, lastKnown, fromOffset, toOffset}) may give a function that converts the time of day of refreshTime; when the zone changed the time of
+   *                                 the last refresh is put right too (it is a moment: the cell kept the wall clock of the old zone); returns { changed, zoneChanged, from, to, lastRefresh }
    *   clearRefreshSettings()        the frequency number and the time of day cleared (D of refreshFrequency and refreshTime; the unit and the zone label stay)
    *   restoreTimeZoneLabel(previous)  the zone label (E of refreshTime) back to `previous`, or to the zone as it is now when that is null
    *   writeRefreshMessage(report)   the refreshStatus line (C:E merged): green when the refresh was set up, red when not (see ScheduleRefresh.apply);
@@ -199,14 +200,22 @@ const SettingsGrid = {
         const timeLabel = timeRow ? label(timeRow) : null;
         const timeMismatch = !!timeRow && timeLabel !== SettingsGrid.offsetName(now, tz);
         if (!lastMismatch && !timeMismatch) return { changed: false };
+        // A cell keeps the wall-clock number, not the moment: after a change of the zone the time of the last refresh reads the same but is a different moment. The label says in
+        // which zone it was written, so the moment is put right: the wall reading minus the old offset, written back (the sheet shows it in the new zone).
+        let lastFixed = null;
+        if (zoneChanged) {
+          const wallMs = lastDate.getTime() + SettingsGrid.offsetMinutes(lastDate, tz) * 60000;
+          lastFixed = new Date(wallMs - SettingsGrid.parseOffsetName(lastLabel) * 60000);
+        }
         const at = timeRow ? SettingsGrid.parseTime(grid.getRange(timeRow, L.valueCol).getValue(), tz) : null;
         const convert = at && plan ? plan({ zoneChanged: zoneChanged, lastKnown: !!lastDate, fromOffset: SettingsGrid.parseOffsetName(timeLabel), toOffset: SettingsGrid.offsetMinutes(now, tz) }) : null;
         const to = convert ? convert(at) : null;
-        if (lastMismatch) grid.getRange(lastRow, L.unitCol).setValue(SettingsGrid.offsetName(lastDate, tz));
+        if (lastFixed) grid.getRange(lastRow, L.valueCol).setValue(lastFixed);
+        if (lastMismatch) grid.getRange(lastRow, L.unitCol).setValue(SettingsGrid.offsetName(lastFixed ?? lastDate, tz));
         if (timeMismatch) grid.getRange(timeRow, L.unitCol).setValue(SettingsGrid.offsetName(now, tz));
         if (to) grid.getRange(timeRow, L.valueCol).setValue((to.hour * 60 + to.minute) / 1440);     // a time of day is a fraction of a day, shown by the cell's HH:mm
         save();
-        return { changed: true, zoneChanged: zoneChanged, from: at, to: to };
+        return { changed: true, zoneChanged: zoneChanged, from: at, to: to, lastRefresh: lastFixed };
       },
       clearRefreshSettings() {
         ["refreshFrequency", "refreshTime"].forEach(key => { const row = keyRow(key); if (row) grid.getRange(row, L.valueCol).setValue(""); });

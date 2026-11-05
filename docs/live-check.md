@@ -163,7 +163,7 @@ The sidebar button "Wyłącz autoodświeżanie" (action `requestTurnOffRefresh`)
 
 ## Time zone labels (hashes re-pinned)
 `lcVerifyZoneLabels_` checks what the user sees against the spreadsheet itself: E of the `refreshTime` line must read the spreadsheet's zone as `UTC+N` for now, E of the `lastRefresh` line the zone's offset at the moment of that last refresh (an older version's
-"CET" is a FAIL). It is part of `onOpen` (where a changed zone is put right; `onOpen` now also reads the settings sheet), `settings.refreshFrequency`, `settings.refreshApply` and the scheduled refresh. A sheet without those lines is skipped.
+"CET" is a FAIL). It is part of `onOpen` (where a changed zone is put right; `onOpen` now also reads the settings sheet), `settings.refreshFrequency`, `settings.refreshApply` and the scheduled refresh. A sheet without those lines is skipped. The TIME of the last refresh is checked too: it must be within 15 minutes of the moment of the last scheduled run that the permit remembers (a label can be right while the time still reads the old zone).
 A failure of the check in `onOpen` itself is no longer silent: it is `console.error` in the execution log and a note on the live check run.
 
 ## Quiet jobs
