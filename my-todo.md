@@ -7,8 +7,6 @@ an older sheet gets them (after refreshFrequency) the first time a message is wr
 
 # Ustawienia sidebar
 
-[DONE, not checked on a real spreadsheet] list of the user's time triggers ("Arkusze, które odświeżasz automatycznie") - see docs/use-cases.md, Refresh Registry.js.
-
 ## [DONE, not yet checked on a real spreadsheet] Time triggers in the 3rd tab (Auto Refresh Panel.js; the last run's duration and result sheets are recorded on the permit by the scheduled run)
 
 Third tab (that now holds nothing) should say "Auto-odświeżanie".
@@ -60,6 +58,17 @@ Not fully completed lines should gray out anything that is unknown yet (ie. only
 
 # Preview request for a config sheet
 
+# Data connection log
+
+For all queries to BC that result (or should result) in data write in the sheets (ie. both "Pobierz dane..." functions in the menu and auto refresh) a status message should be logged. The log is a new sheet (default name "Dziennik pobrań", customizable via Konfiguracja panel), an entry is a new line in this sheet. Insert newest first (ie. logging should insert new row above previous entries, but below headers).
+
+## Sheet layout
+
+The columns should include: source of refresh ("Autoodświeżanie", "Odświeżanie jednego arkusza", "Odświeżanie wszystkich arkuszy"), start time of refresh, end time, duration, status message (platform error if thrown, failure mesage if handled by the script, "OK" if no errors), number and list of sheets refreshed and no of rows in each sheet(in one cell joined as text), technical (this should say clock trigger if fired by a clock trigger and information on deleting trigger and no refresh performed if that was the case).g
+
+## Konfiguracja for log
+
+Add a section "Arkusz dziennika pobrań" in Ogólne settings. layout analagous to import settings sheet name settings.
 
 # Live check fails to check
 
