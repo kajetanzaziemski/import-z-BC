@@ -45,6 +45,8 @@ const AutoRefreshPanel = {
    * ALL of the user's time triggers (clock triggers of every document the add-on is used in), each with what is known about it: the registry's record
    * (Refresh Registry.js) or, for any other trigger, only what the trigger itself says (its id and handler: ScriptApp gives a time trigger no interval, no
    * document, no last run). For THIS document the document's permit (document properties) fills in what the user's record lacks and brings it up to date.
+   * What the record and the permit leave empty is read from the spreadsheet itself (readSpreadsheet_): the last refresh and the frequency / time of day as its
+   * settings sheet has them. That is the last resort, used field by field only where the other sources have nothing (the sheet says what is wanted, not what is set).
    * A trigger of ANOTHER user that refreshes this document is not listed (it is not this user's): the tab says so in a note with a dialog (REFRESH_WHY_MESSAGE).
    * Sorted: known by document name, unknown last.
    * @returns {{items: Array, error: string|null}}
@@ -57,12 +59,14 @@ const AutoRefreshPanel = {
       try{ if(own) RefreshRegistry.syncFromPermit(permit); RefreshRegistry.markSeen(ids,now.getTime()); }
       catch(err){ dbgLog(`Refresh trigger records not kept up to date: ${err}`); }
       const doc = RefreshRegistry.document_();
-      const item = (id, handler, rec, extra) => {
-        const hours = rec?.intervalHours, days = hours && hours % 24 === 0;
-        const zone = rec?.docTz || tz;
+      const item = (id, handler, rec, fill) => {
+        const hours = rec?.intervalHours ?? fill?.intervalHours, days = hours && hours % 24 === 0;
+        const startAt = rec?.intervalHours ? rec.startAt : fill?.startAt;
+        const zone = rec?.docTz || fill?.tz || tz;
         const every = !hours ? null : `${days ? hours / 24 : hours} ${SettingsGrid.unitName({freq: days ? hours / 24 : hours, unit: days ? "days" : "hrs"})}`
-          + (rec.startAt ? ` o ${rec.startAt}` : "") + (rec.startAt && rec.timeZone ? ` (${AutoRefreshPanel.zoneName_(rec.timeZone,now)})` : "");
-        return Object.assign({
+          + (startAt ? ` o ${startAt}` : "") + (rec?.intervalHours && startAt && rec.timeZone ? ` (${AutoRefreshPanel.zoneName_(rec.timeZone,now)})` : "");
+        const lastRun = rec?.lastRun ?? fill?.lastRun;
+        return {
           id: id,
           handler: handler,
           known: !!rec?.docName || !!rec?.docId,
@@ -70,17 +74,63 @@ const AutoRefreshPanel = {
           name: rec?.docName ?? null,
           url: AutoRefreshPanel.safeUrl_(rec?.url, rec?.gid),
           every: every,
-          last: rec?.lastRun ? SettingsGrid.stamp(new Date(rec.lastRun), zone) : null,
+          everyFromSheet: !rec?.intervalHours && !!hours,
+          last: lastRun ? SettingsGrid.stamp(new Date(lastRun), zone) : null,
+          lastFromSheet: !rec?.lastRun && !!fill?.lastRun,
           duration: AutoRefreshPanel.duration(rec?.lastDurationMs),
           next: rec?.nextRefresh ? SettingsGrid.stamp(new Date(rec.nextRefresh), zone) : null
-        }, extra);
+        };
       };
-      const items = seen.map(t => item(t.getUniqueId(), t.getHandlerFunction(), RefreshRegistry.get(t.getUniqueId())));
+      const reads = {others: 0, started: Date.now()};
+      const items = seen.map(t => {
+        const rec = RefreshRegistry.get(t.getUniqueId());
+        const fill = rec?.docId && (!rec.intervalHours || !rec.lastRun) ? AutoRefreshPanel.readSpreadsheet_(rec, doc.docId, reads) : null;
+        return item(t.getUniqueId(), t.getHandlerFunction(), rec, fill);
+      });
       items.sort((a, b) => (b.known - a.known) || String(a.name ?? "").localeCompare(String(b.name ?? "")) || a.id.localeCompare(b.id));
       return {items: items, error: null};
     }catch(err){
       dbgLog(`Auto refresh panel: trigger list not read: ${err}`);
       return {items: [], error: String(err && err.message || err)};
+    }
+  },
+
+  /**
+   * The settings sheet of a document read from the document itself, for what the user's record has no value for: the last refresh (lastRefresh line, D) and
+   * the frequency (refreshFrequency line: D number, E godzin / dni) with the time of day (refreshTime line, D). The sheet is found by its id (the record's `gid`),
+   * else by its header (B2 "Opis linii"). Other documents are opened by id (at most 8 and about 15 s per listing; the reading is kept 60 s in the user cache);
+   * a document that cannot be opened or read gives null. Read only.
+   * @returns {{lastRun: number|null, intervalHours: number|null, startAt: string|null, tz: string}|null}
+   */
+  readSpreadsheet_(rec, hereId, reads){
+    try{
+      const cacheKey = `refreshDocRead:${rec.docId}`;
+      const here = rec.docId === hereId;
+      if(!here){
+        try{ const cached = Store.cache.get("user",cacheKey); if(cached) return JSON.parse(cached); }catch(err){}
+        if(reads.others >= 8 || Date.now() - reads.started > 15000) return null;
+        reads.others++;
+      }
+      const ss = here ? SpreadsheetApp.getActiveSpreadsheet() : SpreadsheetApp.openById(rec.docId);
+      const sheets = ss.getSheets();
+      const sheet = (Number.isInteger(rec.gid) && sheets.find(sh => sh.getSheetId() === rec.gid)) || sheets.find(sh => sh.getRange(2,2).getValue() === "Opis linii");
+      if(!sheet || sheet.getLastRow() < 1) return null;
+      const tz = ss.getSpreadsheetTimeZone();
+      const rows = sheet.getRange(1,2,sheet.getLastRow(),4).getValues();
+      const line = key => rows.find(r => r[0] === key);
+      const out = {lastRun: null, intervalHours: null, startAt: null, tz: tz};
+      const last = line("lastRefresh")?.[2];
+      if(Object.prototype.toString.call(last) === "[object Date]" && !isNaN(last)) out.lastRun = last.getTime();
+      const freq = line("refreshFrequency");
+      const n = Number(freq?.[2]), unit = freq?.[3];
+      if(Number.isInteger(n) && n > 0 && (unit == "godzin" || unit == "dni")) out.intervalHours = unit == "dni" ? 24 * n : n;
+      const at = out.intervalHours ? SettingsGrid.parseTime(line("refreshTime")?.[2], tz) : null;
+      if(at) out.startAt = `${at.hour}:${String(at.minute).padStart(2,"0")}`;
+      if(!here) try{ Store.cache.set("user",cacheKey,JSON.stringify(out),60); }catch(err){}
+      return out;
+    }catch(err){
+      dbgLog(`Auto refresh panel: the spreadsheet ${rec?.docId} not read: ${err}`);
+      return null;
     }
   },
 
