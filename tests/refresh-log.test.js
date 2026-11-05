@@ -54,7 +54,7 @@ module.exports = function register(t) {
     assert.strictEqual(f(2, 6).vAlign, 'top');
   }));
 
-  MODES.forEach(mode => test('log sheet: headers bold, centred, wrapped and FROZEN; "Odświeżone arkusze" 300 px; the technical column Courier New 8 pt on every entry; entries left aligned, top, wrapped; the new row is fitted to its content [' + mode + ']', () => {
+  MODES.forEach(mode => test('log sheet: headers bold, centred, wrapped and FROZEN; "Źródło" 200 px and "Odświeżone arkusze" 300 px, the other columns fitted; the technical text CLIPPED (cut) in Courier New 8 pt; the technical column Courier New 8 pt on every entry; entries left aligned, top, wrapped (not the technical column); the new row is fitted to its content [' + mode + ']', () => {
     const s = gridScope(mode);
     s.run(`RefreshLogGrid.append('Dziennik pobrań', ${entry(1)})`);
     s.run(`RefreshLogGrid.append('Dziennik pobrań', ${entry(2)})`);
@@ -62,15 +62,16 @@ module.exports = function register(t) {
     const f = (r, c) => (sh.cells[r + ',' + c] || { fmt: {} }).fmt;
     for (let c = 1; c <= 7; c++) assert.deepStrictEqual([f(1, c).bold, f(1, c).hAlign, f(1, c).wrap], [true, 'center', 'WRAP'], 'header ' + c);
     for (const r of [2, 3]) {
-      for (let c = 1; c <= 7; c++) assert.deepStrictEqual([f(r, c).hAlign, f(r, c).vAlign, f(r, c).wrap], ['left', 'top', 'WRAP'], `entry ${r} column ${c}`);
+      for (let c = 1; c <= 7; c++) assert.deepStrictEqual([f(r, c).hAlign, f(r, c).vAlign, f(r, c).wrap], ['left', 'top', c == 7 ? 'CLIP' : 'WRAP'], `entry ${r} column ${c}: the technical text is cut, the rest wraps`);
       assert.deepStrictEqual([f(r, 7).family, f(r, 7).size], ['Courier New', 8], 'technical column, row ' + r);
       assert.ok(!f(r, 5).family && !f(r, 5).size, 'only the technical column has the small monospaced font');
     }
     const snap = sh.snapshot();
     assert.strictEqual(snap.frozen, 1, 'the header row is frozen');
-    assert.strictEqual((snap.colPx || {})[6], 300, '"Odświeżone arkusze" is 300 px wide');
-    assert.deepStrictEqual(Object.keys(snap.colPx || {}), ['6'], 'the other columns are fitted, not fixed');
-    assert.ok(snap.fitted.columns.some(x => x[0] === 1 && x[1] === 5) && snap.fitted.columns.some(x => x[0] === 7 && x[1] === 1), 'columns A-E and G fit their content: ' + JSON.stringify(snap.fitted.columns));
+    assert.deepStrictEqual([(snap.colPx || {})[1], (snap.colPx || {})[6]], [200, 300], '"Źródło" 200 px, "Odświeżone arkusze" 300 px');
+    assert.deepStrictEqual(Object.keys(snap.colPx || {}).sort(), ['1', '6'], 'the other columns are fitted, not fixed');
+    assert.ok(snap.fitted.columns.some(x => x[0] === 2 && x[1] === 4) && snap.fitted.columns.some(x => x[0] === 7 && x[1] === 1), 'columns B-E and G fit their content: ' + JSON.stringify(snap.fitted.columns));
+    assert.ok(!snap.fitted.columns.some(x => x[0] <= 1 && x[0] + x[1] > 1) && !snap.fitted.columns.some(x => x[0] <= 6 && x[0] + x[1] > 6), 'not the two fixed ones');
     assert.ok(snap.fitted.rows.length > 0, 'the new row is fitted to its wrapped content');
   }));
 
@@ -78,10 +79,10 @@ module.exports = function register(t) {
     const s = gridScope(mode);
     s.run(`RefreshLogGrid.append('Dziennik pobrań', ${entry(1)})`);
     const sh = s.book.sheets['Dziennik pobrań'];
-    sh.colPx[6] = 410;                                                                      // the user widens the column
+    sh.colPx[6] = 410; sh.colPx[1] = 250;                                                   // the user widens two columns
     sh.frozen = 0;                                                                          // and unfreezes the header
     s.run(`RefreshLogGrid.append('Dziennik pobrań', ${entry(2)})`);
-    assert.strictEqual(sh.colPx[6], 410, 'a later entry does not set the width again');
+    assert.deepStrictEqual([sh.colPx[1], sh.colPx[6]], [250, 410], 'a later entry does not set the widths again');
     assert.strictEqual(sh.frozen, 0, 'nor the freeze');
     assert.ok(/UTC\+9"$/.test((sh.cells['2,2'] || { fmt: {} }).fmt.numFmt) && /UTC\+9"$/.test((sh.cells['3,3'] || { fmt: {} }).fmt.numFmt));
   }));

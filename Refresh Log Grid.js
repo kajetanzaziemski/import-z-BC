@@ -13,9 +13,9 @@
 //   F Odświeżone arkusze  how many sheets ("2 arkusze:"), and each with its number of rows (one cell, a line per sheet)
 //   G Dane techniczne   what fired it (the clock trigger and its id, the menu item); for a trigger that deleted itself: that, and that nothing was refreshed
 //
-// Look: the headers grey like the headers of a config sheet, bold, centred, wrapped, and frozen (the first row stays in view); the entries wrap, are top aligned
-// and left aligned; the technical column is Courier New 8 pt; the columns fit their content, "Odświeżone arkusze" is 300 px wide. The row of a new entry
-// is fitted to its content (the Sheets API does not grow a row for wrapped text by itself).
+// Look: the headers grey like the headers of a config sheet, bold, centred, wrapped, and frozen (the first row stays in view); the entries wrap (the technical column
+// is cut at the edge of the cell instead), are top aligned and left aligned; the technical column is Courier New 8 pt; the columns fit their content, except
+// "Źródło" (200 px) and "Odświeżone arkusze" (300 px). The row of a new entry is fitted to its content (the Sheets API does not grow a row for wrapped text by itself).
 // One read of the first rows only (the log grows; the entries below are not needed to insert above them) and one commit per entry.
 // ---------------------------------------------------------------------------
 
@@ -25,6 +25,8 @@ const REFRESH_LOG_LAYOUT = {
   firstEntryRow: 2,
   timeFormat: "yyyy-mm-dd hh:mm:ss",
   headerBackground: "#cccccc",          // the grey of the headers of a config sheet (CONFIG_HEADER_)
+  sourceCol: 1,
+  sourceWidth: 200,
   sheetsCol: 6,
   sheetsWidth: 300,
   technicalCol: 7,
@@ -51,6 +53,7 @@ const RefreshLogGrid = {
       head.setHorizontalAlignment("center");
       head.setWrapStrategy("WRAP");
       grid.freezeRows(L.headerRow);
+      grid.setColumnWidth(L.sourceCol, L.sourceWidth);
       grid.setColumnWidth(L.sheetsCol, L.sheetsWidth);
     }
     grid.insertRowsAfter(L.headerRow, 1, { plain: true, fit: true });      // the new row takes the look of the header above it: put right below
@@ -69,7 +72,8 @@ const RefreshLogGrid = {
     const technical = grid.getRange(L.firstEntryRow, L.technicalCol);
     technical.setFontFamily(L.technicalFont);
     technical.setFontSize(L.technicalSize);
-    grid.autoResizeColumns(1, L.sheetsCol - 1);                             // every column but "Odświeżone arkusze" (fixed) fits its content
+    technical.setWrapStrategy("CLIP");                                      // the technical text is cut at the edge of the cell, not wrapped
+    grid.autoResizeColumns(L.sourceCol + 1, L.sheetsCol - L.sourceCol - 1);     // every column but "Źródło" and "Odświeżone arkusze" (fixed widths) fits its content
     grid.autoResizeColumns(L.technicalCol, 1);
     grid.commit();
   }
