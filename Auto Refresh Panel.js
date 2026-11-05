@@ -36,9 +36,28 @@ const AutoRefreshPanel = {
         sheets: Array.isArray(permit.lastSheets) ? permit.lastSheets : null
       };
     }
+    out.setupError = AutoRefreshPanel.setupError_(tz);
     out.sheet = AutoRefreshPanel.fromSheet_(now, tz, current, stamp);
     out.triggers = AutoRefreshPanel.triggerList_(now, tz, permit, current);
     return out;
+  },
+
+  /**
+   * The last set-up of the automatic refresh that failed, for the sidebar: the same text as the red message in the settings sheet (with the sentence about the limit of
+   * clock triggers when that was the cause) and the platform's error for the collapsed "Szczegóły błędu". null when the last set-up went right.
+   */
+  setupError_(tz){
+    try{
+      const e = Settings.refreshSetupError();
+      if(!e) return null;
+      const stamp = ms => SettingsGrid.stamp(new Date(ms), tz);
+      const current = e.current && Object.assign({}, e.current, {next: e.current.next ? new Date(e.current.next) : null});
+      const lines = SettingsGrid.messageLines({ok: false, when: e.at, current: current, limit: !!e.limit}, d => SettingsGrid.stamp(Object.prototype.toString.call(d) === "[object Date]" ? d : new Date(d), tz));
+      return {lines: lines, path: SettingsGrid.messagePath, limit: !!e.limit, details: e.details ?? "", at: stamp(e.at)};
+    }catch(err){
+      dbgLog(`Auto refresh panel: set-up error not read: ${err}`);
+      return null;
+    }
   },
 
   /**

@@ -23,7 +23,7 @@ module.exports = function register(t) {
   function scenario(cfg) {
     cfg = Object.assign({ permit: null, sheet: null, triggers: [] }, cfg);
     const p = new FakePlatform();
-    p.props.document.importSettingsArray = JSON.stringify(Object.assign({ addonStatus: true, importSheetName: 'Ustawienia' }, cfg.permit ? { refreshPermit: cfg.permit } : {}));
+    p.props.document.importSettingsArray = JSON.stringify(Object.assign({ addonStatus: true, importSheetName: 'Ustawienia' }, cfg.permit ? { refreshPermit: cfg.permit } : {}, cfg.settings || {}));
     cfg.triggers.forEach(id => p.triggers.push(NAMED(id)));
     const log = [];
     const ex = p.execution(BASE, { __cfg: cfg, __log: log });
@@ -349,11 +349,11 @@ module.exports = function register(t) {
     assert.strictEqual(sc.p.triggers.length, 1);
   });
 
-  test('page: the order of the tab - current settings (with the button to change them, no header of its own), the last refresh, the list of triggers, the zone, and the technical details at the very bottom', () => {
+  test('page: the order of the tab - current settings, the last refresh, the error of the last set-up (if any), the buttons (no header of their own), the list of triggers, the zone, and the technical details at the very bottom', () => {
     const html = fs.readFileSync(path.join(ROOT, 'New Status Sidebar.html'), 'utf8');
     const body = html.slice(html.indexOf('function showRefreshInfo(info)'), html.indexOf('function renderTriggerList'));
     const at = t => { const i = body.indexOf(t); assert.ok(i >= 0, t); return i; };
-    const order = ['Aktualne ustawienia:', 'id="applyRefreshBtn"', 'id="applyRefreshError"', 'Ostatnio odświeżone:', 'Arkusze, które odświeżasz automatycznie:', 'Strefa czasowa:', 'Szczegóły techniczne'].map(at);
+    const order = ['Aktualne ustawienia:', 'Ostatnio odświeżone:', 'renderSetupError(info.setupError)', 'id="applyRefreshBtn"', 'id="applyRefreshError"', 'Arkusze, które odświeżasz automatycznie:', 'Strefa czasowa:', 'Szczegóły techniczne'].map(at);
     assert.deepStrictEqual(order, [...order].sort((a, b) => a - b));
     assert.ok(!/Zmień ustawienia/.test(html), 'no separate header for changing the settings');
   });
@@ -381,6 +381,49 @@ module.exports = function register(t) {
     const html = fs.readFileSync(path.join(ROOT, 'New Status Sidebar.html'), 'utf8');
     assert.ok(/id="turnOffRefreshBtn" onclick="turnOffRefresh\(\)"' \+ \(info\.current \? '' : ' disabled'\)/.test(html));
     assert.ok(/Wyłącz autoodświeżanie/.test(html) && /Na pewno\? Kliknij ponownie/.test(html) && /\.turnOffRefresh\(\)/.test(html));
+  });
+
+  // ---- the error of the last set-up ------------------------------------------------------------------------------------------------------------
+  const SETUP_ERROR = (over) => Object.assign({ at: NOW - 3 * HOUR, details: 'Exception: Boom\n    at Object.setUp (ScheduleRefresh:57:30)', limit: false, current: { active: true, frequency: { freq: 1, unit: 'days' }, next: NOW + 7 * HOUR } }, over);
+  const withError = (e) => scenario({ settings: e ? { refreshSetupError: e } : {} });
+
+  test('error: nothing is shown when the last set-up went right (no error stored, or cleared)', () => {
+    assert.strictEqual(withError(null).info().setupError, null);
+    assert.strictEqual(withError(undefined).info().setupError, null);
+  });
+
+  test('error: the message of the settings sheet (the red one) as lines - headline, what is set now, where to look, the time of the attempt - and the platform\'s error as details', () => {
+    const e = withError(SETUP_ERROR()).info().setupError;
+    assert.deepStrictEqual(e.lines, [
+      'Ustawienia odświeżania nie zostały zaktualizowane!',
+      'Dane będą odświeżane automatycznie co 1 dzień.',
+      'Następne odświeżenie 2026-11-02 18:00:00 UTC+1.',
+      'Zmień ustawienia, żeby spróbować ponownie lub zobacz szczegóły w menu dodatku:',
+      'Import z BC -> Ustawienia.',
+      'Próba zmiany ustawień została podjęta 2026-11-02 08:00:00 UTC+1.']);
+    assert.deepStrictEqual([e.path, e.limit, e.details], ['Import z BC -> Ustawienia', false, 'Exception: Boom\n    at Object.setUp (ScheduleRefresh:57:30)']);
+    const off = withError(SETUP_ERROR({ current: { active: false } })).info().setupError;
+    assert.strictEqual(off.lines[1], 'Odświeżanie automatyczne jest wyłączone.');
+    assert.strictEqual(withError(SETUP_ERROR({ current: null })).info().setupError.lines.length, 4, 'no state known: no status lines');
+  });
+
+  test('error: when the set-up failed on the limit of clock triggers the main message says so, right after the headline and before what is set now (the platform\'s error stays in the details)', () => {
+    const e = withError(SETUP_ERROR({ limit: true, details: 'Exception: Ten dodatek utworzył zbyt wiele wyzwalaczy' })).info().setupError;
+    assert.strictEqual(e.limit, true);
+    assert.strictEqual(e.lines[0], 'Ustawienia odświeżania nie zostały zaktualizowane!');
+    assert.ok(/^Przekroczono limit 5 wyzwalaczy czasowych na użytkownika/.test(e.lines[1]) && /Triggery odświeżania/.test(e.lines[1]), e.lines[1]);
+    assert.strictEqual(e.lines[2], 'Dane będą odświeżane automatycznie co 1 dzień.');
+    assert.ok(/zbyt wiele wyzwalaczy/.test(e.details));
+  });
+
+  test('page: the error is a red box with the lines (the menu path in bold) and "Szczegóły błędu" in a closed <details> that holds the platform\'s error; it sits after the last refresh and before the buttons', () => {
+    const html = fs.readFileSync(path.join(ROOT, 'New Status Sidebar.html'), 'utf8');
+    const fn = html.slice(html.indexOf('function renderSetupError(e)'), html.indexOf('function renderTriggerList'));
+    assert.ok(/class="errbox"/.test(fn) && /<details><summary>Szczegóły błędu<\/summary><pre[^>]*>' \+ escapeHtml\(e\.details\)/.test(fn), 'closed by default (no "open"), the details escaped');
+    assert.ok(!/<details open/.test(fn));
+    assert.ok(/replace\(escapeHtml\(e\.path\), '<b>' \+ escapeHtml\(e\.path\) \+ '<\/b>'\)/.test(fn), 'the path in bold');
+    assert.ok(/e\.lines\.map/.test(fn) && /escapeHtml\(line\)/.test(fn), 'every line escaped');
+    assert.ok(/\.errbox \{[^}]*#f4cccc/.test(html), 'the red of the settings sheet message');
   });
 
   test('panel: reading it never writes (no permit saved, no trigger changed)', () => {

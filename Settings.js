@@ -37,6 +37,10 @@ const Settings = {
   logSheetName() { return Settings.get("logSheetName") || REFRESH_LOG_DEFAULT_NAME; },
   setLogSheetName(name) { return Settings.set("logSheetName", name); },
 
+  /** The last set-up of the automatic refresh that failed ({ at, details, limit, current }); null when the last set-up went right (see ScheduleRefresh.recordSetupError_). */
+  refreshSetupError() { return Settings.get("refreshSetupError") ?? null; },
+  setRefreshSetupError(error) { return Settings.set("refreshSetupError", error); },
+
   refreshPermit() { return Settings.get("refreshPermit"); },
   /** A permit for one time-based trigger: only that trigger may refresh (the others delete themselves). */
   issueRefreshPermit(issuedForId, intervalHoursValue) {

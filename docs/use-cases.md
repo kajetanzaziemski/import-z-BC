@@ -130,3 +130,10 @@ sheet: every run writes its ticket, takes the script lock, and an OLDER run drop
 - a VALID permit: issued for a trigger that exists (three looks), not off, with the interval and the time of day the settings ask for; with the refresh off, no trigger of this document is left;
 - a result that is not right is set up once more; if it still is not, the error says what is wrong (`Odświeżanie nie zostało ustawione poprawnie (...)`) and the message is red. A run that never gets the lock (90 s) reports a failure: nobody else will set up for it.
 The live check judges the same (exactly the permit's trigger among this document's records; none when off) and skips a dropped run.
+
+## Error reporting of the set-up (`my-todo.md` "Error reporting")
+A set-up of the automatic refresh that fails (`ScheduleRefresh.fail_`: the platform's error, a set-up that could not be made right, the lock that never came) writes the red message in the settings sheet AND keeps the error in the import settings (`refreshSetupError`: when, the
+platform's message and stack cut to 1200 characters - the settings are one property of 9 KB -, whether it was the trigger limit, and what was set at that moment). The next set-up that goes right clears it; a run that drops out for a newer edit does neither.
+The Auto-odświeżanie tab shows it (`AutoRefreshPanel.setupError_`), after the last refresh and before the buttons, as a red box: the lines of the same message (`SettingsGrid.messageLines`, shared with the sheet; the menu path in bold) and "Szczegóły błędu" folded, holding the platform's error.
+When Apps Script refused one more clock trigger (the platform's "too many triggers" / "zbyt wiele wyzwalaczy", or a trigger-related error while the user already has 5 clock triggers: `isTriggerLimit_`) the main message says so right after the headline
+("Przekroczono limit 5 wyzwalaczy czasowych na użytkownika ... Triggery odświeżania" - the developer tool that deletes triggers); the sheet's message says it too.

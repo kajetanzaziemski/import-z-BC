@@ -35,7 +35,9 @@ The panel should refresh with poll every 1-3 s.
 1 - if there is indication that there is another trigger set by another user the sidebar should be based on that info with a prompt saying:
 > Odświeżanie ustawione przez innego użytkownika - poniższe informacje mogą zawierać błędy. 
 
-### Error reporting
+### [DONE, not checked on a real spreadsheet] Error reporting
+
+Done as described (docs/use-cases.md, "Error reporting of the set-up"). The error is kept in the import settings until the next set-up goes right; the sheet's red message mentions the trigger limit too; the limit is told by the platform's message (Polish / English) or by a trigger-related error with 5 clock triggers present.
 
 in Autoodświeżanie: 
 

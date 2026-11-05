@@ -50,6 +50,34 @@ const SETTINGS_LAYOUT = {
 };
 
 const SettingsGrid = {
+  /** The menu path the failure message sends the user to; bold in the sheet (rich text) and in the sidebar. */
+  messagePath: "Import z BC -> Ustawienia",
+
+  /** The sentence for a set-up that failed because Apps Script refuses one more clock trigger (a user may have 5 of them for an add-on). */
+  triggerLimitText: "Przekroczono limit 5 wyzwalaczy czasowych na użytkownika (Apps Script). Usuń niepotrzebne triggery (Rozszerzenia -> Import z BC -> Narzędzia programisty -> Triggery odświeżania) i spróbuj ponownie.",
+
+  /**
+   * The lines of the status message for a report ({ ok, off, when, frequency, next, current, limit }); `stamp` writes a time. Used for the message in the settings sheet
+   * and for the error shown in the sidebar, which says the same.
+   */
+  messageLines(report, stamp) {
+    const status = c => c && c.active
+      ? [`Dane będą odświeżane automatycznie co ${c.frequency.freq} ${SettingsGrid.unitName(c.frequency)}.`, `Następne odświeżenie ${stamp(c.next)}.`]
+      : ["Odświeżanie automatyczne jest wyłączone."];
+    if (report.off) return ["Odświeżanie automatyczne jest wyłączone.", `Odświeżanie zostało wyłączone ${stamp(report.when)}.`];
+    if (report.ok) {
+      return [`Dane będą odświeżane automatycznie co ${report.frequency.freq} ${SettingsGrid.unitName(report.frequency)}.`,
+              `Następne odświeżenie ${stamp(report.next)}.`,
+              `Odświeżanie zostało ustawione ${stamp(report.when)}.`];
+    }
+    return ["Ustawienia odświeżania nie zostały zaktualizowane!",
+            ...(report.limit ? [SettingsGrid.triggerLimitText] : []),
+            ...(report.current ? status(report.current) : []),
+            "Zmień ustawienia, żeby spróbować ponownie lub zobacz szczegóły w menu dodatku:",
+            SettingsGrid.messagePath + ".",
+            `Próba zmiany ustawień została podjęta ${stamp(report.when)}.`];
+  },
+
   /** The look of the cell the refresh time is typed in (D of the refreshTime line): HH:mm, right aligned. Set when the line is made and left to the user after. */
   styleTime(range) {
     range.setNumberFormat("HH:mm");
@@ -230,22 +258,8 @@ const SettingsGrid = {
       },
       writeRefreshMessage(report) {
         const style = L.messageStyle[report.off ? "off" : report.ok ? "ok" : "fail"];
-        const stamp = d => SettingsGrid.stamp(d, grid.getTimeZone());
-        const status = c => c && c.active
-          ? [`Dane będą odświeżane automatycznie co ${c.frequency.freq} ${SettingsGrid.unitName(c.frequency)}.`, `Następne odświeżenie ${stamp(c.next)}.`]
-          : ["Odświeżanie automatyczne jest wyłączone."];
-        const where = "Import z BC -> Ustawienia";
-        const lines = report.off
-          ? ["Odświeżanie automatyczne jest wyłączone.", `Odświeżanie zostało wyłączone ${stamp(report.when)}.`]
-          : report.ok
-          ? [`Dane będą odświeżane automatycznie co ${report.frequency.freq} ${SettingsGrid.unitName(report.frequency)}.`,
-             `Następne odświeżenie ${stamp(report.next)}.`,
-             `Odświeżanie zostało ustawione ${stamp(report.when)}.`]
-          : ["Ustawienia odświeżania nie zostały zaktualizowane!",
-             ...(report.current ? status(report.current) : []),
-             "Zmień ustawienia, żeby spróbować ponownie lub zobacz szczegóły w menu dodatku:",
-             where + ".",
-             `Próba zmiany ustawień została podjęta ${stamp(report.when)}.`];
+        const where = SettingsGrid.messagePath;
+        const lines = SettingsGrid.messageLines(report, d => SettingsGrid.stamp(d, grid.getTimeZone()));
         const text = lines.join("\n");
         const at = text.indexOf(where);
         const bold = !report.ok && at >= 0 ? [[at, at + where.length]] : [];

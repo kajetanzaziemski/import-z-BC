@@ -287,6 +287,62 @@ module.exports = function register(t) {
     assert.deepStrictEqual(plain(sc.ex.eval(`__msgs.map(m => m.ok)`)), [true]);
   });
 
+  test('set-up error: a failed set-up keeps the platform\'s error (message and stack, cut to 1200 characters), when, whether it was the trigger limit, and what was set at that moment; the next set-up that goes right clears it', () => {
+    const sc = scenario({ settings: { refreshPermit: Object.assign({}, PERMIT('t1').refreshPermit, { nextRefresh: Date.now() + 3600000 }) } });
+    sc.p.triggers.push(NAMED('t1'));
+    applySettings(sc, { freq: 'x', unit: 'days' });
+    assert.throws(() => sc.ex.eval(`ScheduleRefresh.apply(__ss)`), /Nieprawidłowa częstotliwość/);
+    sc.save();
+    const e = sc.stored().refreshSetupError;
+    assert.ok(/Nieprawidłowa częstotliwość odświeżania: "x"/.test(e.details) && e.details.length <= 1200);
+    assert.deepStrictEqual([typeof e.at, e.limit, e.current.active, e.current.frequency], ['number', false, true, { freq: 3, unit: 'hrs' }]);
+    assert.deepStrictEqual(plain(sc.ex.eval(`__msgs.map(m => m.ok)`)), [false]);
+    // the next set-up goes right
+    applySettings(sc, { freq: 2, unit: 'hrs' });
+    sc.ex.eval(`ScheduleRefresh.apply(__ss)`);
+    sc.save();
+    assert.strictEqual(sc.stored().refreshSetupError, null);
+  });
+
+  test('set-up error: a long error is cut; a run that drops out for a newer edit neither records nor clears; the lock timeout is recorded', () => {
+    const sc = scenario();
+    applySettings(sc, { freq: 2, unit: 'hrs' });
+    sc.ex.eval(`ScheduleRefresh.recordSetupError_(new Error('x'.repeat(5000)), null, false)`);
+    sc.save();
+    assert.strictEqual(sc.stored().refreshSetupError.details.length, 1200);
+    const keep = scenario({ settings: { refreshSetupError: { at: 1, details: 'older', limit: false, current: null } } });
+    applySettings(keep, { freq: 2, unit: 'hrs' }, null, { onReload: `Store.set('document', 'refreshSetup', 'a-newer-run');` });
+    keep.ex.eval(`ScheduleRefresh.apply(__ss)`);
+    keep.save();
+    assert.strictEqual(keep.stored().refreshSetupError.details, 'older', 'the dropped run leaves the error as it was');
+    const locked = scenario(); locked.p.lockHeld = true;
+    applySettings(locked, { freq: 2, unit: 'hrs' });
+    assert.throws(() => locked.ex.eval(`ScheduleRefresh.apply(__ss)`), /trwa zbyt długo/);
+    locked.save();
+    assert.ok(/trwa zbyt długo/.test(locked.stored().refreshSetupError.details));
+  });
+
+  test('set-up error: the limit of clock triggers is told by the platform\'s message (Polish or English) - or by a trigger-related error while the user already has 5 clock triggers; other errors are not the limit', () => {
+    const sc = scenario();
+    const lim = (msg, n = 0) => { sc.p.triggers.length = 0; for (let i = 0; i < n; i++) sc.p.triggers.push(NAMED('t' + i)); return sc.ex.eval(`ScheduleRefresh.isTriggerLimit_(new Error(${JSON.stringify(msg)}))`); };
+    assert.strictEqual(lim('Ten dodatek utworzył zbyt wiele wyzwalaczy o nazwie time-based w tym dokumencie dla tego konta użytkownika Google.'), true);
+    assert.strictEqual(lim('This add-on has created too many triggers named time-based in this document for this Google user account.'), true);
+    assert.strictEqual(lim('Service invoked too many times in a short time'), false);
+    assert.strictEqual(lim('Nie można utworzyć wyzwalacza', 5), true);
+    assert.strictEqual(lim('Nie można utworzyć wyzwalacza', 2), false);
+    assert.strictEqual(lim('TypeError: Cannot read properties of null', 6), false);
+  });
+
+  test('set-up error: the limit of triggers is in the red message of the sheet and in what is kept for the sidebar', () => {
+    const sc = scenario();
+    applySettings(sc, { freq: 3, unit: 'hrs' });
+    sc.ex.eval(`{ const n0 = ScriptApp.newTrigger; ScriptApp.newTrigger = fn => { const b = n0(fn); b.create = () => { throw new Error('Ten dodatek utworzył zbyt wiele wyzwalaczy o nazwie time-based'); }; return b; }; }`);
+    assert.throws(() => sc.ex.eval(`ScheduleRefresh.apply(__ss)`), /zbyt wiele wyzwalaczy/);
+    sc.save();
+    assert.strictEqual(sc.stored().refreshSetupError.limit, true);
+    assert.deepStrictEqual(plain(sc.ex.eval(`__msgs.map(m => [m.ok, m.limit])`)), [[false, true]]);
+  });
+
   test('set-up: with the refresh switched off none of this document\'s refresh triggers is left (the permit is marked off)', () => {
     const sc = scenario({ settings: PERMIT('t-old') });
     ['t-old', 't-orphan', 't-otherdoc'].forEach(id => sc.p.triggers.push(NAMED(id)));

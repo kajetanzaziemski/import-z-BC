@@ -231,14 +231,15 @@ const ScheduleRefresh = {
       // the older ones drop out, nothing changed); it re-reads the sheet under the lock, sets the trigger up and makes sure the result is right (reconcile_).
       outcome = runLatestOnly(isLatest => ScheduleRefresh.applyNewest_(settings,isLatest),"refreshSetup");
     }catch(err){
-      ScheduleRefresh.report_(settings,{ok:false,when:new Date(),current:ScheduleRefresh.current()});
+      ScheduleRefresh.fail_(settings,err);
       throw err;
     }
     if(outcome === "dropped"){
       Controller.checkNote("refresh set-up dropped: a newer edit took over");        // the newer run sets up and writes the message
     }else if(outcome === "timeout"){
-      ScheduleRefresh.report_(settings,{ok:false,when:new Date(),current:ScheduleRefresh.current()});
-      throw new Error("Nie udało się ustawić odświeżania: poprzednia zmiana ustawień trwa zbyt długo.");
+      const err = new Error("Nie udało się ustawić odświeżania: poprzednia zmiana ustawień trwa zbyt długo.");
+      ScheduleRefresh.fail_(settings,err);
+      throw err;
     }
   },
 
@@ -256,8 +257,42 @@ const ScheduleRefresh = {
       problems = ScheduleRefresh.reconcile_(wanted);
       if(problems.length) throw new Error(`Odświeżanie nie zostało ustawione poprawnie (${problems.join(", ")}).`);
     }
+    ScheduleRefresh.clearSetupError_();
     ScheduleRefresh.report_(settings,{ok:true,off:!result,when:new Date(),frequency:frequency,next:result?.nextRefresh ?? null});
     return true;
+  },
+
+  /** A set-up failed: the red message in the sheet, and the error kept for the sidebar (cleared by the next set-up that goes right). */
+  fail_(settings, err){
+    const current = ScheduleRefresh.current();
+    const limit = ScheduleRefresh.isTriggerLimit_(err);
+    ScheduleRefresh.recordSetupError_(err,current,limit);
+    ScheduleRefresh.report_(settings,{ok:false,when:new Date(),current:current,limit:limit});
+  },
+
+  /**
+   * Did the set-up fail because Apps Script refuses one more clock trigger? (An add-on may have 5 per user; the platform's message says "too many triggers" - in the
+   * user's language: "zbyt wiele wyzwalaczy".) A trigger-related error while the user already has 5 clock triggers counts too.
+   */
+  isTriggerLimit_(err){
+    const text = String(err && err.message || err);
+    if(/too many triggers|zbyt wiele wyzwalaczy|zbyt wiele trigger|maximum number of triggers/i.test(text)) return true;
+    try{
+      return /trigger|wyzwalacz/i.test(text) && ScheduleRefresh.triggersSeen_().filter(t => String(t.getEventType()) == "CLOCK").length >= 5;
+    }catch(e){ return false; }
+  },
+
+  /** What the sidebar shows later: when, the platform's error (cut to fit the settings property), whether it was the limit, and what was set at that moment. */
+  recordSetupError_(err, current, limit){
+    try{
+      const details = String(err && err.stack || err && err.message || err).slice(0,1200);
+      Settings.setRefreshSetupError({at: Date.now(), details: details, limit: !!limit,
+        current: current ? {active: !!current.active, frequency: current.frequency, next: current.next ? current.next.getTime() : null} : null});
+    }catch(e){ dbgLog(`Set-up error not kept: ${e}`); }
+  },
+
+  clearSetupError_(){
+    try{ if(Settings.refreshSetupError()) Settings.setRefreshSetupError(null); }catch(e){ dbgLog(`Set-up error not cleared: ${e}`); }
   },
 
   /** What the settings ask for, as the permit and the trigger must show it: { hours, startAt: "17:30"|null }, or null when the refresh is to be off. */
