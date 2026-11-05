@@ -153,6 +153,10 @@ In a sidebar call `ScriptApp.getProjectTriggers()` was seen to return 8 triggers
 ## Job `settings.timeZoneCell` (hashes re-pinned)
 An edit of the zone label (E of the `refreshTime` line) is undone and answered with a dialog. The verifier reads the label back (`lcReadSettingsSheet_` gives `timeZoneLabel`): it has to be a `UTC+N` label again, and the permit / triggers are untouched.
 
+## Developer tools: the trigger list (hash of `Live Check.js` / `Live Check Verifiers.js` re-pinned)
+`requestRefreshTriggersSidebar` (menu) and `requestRefreshTriggerList` only read (no sheet, no document property changes). `requestForceDeleteTrigger` is judged on: the trigger is gone, no sheet and no document property changed - the missing cleanup is
+the point of the action.
+
 ## Quiet jobs
 `sheet.ignored`, `change.ignored` and `change.own` (`LIVE_CHECK_QUIET_JOBS`, `Live Check.js`) only look at an event and do nothing; they were most of the report. While they **pass** (or skip) nothing is logged, stored or shown, and their "running" placeholder
 is removed at once. One that fails or warns (an edit in a config sheet wrongly ignored) is recorded and shown like any other run. `settings.edit` and `agent.skipped` also do nothing but are still reported.

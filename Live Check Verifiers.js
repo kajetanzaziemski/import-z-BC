@@ -703,6 +703,26 @@ function buildLiveCheckVerifiers_(){
       verify(c){ lcVerifyNothingChanged_(c); }
     },
 
+    requestRefreshTriggersSidebar: {
+      needs: ["sheets","docProps"],
+      verify(c){ lcVerifyNothingChanged_(c); }
+    },
+
+    requestRefreshTriggerList: {
+      needs: ["sheets","docProps"],
+      verify(c){ lcVerifyNothingChanged_(c); }
+    },
+
+    requestForceDeleteTrigger: {
+      needs: ["sheets","docProps"],
+      verify(c){
+        const id = c.input && c.input.id;
+        c.expect("the trigger is gone",!!id && !lcTriggersSeen_().some(t => t.getUniqueId() === id),`${id} is still installed`);
+        c.unchanged("sheets","no sheet touched");
+        c.unchanged("docProps","no cleanup on purpose: the permit and the settings are as they were",["docTriggerArray","agentSuspect"]);
+      }
+    },
+
     requestShowRefreshHelp: {
       needs: ["sheets","docProps"],
       verify(c){ lcVerifyNothingChanged_(c); }

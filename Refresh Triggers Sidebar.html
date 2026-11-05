@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <link rel="stylesheet" href="https://ssl.gstatic.com/docs/script/css/add-ons1.css">
+    <style>
+      body { font-size: 13px; }
+      ul.triggers { padding-left: 0; list-style: none; margin: 4px 0; }
+      ul.triggers li { margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #e0e0e0; }
+      .warn { background: #fff2cc; border-left: 4px solid #f1c232; padding: 6px 8px; }
+      .id { font-family: monospace; font-size: 11px; }
+    </style>
+    <script>
+      /* Developer tools: the user's time triggers, each with a button that DELETES the trigger and does nothing else
+         (the permit, the records, the cache and the message are left as they are - this is for testing what happens when a trigger goes missing). */
+      var loadId = 0;
+      var armed = null;            // the id of the trigger whose delete button was pressed once (a second press within 4 s deletes)
+      var armTimer = null;
+
+      function escapeHtml(str) {
+        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      }
+
+      function load() {
+        var id = ++loadId;
+        var btn = document.getElementById('reloadBtn');
+        btn.disabled = true; btn.innerHTML = 'Odświeżanie…';
+        google.script.run
+          .withSuccessHandler(function (info) { if (id === loadId) show(info); })
+          .withFailureHandler(function (error) { if (id === loadId) showError(error); })
+          .getRefreshTriggerList();
+      }
+
+      function show(info) {
+        var btn = document.getElementById('reloadBtn');
+        btn.disabled = false; btn.innerHTML = 'Odśwież';
+        var list = info.triggers;
+        var html = '';
+        if (!list || list.error) html = '<p class="gray">Nie udało się odczytać listy triggerów.</p>';
+        else if (!list.items.length) html = '<p class="gray">Brak triggerów czasowych.</p>';
+        else html = '<ul class="triggers">' + list.items.map(function (t) {
+          var title = t.name ? escapeHtml(t.name) : 'Nieznany arkusz';
+          if (t.name && t.url) title = '<a href="' + escapeHtml(t.url) + '" target="_blank" rel="noopener">' + title + '</a>';
+          var lines = [
+            'Odświeżanie co: ' + (t.every ? escapeHtml(t.every) : '<span class="gray">brak danych</span>'),
+            'Ostatnio odświeżone: ' + (t.last ? escapeHtml(t.last) + (t.duration ? ' (' + escapeHtml(t.duration) + ')' : '') + (t.lastFromSheet ? ' <span class="gray">(wg arkusza)</span>' : '') : '<span class="gray">brak danych</span>'),
+            '<span class="gray id">' + escapeHtml(t.id) + ' · ' + escapeHtml(t.handler) + (t.handler === 'autoRefresh' ? ' (stara wersja)' : '') + '</span>'
+          ];
+          return '<li><b>' + title + '</b>' + (t.here ? ' <span class="gray">(ten dokument)</span>' : '') + '<br />' + lines.join('<br />') +
+            '<br /><button data-id="' + escapeHtml(t.id) + '" onclick="removeTrigger(this)"> Usuń trigger </button></li>';
+        }).join('') + '</ul>';
+        document.getElementById('list').innerHTML = html + '<p class="gray">Strefa czasowa: ' + escapeHtml(info.zone) + '</p>';
+      }
+
+      function showError(error) {
+        var btn = document.getElementById('reloadBtn');
+        btn.disabled = false; btn.innerHTML = 'Odśwież';
+        document.getElementById('list').innerHTML = '<p class="warn">Błąd pobierania danych: ' + escapeHtml(error.message) + '</p>';
+      }
+
+      function removeTrigger(button) {
+        var id = button.getAttribute('data-id');
+        if (armed !== id) {
+          armed = id;
+          button.innerHTML = ' Na pewno? Kliknij ponownie ';
+          if (armTimer) clearTimeout(armTimer);
+          armTimer = setTimeout(function () { armed = null; button.innerHTML = ' Usuń trigger '; }, 4000);
+          return;
+        }
+        armed = null;
+        if (armTimer) clearTimeout(armTimer);
+        button.disabled = true; button.innerHTML = 'Usuwanie…';
+        google.script.run
+          .withSuccessHandler(function () { document.getElementById('result').innerHTML = ''; load(); })
+          .withFailureHandler(function (error) {
+            document.getElementById('result').innerHTML = '<p class="warn">Nie usunięto: ' + escapeHtml(error.message) + '</p>';
+            load();
+          })
+          .forceDeleteRefreshTrigger(id);
+      }
+
+      window.onload = load;
+    </script>
+  </head>
+  <body>
+    <div class="sidebar">
+      <h1> Triggery odświeżania </h1>
+      <p class="gray">Narzędzie programisty. "Usuń trigger" kasuje sam trigger i nic więcej: zezwolenie, zapisane dane i komunikat w arkuszu zostają bez zmian (do testowania zachowania, gdy trigger zniknie).</p>
+      <button id="reloadBtn" onclick="load()"> Odśwież </button>
+      <div id="result"></div>
+      <div id="list"><p id="status" class="gray">Pobieranie danych…</p></div>
+    </div>
+  </body>
+</html>

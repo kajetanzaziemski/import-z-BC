@@ -363,6 +363,16 @@ const ScheduleRefresh = {
     return [...seen.values()];
   },
 
+  /**
+   * Developer tools: deletes the time trigger with this id and NOTHING ELSE (no permit, record, cache or message is touched), so that what the add-on does when a
+   * trigger goes missing can be tested. Only a time trigger can be deleted this way, never an agent.
+   */
+  forceDelete(triggerId){
+    const trigger = ScheduleRefresh.triggersSeen_().find(t => t.getUniqueId() === triggerId && String(t.getEventType()) == "CLOCK");
+    if(!trigger) throw new Error(`Nie znaleziono triggera czasowego ${triggerId}.`);
+    ScriptApp.deleteTrigger(trigger);
+  },
+
   /** Deletes the project trigger with this id (a time trigger removes itself this way). */
   removeTrigger(triggerUid){
     ScheduleRefresh.forget_(triggerUid);

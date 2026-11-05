@@ -48,6 +48,13 @@ class StatusManager{
       		.showSidebar(html);
 	}
 
+	static refreshTriggersSidebar(){
+		const html = HtmlService.createTemplateFromFile('Refresh Triggers Sidebar').evaluate()
+      		.setTitle('Triggery odświeżania');
+  		SpreadsheetApp.getUi()
+      		.showSidebar(html);
+	}
+
 	static statusSidebar(){
 		const html = HtmlService.createTemplateFromFile('New Status Sidebar').evaluate()
       		.setTitle('Konfiguracja');

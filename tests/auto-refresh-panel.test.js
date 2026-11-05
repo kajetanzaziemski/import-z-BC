@@ -36,7 +36,8 @@ module.exports = function register(t) {
         getRange: (r, c, nr, nc) => nr === undefined ? { getValue: () => (rows[r - 1] || [])[c - 2] ?? '' } : { getValues: () => rows.slice(r - 1, r - 1 + nr).map(x => x.slice(c - 2, c - 2 + nc)) } });
       globalThis.__book = (d) => ({ getSpreadsheetTimeZone: () => d.tz || 'Europe/Warsaw', getSheets: () => [__sheet([['Inna'], ['x']], 1), __sheet(d.rows, d.gid)] });
       SpreadsheetApp.openById = id => { __opened.push(id); if (!__cfg.docs || !__cfg.docs[id]) throw new Error('no access'); return __book(__cfg.docs[id]); };
-      { const g = SpreadsheetApp.getActiveSpreadsheet; SpreadsheetApp.getActiveSpreadsheet = () => Object.assign(g(), __cfg.activeRows ? __book({ rows: __cfg.activeRows, gid: 7 }) : { getSheets: () => [] }); }
+      { const g = SpreadsheetApp.getActiveSpreadsheet; SpreadsheetApp.getActiveSpreadsheet = () => Object.assign(g(), __cfg.activeRows ? (b => ({ getSpreadsheetTimeZone: b.getSpreadsheetTimeZone, getSheets: () => { __sheetReads++; return b.getSheets(); } }))(__book({ rows: __cfg.activeRows, gid: 7 })) : { getSheets: () => [] }); }
+      globalThis.__sheetReads = 0;
       getMainSettings = () => ({
         getRefreshFrequency: () => __cfg.sheet.freq, getRefreshStartAt: () => __cfg.sheet.at ?? null,
         getSheetListWithRefreshTrue: () => [{ configSheet: 'K1', resultSheet: 'Dane K1', refresh: true }, { configSheet: 'K3', resultSheet: 'Dane K3', refresh: true }],
@@ -211,53 +212,78 @@ module.exports = function register(t) {
     assert.ok(/Controller\.run\("requestShowRefreshHelp"/.test(fs.readFileSync(path.join(ROOT, 'Auto Refresh Panel.js'), 'utf8')));
   });
 
-  // ---- the spreadsheet itself as the last resort for what the other sources have nothing for ---------------------------------------------------
+  // ---- the spreadsheet itself as the last resort: THIS document's last refresh only ------------------------------------------------------------
   const SETTINGS_ROWS = (over) => [['Opis linii'], ['x'], ['headerGeneralSettings'], ['lastRefresh', 'Ostatnio odświeżone o:', new Date(Date.UTC(2026, 10, 2, 8, 30)), 'UTC+1'],
     ['refreshFrequency', 'Odświeżaj co:', 3, 'dni'], ['refreshTime', 'Godzina odświeżenia:', '6:45', 'UTC+1'], ['configSheet', 'K1', 'Dane K1', true]].map((r, i) => (over && over[i]) || r);
+  const HERE = (over) => rec(Object.assign({ docId: 'ss-1', docName: 'Ten', gid: 7, lastRun: undefined, lastDurationMs: undefined }, over));
 
-  test('list: the last refresh a record has no value for is read from the spreadsheet itself (lastRefresh line, in that spreadsheet\'s zone) and marked; a record with a last run is not overridden and its spreadsheet is not opened', () => {
-    const docs = { 'doc-A': { rows: SETTINGS_ROWS(), gid: 5, tz: 'Asia/Tokyo' } };
-    const sc = scenario({ triggers: ['tA', 'tB'], docs: docs });
-    setRecord(sc, 'tA', rec({ lastRun: undefined, lastDurationMs: undefined }));
-    setRecord(sc, 'tB', rec({ docId: 'doc-B', docName: 'B', url: 'https://docs.google.com/spreadsheets/d/doc-B/edit' }));     // a complete record
-    const byId = Object.fromEntries(items(sc).map(x => [x.id, x]));
-    const a = byId.tA, b = byId.tB;
-    assert.deepStrictEqual([a.id, a.last, a.lastFromSheet, a.every, a.everyFromSheet], ['tA', '2026-11-02 09:30:00 UTC+1', true, '1 dzień o 17:30 (UTC+1)', false], 'the record\'s frequency stays');
-    assert.deepStrictEqual([b.id, b.lastFromSheet], ['tB', false]);
-    assert.deepStrictEqual(plain(sc.ex.eval(`__opened`)), ['doc-A'], 'only the spreadsheet that was missing something is opened');
+  test('list: this document\'s last refresh, when its record has none, is read from the spreadsheet itself (lastRefresh line) and marked; nothing else is read from the sheet', () => {
+    const sc = scenario({ triggers: ['tHere'], activeRows: SETTINGS_ROWS(), docs: {} });
+    setRecord(sc, 'tHere', HERE({ intervalHours: undefined, startAt: undefined, timeZone: undefined }));
+    const [x] = items(sc);
+    assert.deepStrictEqual([x.last, x.lastFromSheet], ['2026-11-02 09:30:00 UTC+1', true]);
+    assert.deepStrictEqual([x.every, x.here], [null, true], 'the frequency and the time of day of the sheet are not used');
+    assert.strictEqual(sc.ex.eval(`__sheetReads`), 1);
   });
 
-  test('list: the frequency and the time of day, when the record has none, come from the spreadsheet (marked); an invalid or empty frequency there gives nothing', () => {
-    const docs = { 'doc-A': { rows: SETTINGS_ROWS(), gid: 5 }, 'doc-B': { rows: SETTINGS_ROWS({ 4: ['refreshFrequency', 'Odświeżaj co:', 'x', 'dni'] }), gid: 5 }, 'doc-C': { rows: SETTINGS_ROWS({ 3: ['lastRefresh', '', '', ''] }), gid: 5 } };
-    const sc = scenario({ triggers: ['tA', 'tB', 'tC'], docs: docs });
-    const bare = (docId, name) => rec({ docId, docName: name, url: 'https://docs.google.com/spreadsheets/d/' + docId + '/edit', intervalHours: undefined, startAt: undefined, timeZone: undefined, lastRun: undefined, lastDurationMs: undefined, nextRefresh: undefined });
-    setRecord(sc, 'tA', bare('doc-A', 'A')); setRecord(sc, 'tB', bare('doc-B', 'B')); setRecord(sc, 'tC', bare('doc-C', 'C'));
-    const by = Object.fromEntries(items(sc).map(x => [x.name, x]));
-    assert.deepStrictEqual([by.A.every, by.A.everyFromSheet, by.A.lastFromSheet], ['3 dni o 6:45', true, true]);
-    assert.deepStrictEqual([by.B.every, by.B.everyFromSheet], [null, false], 'x is not a frequency');
-    assert.deepStrictEqual([by.C.last, by.C.lastFromSheet], [null, false], 'an empty last refresh is nothing');
+  test('list: a record with a last run is not overridden and the sheet is not even read; an empty or invalid lastRefresh gives nothing', () => {
+    const full = scenario({ triggers: ['tHere'], activeRows: SETTINGS_ROWS() });
+    setRecord(full, 'tHere', HERE({ lastRun: NOW - 3 * HOUR }));
+    const [a] = items(full);
+    assert.deepStrictEqual([a.lastFromSheet, full.ex.eval(`__sheetReads`)], [false, 0]);
+    const empty = scenario({ triggers: ['tHere'], activeRows: SETTINGS_ROWS({ 3: ['lastRefresh', '', '', ''] }) });
+    setRecord(empty, 'tHere', HERE({}));
+    assert.deepStrictEqual([items(empty)[0].last, empty.ex.eval(`__sheetReads`)], [null, 1]);
+    const text = scenario({ triggers: ['tHere'], activeRows: SETTINGS_ROWS({ 3: ['lastRefresh', '', 'wczoraj', ''] }) });
+    setRecord(text, 'tHere', HERE({}));
+    assert.strictEqual(items(text)[0].last, null);
   });
 
-  test('list: this document is read from the active spreadsheet (not opened by id); other documents are read once a minute (cached), at most 8 per listing; one that cannot be opened leaves the fields empty', () => {
-    const docs = { 'doc-A': { rows: SETTINGS_ROWS(), gid: 5 } };
-    const sc = scenario({ triggers: ['tHere', 'tA', 'tNo'], docs: docs, activeRows: SETTINGS_ROWS() });
-    setRecord(sc, 'tHere', rec({ docId: 'ss-1', docName: 'Ten', lastRun: undefined, gid: 7 }));
-    setRecord(sc, 'tA', rec({ lastRun: undefined }));
-    setRecord(sc, 'tNo', rec({ docId: 'doc-X', docName: 'Bez dostępu', lastRun: undefined }));
-    const list = items(sc);
-    assert.deepStrictEqual(list.map(x => [x.name, x.lastFromSheet]), [['Bez dostępu', false], ['Ten', true], ['Zestawienie A', true]]);
-    assert.deepStrictEqual(plain(sc.ex.eval(`__opened`)), ['doc-A', 'doc-X'], 'this document is not opened by id');
-    items(sc);
-    assert.deepStrictEqual(plain(sc.ex.eval(`__opened`)), ['doc-A', 'doc-X', 'doc-X'], 'doc-A came from the cache; the one that failed is tried again');
-    const many = scenario({ triggers: Array.from({ length: 10 }, (_, i) => 't' + i), docs: {} });
-    for (let i = 0; i < 10; i++) setRecord(many, 't' + i, rec({ docId: 'doc-' + i, docName: 'N' + i, lastRun: undefined }));
-    items(many);
-    assert.strictEqual(plain(many.ex.eval(`__opened`)).length, 8);
+  test('list: OTHER documents are never opened: their missing values stay "brak danych"', () => {
+    const sc = scenario({ triggers: ['tA'], activeRows: SETTINGS_ROWS(), docs: { 'doc-A': { rows: SETTINGS_ROWS(), gid: 5 } } });
+    setRecord(sc, 'tA', rec({ lastRun: undefined, intervalHours: undefined }));
+    const [x] = items(sc);
+    assert.deepStrictEqual([x.last, x.every, plain(sc.ex.eval(`__opened`)), sc.ex.eval(`__sheetReads`)], [null, null, [], 0]);
   });
 
-  test('page: a last refresh or frequency taken from the spreadsheet is marked "(wg arkusza)"', () => {
+  test('page: a last refresh taken from the spreadsheet is marked "(wg arkusza)"', () => {
     const html = fs.readFileSync(path.join(ROOT, 'New Status Sidebar.html'), 'utf8');
-    assert.ok(/t\.everyFromSheet \? ' <span class="gray">\(wg arkusza\)<\/span>'/.test(html) && /t\.lastFromSheet \? ' <span class="gray">\(wg arkusza\)<\/span>'/.test(html));
+    assert.ok(/t\.lastFromSheet \? ' <span class="gray">\(wg arkusza\)<\/span>'/.test(html) && !/everyFromSheet/.test(html));
+  });
+
+  // ---- developer tools: the list with "Usuń trigger" -------------------------------------------------------------------------------------------
+  test('dev tools: force delete removes ONLY the time trigger - the permit, the user record, the sighting cache and the settings are left exactly as they were', () => {
+    const sc = scenario({ permit: permit({ issuedFor: 'tHere' }), triggers: ['tHere', 'tOther'] });
+    sc.p.triggers.push({ id: 'agent', fn: 'sheetEdit', type: 'ON_EDIT', source: 'ss-1', params: {} });
+    sc.info();                                                                       // makes the record and the sighting
+    const snapshot = () => JSON.stringify([sc.p.props, sc.p.cache]);
+    const before = snapshot();
+    sc.ex.eval(`forceDeleteRefreshTrigger('tHere')`);
+    assert.deepStrictEqual(sc.p.triggers.map(x => x.id), ['tOther', 'agent']);
+    assert.strictEqual(snapshot(), before, 'no cleanup of any kind: properties and cache are unchanged');
+    assert.strictEqual(sc.stored().refreshPermit.issuedFor, 'tHere', 'the permit still names the deleted trigger');
+  });
+
+  test('dev tools: only a time trigger can be deleted (an agent or an unknown id gives an error and nothing changes)', () => {
+    const sc = scenario({ triggers: ['tA'] });
+    sc.p.triggers.push({ id: 'agent', fn: 'sheetEdit', type: 'ON_EDIT', source: 'ss-1', params: {} });
+    assert.throws(() => sc.ex.eval(`forceDeleteRefreshTrigger('agent')`), /Nie znaleziono triggera czasowego agent/);
+    assert.throws(() => sc.ex.eval(`forceDeleteRefreshTrigger('nope')`), /Nie znaleziono/);
+    assert.deepStrictEqual(sc.p.triggers.map(x => x.id), ['tA', 'agent']);
+  });
+
+  test('dev tools: the list is the same as the tab\'s, with every time trigger; both functions are ordinary runs that hand the live check what they were called with; the menu item opens the sidebar', () => {
+    const sc = scenario({ permit: permit({ issuedFor: 'tHere' }), triggers: ['tHere', 'tX'] });
+    const r = plain(sc.ex.eval(`getRefreshTriggerList()`));
+    assert.deepStrictEqual([r.zone, r.triggers.error, r.triggers.items.map(x => x.id)], ['UTC+1', null, ['tHere', 'tX']]);
+    const panel = fs.readFileSync(path.join(ROOT, 'Auto Refresh Panel.js'), 'utf8');
+    assert.ok(/Controller\.checkInput\("requestForceDeleteTrigger",\{id: triggerId\}\);\s*return Controller\.run\("requestForceDeleteTrigger"/.test(panel));
+    assert.ok(/Controller\.run\("requestRefreshTriggerList"/.test(panel));
+    assert.ok(/addItem\('Triggery odświeżania','refreshTriggersSidebar'\)/.test(fs.readFileSync(path.join(ROOT, 'Menu.js'), 'utf8')));
+    const html = fs.readFileSync(path.join(ROOT, 'Refresh Triggers Sidebar.html'), 'utf8');
+    assert.ok(/\.getRefreshTriggerList\(\)/.test(html) && /\.forceDeleteRefreshTrigger\(id\)/.test(html));
+    assert.ok(/Na pewno\? Kliknij ponownie/.test(html), 'a second press within 4 s is needed');
+    assert.ok(/escapeHtml\(t\.id\)/.test(html) && /escapeHtml\(t\.handler\)/.test(html) && /escapeHtml\(t\.name\)/.test(html));
   });
 
   test('list: a record whose trigger is not there is not listed (a record never makes a trigger exist); it is dropped after a week unseen, kept before', () => {

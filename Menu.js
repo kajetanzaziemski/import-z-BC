@@ -31,7 +31,7 @@ function fullMenu() {
 
 /** "Narzędzia programisty" submenu. The live check entry exists only while the helper files are in the project. */
 function devToolsMenu_(ui){
-  const menu = ui.createMenu('Narzędzia programisty').addItem('Wszystkie triggery','listAllTriggers');
+  const menu = ui.createMenu('Narzędzia programisty').addItem('Wszystkie triggery','listAllTriggers').addItem('Triggery odświeżania','refreshTriggersSidebar');
   if(typeof liveCheckSidebar === "function") menu.addItem('Live check','liveCheckSidebar');
   return menu;
 }
@@ -42,6 +42,10 @@ function statusCheck(){
 
 function listAllTriggers(){
   return Controller.run("requestListAllTriggers",()=>StatusManager.triggerTableSidebar());
+}
+
+function refreshTriggersSidebar(){
+  return Controller.run("requestRefreshTriggersSidebar",()=>StatusManager.refreshTriggersSidebar());
 }
 
 function checkConfigSheet(){
