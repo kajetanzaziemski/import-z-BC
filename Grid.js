@@ -80,6 +80,8 @@ class Grid {
     this.formats = [];                           // [{ r1, c1, r2, c2, props: { bold, size, color, vAlign, wrap, numFmt } }]
     this.validations = {};                       // 'row,col' -> spec ({ list, strict, dropdown } / { date: true }) or null (= remove the validation)
     this.colFits = [];                           // [{ first, count }]: columns fitted to their content at the end of the commit
+    this.colWidths = {};                         // column -> pixels, set by the operation (setColumnWidth)
+    this.freezeTo = null;                        // rows to freeze at the top, set by the operation (freezeRows)
     this.condSets = [];                          // [{ range: { r1, c1, r2?, c2 }, rules: [{ formula, fontColor }], owned: [formula] }]: conditional formats set by the operation
     this.tz = init.tz || null;                   // the spreadsheet's time zone (Date <-> serial number); read lazily when needed
     this.maxCols = init.maxCols || init.cols;    // columns of the sheet (grows with inserts and with writes past the last column)
@@ -112,6 +114,10 @@ class Grid {
 
   /** Fits the columns `from`..`from + n - 1` to their content (at the end of the commit; final column numbers). */
   autoResizeColumns(from, n) { this.colFits.push({ first: from, count: n }); }
+  /** The width of a column in pixels (after the fit of the columns, so a column that is both fitted and given a width ends with the width). */
+  setColumnWidth(col, px) { this.colWidths[col] = px; }
+  /** The first n rows stay in view (a plain freeze of the top of the sheet; for a sheet whose headers are not a price list). */
+  freezeRows(n) { this.freezeTo = n; }
   getMaxColumns() { return this.maxCols; }
   /**
    * The separator of formula arguments to write formulas with: the one of the spreadsheet's locale (";" for Polish ...), on the Sheets API path too (its
@@ -338,7 +344,9 @@ class Grid {
     if (this._frozen && this._frozen.rows !== null && this._frozen.rows !== undefined) this.frozenRows = this._frozen.rows;
     this.ops = []; this.dirty = {}; this.notes = {}; this.rich = {}; this.checks = {}; this.validations = {};
     this.aligns = []; this.fills = []; this.borders = []; this.formats = []; this.rowFormats = []; this.afterOps = [];
-    this.rowSizes = {}; this.fitRows = []; this.colFits = []; this.active = null; this.condSets = [];
+    this.rowSizes = {}; this.fitRows = []; this.colFits = []; this.colWidths = {}; this.active = null; this.condSets = [];
+    if (this.freezeTo !== null) this.frozenRows = this.freezeTo;
+    this.freezeTo = null;
     this.anchorRow0 = this.anchorRow;
     this.sheetAnchorRow = this.anchorRow;
   }
@@ -582,6 +590,11 @@ class Grid {
     } }));
     this._fitRuns().forEach(run => req.push({ autoResizeDimensions: { dimensions: { sheetId: sid, dimension: 'ROWS', startIndex: run.first - 1, endIndex: run.first - 1 + run.count } } }));   // after the content is written
     this.colFits.forEach(x => req.push({ autoResizeDimensions: { dimensions: { sheetId: sid, dimension: 'COLUMNS', startIndex: x.first - 1, endIndex: x.first - 1 + x.count } } }));
+    Object.keys(this.colWidths).forEach(c => req.push({ updateDimensionProperties: {
+      range: { sheetId: sid, dimension: 'COLUMNS', startIndex: Number(c) - 1, endIndex: Number(c) },
+      properties: { pixelSize: this.colWidths[c] }, fields: 'pixelSize'
+    } }));
+    if (this.freezeTo !== null) req.push({ updateSheetProperties: { properties: { sheetId: sid, gridProperties: { frozenRowCount: this.freezeTo } }, fields: 'gridProperties.frozenRowCount' } });
 
     if (S.tpl) {                                  // a reset: the rows from the anchor down (the data) fit their content again; the rows above keep the template's heights
       const from = this.anchorRow0 - 1;
@@ -767,6 +780,7 @@ class Grid {
       const rng = sheet.getRange(m.r1, m.c1, m.r2 - m.r1 + 1, m.c2 - m.c1 + 1), p = m.props;
       if (p.bold !== undefined) rng.setFontWeight(p.bold ? 'bold' : 'normal');
       if (p.size !== undefined) rng.setFontSize(p.size);
+      if (p.family !== undefined) rng.setFontFamily(p.family);
       if (p.color !== undefined) rng.setFontColor(p.color);
       if (p.vAlign !== undefined) rng.setVerticalAlignment(p.vAlign);
       if (p.wrap !== undefined) rng.setWrapStrategy(SpreadsheetApp.WrapStrategy[p.wrap]);
@@ -795,6 +809,8 @@ class Grid {
 
     Object.keys(this.rowSizes).forEach(r => sheet.setRowHeight(Number(r), this.rowSizes[r]));
     this.colFits.forEach(x => sheet.autoResizeColumns(x.first, x.count));
+    Object.keys(this.colWidths).forEach(c => sheet.setColumnWidth(Number(c), this.colWidths[c]));
+    if (this.freezeTo !== null) sheet.setFrozenRows(this.freezeTo);
     if (typeof sheet.autoResizeRows === 'function') this._fitRuns().forEach(run => sheet.autoResizeRows(run.first, run.count));
 
     this._condServiceCommit(sheet);
@@ -880,6 +896,7 @@ class GridRange {
 
   setFontWeight(w) { return this._fmt({ bold: String(w).toLowerCase() === 'bold' }); }
   setFontSize(n) { return this._fmt({ size: n }); }
+  setFontFamily(name) { return this._fmt({ family: String(name) }); }
   setFontColor(c) { colorToApi_(c); return this._fmt({ color: c }); }       // a bad colour fails now, not at the commit
   setVerticalAlignment(a) { return this._fmt({ vAlign: String(a).toLowerCase() }); }
   setWrapStrategy(s) { return this._fmt({ wrap: wrapOf_(s) }); }
@@ -1007,6 +1024,7 @@ function formatToApi_(p) {
   const text = {};
   if (p.bold !== undefined) { text.bold = !!p.bold; fields.push('userEnteredFormat.textFormat.bold'); }
   if (p.size !== undefined) { text.fontSize = p.size; fields.push('userEnteredFormat.textFormat.fontSize'); }
+  if (p.family !== undefined) { text.fontFamily = p.family; fields.push('userEnteredFormat.textFormat.fontFamily'); }
   if (p.color !== undefined) { text.foregroundColor = colorToApi_(p.color); fields.push('userEnteredFormat.textFormat.foregroundColor'); }
   if (fields.length) format.textFormat = text;
   if (p.vAlign !== undefined) { format.verticalAlignment = String(p.vAlign).toUpperCase(); fields.push('userEnteredFormat.verticalAlignment'); }

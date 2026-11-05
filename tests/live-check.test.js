@@ -410,16 +410,19 @@ module.exports = function register(t) {
     /** the verdicts of lcVerifyRefreshLog_ on a log sheet whose row 2 is `row` (dates as { t: ms }) */
     const run = (row, over) => plain(ex.eval(`(() => { const res = []; const D = x => (x && typeof x == 'object' && 't' in x) ? new Date(x.t) : x;
       const rows = { 1: ${JSON.stringify(HEAD)}, 2: ${JSON.stringify(row)}.map(D) };
-      const sheet = ${over && over.noSheet ? 'null' : '{ getRange: (r) => ({ getValues: () => [rows[r]] }) }'};
+      const sheet = ${over && over.noSheet ? 'null' : '{ getRange: (r) => ({ getValues: () => [rows[r]], getNumberFormat: () => ' + JSON.stringify(over && 'format' in over ? over.format : 'yyyy-mm-dd hh:mm:ss "UTC+9"') + ' }) }'};
       const c = { startedAt: ${T - 1000}, error: ${over && over.error ? '{ message: "BC down" }' : 'null'}, settings: () => ({ logSheetName: ${over && over.name ? JSON.stringify(over.name) : 'undefined'} }), attempt: (n, f) => f(),
-        spreadsheet: () => ({ getSheetByName: n => { res.push(['sheet', n]); return sheet; } }),
+        spreadsheet: () => ({ getSpreadsheetTimeZone: () => 'Asia/Tokyo', getSheetByName: n => { res.push(['sheet', n]); return sheet; } }),
         expect: (n, ok) => { res.push([n, ok ? 'PASS' : 'FAIL']); return ok; }, expectEqual: (n, a, b) => res.push([n, JSON.stringify(a) === JSON.stringify(b) ? 'PASS' : 'FAIL']) };
+      Utilities.formatDate = (d, tz, p) => '+0900';
       Date.now = () => ${T + 10000}; lcVerifyRefreshLog_(c, 'Autoodświeżanie', /^Clock trigger /); return res; })()`));
     const fails = res => res.filter(r => r[1] === 'FAIL').map(r => r[0]);
     assert.deepStrictEqual(fails(run(GOOD)), []);
     assert.strictEqual(run(GOOD)[0][1], 'Dziennik pobrań', 'the default name');
     assert.strictEqual(run(GOOD, { name: 'Moje pobrania' })[0][1], 'Moje pobrania', 'the chosen name');
     assert.ok(fails(run(GOOD, { noSheet: true })).some(n => /log sheet/.test(n)), 'no log sheet');
+    assert.deepStrictEqual(fails(run(GOOD, { format: 'yyyy-mm-dd hh:mm:ss' })).length, 1, 'the time without its zone in the format');
+    assert.deepStrictEqual(fails(run(GOOD, { format: 'yyyy-mm-dd hh:mm:ss "UTC+1"' })).length, 1, 'a zone that is not the spreadsheet\'s');
     assert.deepStrictEqual(fails(run(['Odświeżanie jednego arkusza'].concat(GOOD.slice(1)))), ['log source']);
     assert.deepStrictEqual(fails(run(GOOD.slice(0, 6).concat(['Menu']))), ['log technical text']);
     assert.deepStrictEqual(fails(run([GOOD[0], { t: T - 600000 }].concat(GOOD.slice(2)))).slice(0, 1), ['log start is inside this run'], 'an older entry: nothing was written by this run');

@@ -6,13 +6,16 @@
 //   row 2 ... the entries, NEWEST FIRST: a new entry is inserted as row 2, above the previous ones and below the headers
 //
 //   A Źródło            where the refresh came from (Autoodświeżanie / Odświeżanie jednego arkusza / Odświeżanie wszystkich arkuszy)
-//   B Początek          start of the refresh (date and time)
-//   C Koniec            end of the refresh
+//   B Początek          start of the refresh (date, time and the zone: "2026-11-05 10:01:00 UTC+1")
+//   C Koniec            end of the refresh (the same)
 //   D Czas trwania      "27 m 11 s"
 //   E Status            "OK", the message of a failure the add-on handled, or the error the platform threw
-//   F Odświeżone arkusze  how many sheets, and each with its number of rows (one cell, a line per sheet)
+//   F Odświeżone arkusze  how many sheets ("2 arkusze:"), and each with its number of rows (one cell, a line per sheet)
 //   G Dane techniczne   what fired it (the clock trigger and its id, the menu item); for a trigger that deleted itself: that, and that nothing was refreshed
 //
+// Look: the headers grey like the headers of a config sheet, bold, centred, wrapped, and frozen (the first row stays in view); the entries wrap, are top aligned
+// and left aligned; the technical column is Courier New 8 pt; the columns fit their content, "Odświeżone arkusze" is 300 px wide. The row of a new entry
+// is fitted to its content (the Sheets API does not grow a row for wrapped text by itself).
 // One read of the first rows only (the log grows; the entries below are not needed to insert above them) and one commit per entry.
 // ---------------------------------------------------------------------------
 
@@ -21,7 +24,12 @@ const REFRESH_LOG_LAYOUT = {
   headerRow: 1,
   firstEntryRow: 2,
   timeFormat: "yyyy-mm-dd hh:mm:ss",
-  headerBackground: "#f1f3f4"
+  headerBackground: "#cccccc",          // the grey of the headers of a config sheet (CONFIG_HEADER_)
+  sheetsCol: 6,
+  sheetsWidth: 300,
+  technicalCol: 7,
+  technicalFont: "Courier New",
+  technicalSize: 8
 };
 
 const RefreshLogGrid = {
@@ -40,16 +48,29 @@ const RefreshLogGrid = {
       head.setValues([L.headers]);
       head.setFontWeight("bold");
       head.setBackground(L.headerBackground);
-      grid.autoResizeColumns(1, cols);
+      head.setHorizontalAlignment("center");
+      head.setWrapStrategy("WRAP");
+      grid.freezeRows(L.headerRow);
+      grid.setColumnWidth(L.sheetsCol, L.sheetsWidth);
     }
-    grid.insertRowsAfter(L.headerRow, 1, { plain: true });         // the new row takes the look of the header above it: put right below
+    grid.insertRowsAfter(L.headerRow, 1, { plain: true, fit: true });      // the new row takes the look of the header above it: put right below
     const row = grid.getRange(L.firstEntryRow, 1, 1, cols);
     row.setValues([[entry.source, entry.start, entry.end, entry.duration, entry.status, entry.sheets, entry.technical]]);
     row.setFontWeight("normal");
     row.setBackground(null);
+    row.setHorizontalAlignment("left");
     row.setVerticalAlignment("top");
     row.setWrapStrategy("WRAP");
-    grid.getRange(L.firstEntryRow, 2, 1, 2).setNumberFormat(L.timeFormat);
+    // the time and the zone it is in: the cell keeps the wall clock of the spreadsheet's zone, so the zone (as UTC+N, the offset at that moment) is part of its format -
+    // it stays true for an old entry when the zone of the spreadsheet is changed later
+    const tz = grid.getTimeZone();
+    grid.getRange(L.firstEntryRow, 2).setNumberFormat(`${L.timeFormat} "${SettingsGrid.offsetName(entry.start, tz)}"`);
+    grid.getRange(L.firstEntryRow, 3).setNumberFormat(`${L.timeFormat} "${SettingsGrid.offsetName(entry.end, tz)}"`);
+    const technical = grid.getRange(L.firstEntryRow, L.technicalCol);
+    technical.setFontFamily(L.technicalFont);
+    technical.setFontSize(L.technicalSize);
+    grid.autoResizeColumns(1, L.sheetsCol - 1);                             // every column but "Odświeżone arkusze" (fixed) fits its content
+    grid.autoResizeColumns(L.technicalCol, 1);
     grid.commit();
   }
 };

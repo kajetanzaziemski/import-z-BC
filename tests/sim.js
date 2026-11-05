@@ -111,6 +111,7 @@ class SimSheet {
   snapshot() {
     const out = this.snapshot_();
     if (this.condRules.length) out.condRules = this.snapshotCond_();
+    if (this.colPx && Object.keys(this.colPx).length) out.colPx = Object.assign({}, this.colPx);
     return out;
   }
   snapshot_() {
@@ -259,6 +260,7 @@ class SimBook {
       getLastRow: () => s.lastRow(), getLastColumn: () => s.lastCol(), getFrozenRows: () => s.frozen,
       getDataRange: () => book.rangeObj(s, 1, 1, s.lastRow() || 1, s.lastCol() || 1),
       setFrozenRows: n => { call(); s.frozen = n; },
+      setColumnWidth: (c, px) => { call(); (s.colPx = s.colPx || {})[c] = px; },
       getRange: (r, c, nr, nc) => {
         if (typeof r === 'string') {                                   // "B1:F1"
           const m = r.match(/^([A-Z]+)(\d+)(?::([A-Z]+)(\d+))?$/);
@@ -345,6 +347,7 @@ class SimBook {
       setBackground: col => fmtSet('bg', col ? serviceColor(col) : null),
       setFontWeight: w => fmtSet('bold', w === 'bold'),
       setFontSize: n => fmtSet('size', n),
+      setFontFamily: n => fmtSet('family', n),
       setFontColor: col => fmtSet('color', serviceColor(col)),
       setVerticalAlignment: a => fmtSet('vAlign', a),
       setHorizontalAlignment: a => { book.alignLog.push(a); return fmtSet('hAlign', alignCanon(a)); },
@@ -472,8 +475,9 @@ class SimBook {
         this.byId(x.properties.sheetId).frozen = x.properties.gridProperties.frozenRowCount;
       } else if (k === 'updateDimensionProperties') {
         const s = this.byId(x.range.sheetId);
-        if (x.range.dimension !== 'ROWS') throw new Error('SimBook: only row heights');
-        for (let i = x.range.startIndex; i < x.range.endIndex; i++) s.rowPx[i + 1] = x.properties.pixelSize;
+        if (x.range.dimension === 'COLUMNS') { for (let i = x.range.startIndex; i < x.range.endIndex; i++) (s.colPx = s.colPx || {})[i + 1] = x.properties.pixelSize; }
+        else if (x.range.dimension !== 'ROWS') throw new Error('SimBook: only row heights and column widths');
+        else for (let i = x.range.startIndex; i < x.range.endIndex; i++) s.rowPx[i + 1] = x.properties.pixelSize;
       } else if (k === 'autoResizeDimensions') {
         const g = x.dimensions, s = this.byId(g.sheetId);
         s.fitted[g.dimension === 'ROWS' ? 'rows' : 'columns'].push([g.startIndex + 1, g.endIndex - g.startIndex]);
@@ -531,6 +535,7 @@ class SimBook {
             else if (field === 'userEnteredFormat.numberFormat') set('numFmt', f.numberFormat ? f.numberFormat.pattern : undefined);
             else if (field === 'userEnteredFormat.textFormat.bold') set('bold', t.bold);
             else if (field === 'userEnteredFormat.textFormat.fontSize') set('size', t.fontSize);
+            else if (field === 'userEnteredFormat.textFormat.fontFamily') set('family', t.fontFamily);
             else if (field === 'userEnteredFormat.textFormat.foregroundColor') set('color', t.foregroundColor ? apiColor(t.foregroundColor) : undefined);
             else throw new Error('SimBook: unsupported repeatCell field ' + field);
             g.s.prune(r, c);

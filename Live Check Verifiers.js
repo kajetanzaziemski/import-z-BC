@@ -256,6 +256,14 @@ function lcVerifyRefreshLog_(c,source,technical){
     const isDate = d => Object.prototype.toString.call(d) === "[object Date]" && !isNaN(d);
     c.expectEqual("log source",row[0],source);
     c.expect("log start is inside this run",isDate(row[1]) && row[1].getTime() >= c.startedAt - 2000 && row[1].getTime() <= Date.now() + 2000,`the newest entry starts ${row[1]}`);
+    // the time carries its zone: the format of the start / end cell ends with the offset (UTC+N) of that moment in the spreadsheet's zone
+    if(isDate(row[1])){
+      const tz = c.spreadsheet().getSpreadsheetTimeZone();
+      const z = Utilities.formatDate(row[1],tz,"Z"), m = z.slice(3);
+      const label = `UTC${z[0]}${parseInt(z.slice(1,3),10)}${m == "00" ? "" : ":" + m}`;
+      const format = String(sheet.getRange(2,2).getNumberFormat());
+      c.expect(`log start shows its time zone (${label})`,format.endsWith(`"${label}"`),`the format of the start cell is ${JSON.stringify(format)}`);
+    }
     c.expect("log end is not before its start",isDate(row[2]) && isDate(row[1]) && row[2].getTime() >= row[1].getTime(),`${row[1]} - ${row[2]}`);
     c.expect("log has a duration and a status",String(row[3]).trim() !== "" && String(row[4]).trim() !== "",`duration ${JSON.stringify(row[3])}, status ${JSON.stringify(row[4])}`);
     if(c.error) c.expectEqual("log status is the error the run ended with",String(row[4]),String(c.error.message ?? c.error));

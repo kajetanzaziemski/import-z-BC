@@ -9,7 +9,7 @@ const { SimBook } = require('./sim');
 const { FakePlatform } = require('./platform-fakes');
 
 const ROOT = path.join(__dirname, '..');
-const GRID_FILES = ['Grid.js', 'Grid Util.js', 'Refresh Log Grid.js'];
+const GRID_FILES = ['Grid.js', 'Grid Util.js', 'Settings Grid.js', 'Refresh Log Grid.js'];
 const USE_CASE_BASE = ['Custom errors.js', 'Helper Data Store.js', 'Store.js', 'Settings.js', 'Main Settings.js', 'Controller.js', 'functions.js', 'Settings Grid.js',
   'Auto Refresh Panel.js', 'Refresh Log.js', 'RefreshAll.js', 'Menu Actions.js'];
 const MODES = ['api', 'service'];
@@ -26,7 +26,7 @@ module.exports = function register(t) {
     GRID_FILES.forEach(f => new vm.Script(fs.readFileSync(path.join(ROOT, f), 'utf8'), { filename: f }).runInContext(ctx));
     return { book, ctx, run: code => vm.runInContext(code, ctx) };
   }
-  const entry = (n) => `({ source: 'Autoodświeżanie', start: new Date(Date.UTC(2026, 10, 5, 10, ${n})), end: new Date(Date.UTC(2026, 10, 5, 10, ${n}, 30)), duration: '30 s', status: 'OK', sheets: '1 arkusz\\nDane K1 (${n} wierszy)', technical: 'Clock trigger t${n}' })`;
+  const entry = (n) => `({ source: 'Autoodświeżanie', start: new Date(Date.UTC(2026, 10, 5, 10, ${n})), end: new Date(Date.UTC(2026, 10, 5, 10, ${n}, 30)), duration: '30 s', status: 'OK', sheets: '1 arkusz:\\nDane K1 (${n} wierszy)', technical: 'Clock trigger t${n}' })`;
 
   MODES.forEach(mode => test('log sheet: the first entry makes the sheet with the headers (bold, grey) and writes the entry under them; the next one goes ABOVE it, right under the headers [' + mode + ']', () => {
     const s = gridScope(mode);
@@ -34,7 +34,7 @@ module.exports = function register(t) {
     const sh = s.book.sheets['Dziennik pobrań'];
     const v = (r, c) => (sh.cells[r + ',' + c] || {}).v ?? '';
     assert.deepStrictEqual([1, 2, 3, 4, 5, 6, 7].map(c => v(1, c)), ['Źródło', 'Początek', 'Koniec', 'Czas trwania', 'Status', 'Odświeżone arkusze', 'Dane techniczne']);
-    assert.deepStrictEqual([v(2, 1), v(2, 4), v(2, 5), v(2, 6), v(2, 7)], ['Autoodświeżanie', '30 s', 'OK', '1 arkusz\nDane K1 (1 wierszy)', 'Clock trigger t1']);
+    assert.deepStrictEqual([v(2, 1), v(2, 4), v(2, 5), v(2, 6), v(2, 7)], ['Autoodświeżanie', '30 s', 'OK', '1 arkusz:\nDane K1 (1 wierszy)', 'Clock trigger t1']);
     s.run(`RefreshLogGrid.append('Dziennik pobrań', ${entry(2)})`);
     assert.deepStrictEqual([v(2, 7), v(3, 7), v(4, 7)], ['Clock trigger t2', 'Clock trigger t1', ''], 'the newest first');
     assert.deepStrictEqual([1, 2, 3, 4, 5, 6, 7].map(c => v(1, c))[0], 'Źródło', 'the headers stay on top');
@@ -47,11 +47,43 @@ module.exports = function register(t) {
     const sh = s.book.sheets['Dziennik pobrań'];
     const f = (r, c) => (sh.cells[r + ',' + c] || { fmt: {} }).fmt;
     assert.strictEqual(f(1, 1).bold, true);
-    assert.strictEqual(f(1, 1).bg, '#f1f3f4');
+    assert.strictEqual(f(1, 1).bg, '#cccccc', 'the grey of the headers of a config sheet');
     [2, 3].forEach(r => { assert.ok(!f(r, 1).bold, 'row ' + r + ' not bold'); assert.ok(!f(r, 1).bg, 'row ' + r + ' no fill'); });
-    assert.deepStrictEqual([f(2, 2).numFmt, f(2, 3).numFmt], ['yyyy-mm-dd hh:mm:ss', 'yyyy-mm-dd hh:mm:ss']);
+    assert.deepStrictEqual([f(2, 2).numFmt, f(2, 3).numFmt], ['yyyy-mm-dd hh:mm:ss "UTC+9"', 'yyyy-mm-dd hh:mm:ss "UTC+9"'], 'date, time AND the zone (the sim\'s spreadsheet is in UTC+9)');
     assert.strictEqual(f(2, 6).wrap, 'WRAP');
     assert.strictEqual(f(2, 6).vAlign, 'top');
+  }));
+
+  MODES.forEach(mode => test('log sheet: headers bold, centred, wrapped and FROZEN; "Odświeżone arkusze" 300 px; the technical column Courier New 8 pt on every entry; entries left aligned, top, wrapped; the new row is fitted to its content [' + mode + ']', () => {
+    const s = gridScope(mode);
+    s.run(`RefreshLogGrid.append('Dziennik pobrań', ${entry(1)})`);
+    s.run(`RefreshLogGrid.append('Dziennik pobrań', ${entry(2)})`);
+    const sh = s.book.sheets['Dziennik pobrań'];
+    const f = (r, c) => (sh.cells[r + ',' + c] || { fmt: {} }).fmt;
+    for (let c = 1; c <= 7; c++) assert.deepStrictEqual([f(1, c).bold, f(1, c).hAlign, f(1, c).wrap], [true, 'center', 'WRAP'], 'header ' + c);
+    for (const r of [2, 3]) {
+      for (let c = 1; c <= 7; c++) assert.deepStrictEqual([f(r, c).hAlign, f(r, c).vAlign, f(r, c).wrap], ['left', 'top', 'WRAP'], `entry ${r} column ${c}`);
+      assert.deepStrictEqual([f(r, 7).family, f(r, 7).size], ['Courier New', 8], 'technical column, row ' + r);
+      assert.ok(!f(r, 5).family && !f(r, 5).size, 'only the technical column has the small monospaced font');
+    }
+    const snap = sh.snapshot();
+    assert.strictEqual(snap.frozen, 1, 'the header row is frozen');
+    assert.strictEqual((snap.colPx || {})[6], 300, '"Odświeżone arkusze" is 300 px wide');
+    assert.deepStrictEqual(Object.keys(snap.colPx || {}), ['6'], 'the other columns are fitted, not fixed');
+    assert.ok(snap.fitted.columns.some(x => x[0] === 1 && x[1] === 5) && snap.fitted.columns.some(x => x[0] === 7 && x[1] === 1), 'columns A-E and G fit their content: ' + JSON.stringify(snap.fitted.columns));
+    assert.ok(snap.fitted.rows.length > 0, 'the new row is fitted to its wrapped content');
+  }));
+
+  MODES.forEach(mode => test('log sheet: the time cells carry the zone of the moment they were written in (UTC+N in the format), per cell; the freeze and the width are set once, with the sheet [' + mode + ']', () => {
+    const s = gridScope(mode);
+    s.run(`RefreshLogGrid.append('Dziennik pobrań', ${entry(1)})`);
+    const sh = s.book.sheets['Dziennik pobrań'];
+    sh.colPx[6] = 410;                                                                      // the user widens the column
+    sh.frozen = 0;                                                                          // and unfreezes the header
+    s.run(`RefreshLogGrid.append('Dziennik pobrań', ${entry(2)})`);
+    assert.strictEqual(sh.colPx[6], 410, 'a later entry does not set the width again');
+    assert.strictEqual(sh.frozen, 0, 'nor the freeze');
+    assert.ok(/UTC\+9"$/.test((sh.cells['2,2'] || { fmt: {} }).fmt.numFmt) && /UTC\+9"$/.test((sh.cells['3,3'] || { fmt: {} }).fmt.numFmt));
   }));
 
   MODES.forEach(mode => test('log sheet: an entry is one commit, and the grid reads only the first rows (the log grows; the entries below are not read) [' + mode + ']', () => {
@@ -86,7 +118,7 @@ module.exports = function register(t) {
     u.ex.eval(`RefreshLog.run('Autoodświeżanie', 'Clock trigger t1', () => { RefreshLog.noteSheet('Dane K1', 1234); RefreshLog.noteSheet('Dane K3', 1); RefreshLog.noteSheet('Dane K4', 22); })`);
     const [e] = u.entries();
     assert.deepStrictEqual([e.name, e.source, e.status, e.technical], ['Dziennik pobrań', 'Autoodświeżanie', 'OK', 'Clock trigger t1']);
-    assert.strictEqual(e.sheets, '3 arkusze\nDane K1 (1234 wiersze)\nDane K3 (1 wiersz)\nDane K4 (22 wiersze)');
+    assert.strictEqual(e.sheets, '3 arkusze:\nDane K1 (1234 wiersze)\nDane K3 (1 wiersz)\nDane K4 (22 wiersze)');
     assert.ok(Date.parse(e.start) <= Date.parse(e.end));
     assert.ok(/^\d+ s$|^\d+ m \d+ s$/.test(e.duration), e.duration);
     const plural = n => u.ex.eval(`[RefreshLog.plural_(${n}, 'a', 'b', 'c')]`)[0];
@@ -98,7 +130,7 @@ module.exports = function register(t) {
     u.ex.eval(`RefreshLog.run('Odświeżanie wszystkich arkuszy', 'Menu', () => { RefreshLog.noteProblem('Brak tabeli w arkuszu konfiguracji „K2”'); RefreshLog.noteProblem('BC (Dane K3): Authorization_RequestDenied: brak uprawnień'); RefreshLog.noteSheet('Dane K1', 5); })`);
     const [e] = u.entries();
     assert.strictEqual(e.status, 'Brak tabeli w arkuszu konfiguracji „K2”; BC (Dane K3): Authorization_RequestDenied: brak uprawnień');
-    assert.strictEqual(e.sheets, '1 arkusz\nDane K1 (5 wierszy)');
+    assert.strictEqual(e.sheets, '1 arkusz:\nDane K1 (5 wierszy)');
     const none = useCase();
     none.ex.eval(`RefreshLog.run('Odświeżanie jednego arkusza', 'Menu', () => {})`);
     assert.strictEqual(none.entries()[0].sheets, '0 arkuszy');
@@ -108,7 +140,7 @@ module.exports = function register(t) {
     const u = useCase();
     assert.throws(() => u.ex.eval(`RefreshLog.run('Odświeżanie wszystkich arkuszy', 'Menu', () => { RefreshLog.noteSheet('Dane K1', 7); throw new Error('Exceeded maximum execution time'); })`), /Exceeded maximum execution time/);
     const [e] = u.entries();
-    assert.deepStrictEqual([e.status, e.sheets], ['Exceeded maximum execution time', '1 arkusz\nDane K1 (7 wierszy)']);
+    assert.deepStrictEqual([e.status, e.sheets], ['Exceeded maximum execution time', '1 arkusz:\nDane K1 (7 wierszy)']);
   });
 
   test('entry: a refresh inside a refresh is ONE entry (the outer one); notes outside of any refresh are ignored', () => {
@@ -117,7 +149,7 @@ module.exports = function register(t) {
     u.ex.eval(`RefreshLog.run('Odświeżanie wszystkich arkuszy', 'Menu', () => { RefreshLog.run('Odświeżanie jednego arkusza', 'inner', () => RefreshLog.noteSheet('Dane K1', 2)); })`);
     const list = u.entries();
     assert.strictEqual(list.length, 1);
-    assert.deepStrictEqual([list[0].source, list[0].sheets], ['Odświeżanie wszystkich arkuszy', '1 arkusz\nDane K1 (2 wiersze)']);
+    assert.deepStrictEqual([list[0].source, list[0].sheets], ['Odświeżanie wszystkich arkuszy', '1 arkusz:\nDane K1 (2 wiersze)']);
   });
 
   test('entry: a log that cannot be written never fails the refresh (console.error and a note), and the next refresh is logged again', () => {
@@ -147,8 +179,8 @@ module.exports = function register(t) {
     u.ex.eval(`RefreshAll.all()`);
     u.ex.eval(`MenuActions.activeConfigSheet = () => 'K2'; MenuActions.refreshActive()`);
     const [all, one] = u.entries();
-    assert.deepStrictEqual([all.source, all.sheets, all.technical, all.status], ['Odświeżanie wszystkich arkuszy', '2 arkusze\nDane K1 (10 wierszy)\nDane K2 (20 wierszy)', 'Menu: refresh all sheets', 'OK']);
-    assert.deepStrictEqual([one.source, one.sheets, one.technical], ['Odświeżanie jednego arkusza', '1 arkusz\nDane K2 (20 wierszy)', 'Menu: refresh one sheet (config sheet: K2)']);
+    assert.deepStrictEqual([all.source, all.sheets, all.technical, all.status], ['Odświeżanie wszystkich arkuszy', '2 arkusze:\nDane K1 (10 wierszy)\nDane K2 (20 wierszy)', 'Menu: refresh all sheets', 'OK']);
+    assert.deepStrictEqual([one.source, one.sheets, one.technical], ['Odświeżanie jednego arkusza', '1 arkusz:\nDane K2 (20 wierszy)', 'Menu: refresh one sheet (config sheet: K2)']);
   });
 
   test('menu: on a sheet that is not a config sheet nothing is refreshed and nothing is logged; a failing sheet stops the run and the entry carries the error', () => {
@@ -158,14 +190,14 @@ module.exports = function register(t) {
     u.ex.eval(`getMainSettings = () => ({ getSheetList: () => [{ configSheet: 'K1', resultSheet: 'R1' }, { configSheet: 'BAD', resultSheet: 'R2' }, { configSheet: 'K2', resultSheet: 'R3' }] })`);
     assert.throws(() => u.ex.eval(`RefreshAll.all()`), /Brak połączenia/);
     const [e] = u.entries();
-    assert.deepStrictEqual([e.status, e.sheets], ['Brak połączenia', '1 arkusz\nR1 (10 wierszy)']);
+    assert.deepStrictEqual([e.status, e.sheets], ['Brak połączenia', '1 arkusz:\nR1 (10 wierszy)']);
   });
 
   test('automatic refresh: RefreshAll.scheduled writes "Autoodświeżanie" with the clock trigger in the technical text; a trigger that retires writes an entry that says nothing was refreshed', () => {
     const u = useCase(); u.ex.eval(STUBS);
     u.ex.eval(`RefreshAll.scheduled('Clock trigger t1')`);
     const [e] = u.entries();
-    assert.deepStrictEqual([e.source, e.technical, e.sheets, e.status], ['Autoodświeżanie', 'Clock trigger t1', '1 arkusz\nDane K1 (10 wierszy)', 'OK']);
+    assert.deepStrictEqual([e.source, e.technical, e.sheets, e.status], ['Autoodświeżanie', 'Clock trigger t1', '1 arkusz:\nDane K1 (10 wierszy)', 'OK']);
     const text = fs.readFileSync(path.join(ROOT, 'ScheduleRefresh.js'), 'utf8');
     assert.ok(/RefreshAll\.scheduled\(ScheduleRefresh\.triggerText_\(e\.triggerUid,false\)\)/.test(text) && /RefreshAll\.scheduled\(ScheduleRefresh\.triggerText_\(e\.triggerUid,true\)\)/.test(text));
     assert.ok(/logRetired_\(e\.triggerUid,false\)/.test(text) && /logRetired_\(e\.triggerUid,true\)/.test(text), 'both handlers log a retired trigger');

@@ -115,3 +115,8 @@ The sheet (name chosen in the sidebar, Ogólne, "Arkusz dziennika pobrań"; defa
 Status ("OK", the handled failure, or the platform error), Odświeżone arkusze (one cell: "2 arkusze" and a line "name (n wierszy)" per sheet), Dane techniczne (in English: "Clock trigger <id>" / "Menu: refresh one sheet (config sheet: K1)" / "Menu: refresh all sheets"). NEWEST FIRST: an entry is inserted as row 2, under the headers and above the older entries
 (`Grid.insertRowsAfter(1, 1)` with the row reformatted: not bold, no grey; the grid reads only the first rows and commits once per entry). The name may not be the settings sheet, a config sheet or a result sheet (`MainSettings.setLogSheetName`).
 An older log sheet stays where it is when the name is changed (nothing is renamed or moved).
+
+Look of the log sheet (`Refresh Log Grid.js`): headers grey (`#cccccc`, the grey of a config sheet's headers), bold, centred, wrapped, the header row frozen; entries left aligned, top, wrapped, rows fitted to their content; the technical column Courier New 8 pt; the columns fit
+their content, "Odświeżone arkusze" is 300 px (width and freeze are set when the sheet is made, never again, so the user's changes stay); "Odświeżone arkusze" starts with "N arkusze:" (no colon for "0 arkuszy": nothing follows). The start and end carry
+their time zone IN THE FORMAT of the cell (`yyyy-mm-dd hh:mm:ss "UTC+1"`, the offset of that moment): a cell keeps the wall clock of the spreadsheet's zone, so an old entry stays true when the zone is changed later. Needed in Grid.js: `setFontFamily`,
+`setColumnWidth`, `freezeRows`.

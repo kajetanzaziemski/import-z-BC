@@ -167,7 +167,7 @@ The sidebar button "Wyłącz autoodświeżanie" (action `requestTurnOffRefresh`)
 A failure of the check in `onOpen` itself is no longer silent: it is `console.error` in the execution log and a note on the live check run.
 
 ## The download log (hashes re-pinned)
-`lcVerifyRefreshLog_` reads the log sheet as the user sees it: the refresh that just ran must be the newest entry (row 2): its source, a start inside the run, an end not before it, a duration and a status (the error message when the run failed) and the technical text.
+`lcVerifyRefreshLog_` reads the log sheet as the user sees it: the refresh that just ran must be the newest entry (row 2): its source, a start inside the run, an end not before it, a duration and a status (the error message when the run failed) and the technical text; the start cell's format must end with the spreadsheet's zone for that moment (`"UTC+1"`).
 It is part of `menuRefreshCurrentSheet` (a config sheet), `menuRefreshAll`, the scheduled refresh, and the retired trigger (whose entry says nothing was refreshed; the retired check no longer fails on the log sheet that entry may have made). The sidebar functions
 `getRefreshLogSheetName` / `setRefreshLogSheetName` are `requestRefreshLogSheetName` / `requestSetRefreshLogSheetName` (a refused name - already a sheet of the add-on, or over 100 characters - is an expected error).
 
