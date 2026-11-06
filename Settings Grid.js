@@ -53,8 +53,8 @@ const SettingsGrid = {
   /** The menu path the failure message sends the user to; bold in the sheet (rich text) and in the sidebar. */
   messagePath: "Import z BC -> Ustawienia",
 
-  /** The sentence for a set-up that failed because Apps Script refuses one more clock trigger (a user may have 5 of them for an add-on). */
-  triggerLimitText: "Przekroczono limit 5 wyzwalaczy czasowych na użytkownika (Apps Script). Usuń niepotrzebne triggery (Rozszerzenia -> Import z BC -> Narzędzia programisty -> Triggery odświeżania) i spróbuj ponownie.",
+  /** The sentence for a set-up that failed because Apps Script refuses one more clock trigger (a user may have 5 of them for an add-on); the list of the files the user refreshes is in the same tab. */
+  triggerLimitText: "Możesz odświeżać automatycznie najwyżej 5 plików. Zobacz listę aktualnie odświeżanych arkuszy poniżej.",
 
   /**
    * The lines of the status message for a report ({ ok, off, when, frequency, next, current, limit }); `stamp` writes a time. Used for the message in the settings sheet

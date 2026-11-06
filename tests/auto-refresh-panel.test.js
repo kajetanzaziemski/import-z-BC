@@ -417,7 +417,7 @@ module.exports = function register(t) {
     assert.strictEqual(e.limit, true);
     assert.strictEqual(e.lines.length, 3);
     assert.strictEqual(e.lines[0], 'Ustawienia odświeżania nie zostały zaktualizowane!');
-    assert.ok(/^Przekroczono limit 5 wyzwalaczy czasowych na użytkownika/.test(e.lines[1]) && /Triggery odświeżania/.test(e.lines[1]), e.lines[1]);
+    assert.strictEqual(e.lines[1], 'Możesz odświeżać automatycznie najwyżej 5 plików. Zobacz listę aktualnie odświeżanych arkuszy poniżej.');
     assert.ok(/^Próba zmiany ustawień została podjęta/.test(e.lines[2]));
     assert.ok(/zbyt wiele wyzwalaczy/.test(e.details));
   });
