@@ -58,7 +58,7 @@ const RefreshAll = {
       }
       getMainSettings().setLastRefresh(new Date());
       return true;
-    },{opening: true, limitSeconds: REFRESH_TIME_LIMIT_SECONDS});
+    },{limitSeconds: REFRESH_TIME_LIMIT_SECONDS});
   },
 
   /** The attempt failed: a note on the time of the last refresh. Never hides the error that is on its way. */

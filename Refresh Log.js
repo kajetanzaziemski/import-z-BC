@@ -10,8 +10,9 @@
 //   RefreshLog.noteFailedSheet(name, error)     (RefreshSheet) the data of this sheet could not be pulled - the platform threw an error, or BC answered with an error document: the status only says
 //                                               "Błąd ❗️ Przy pobieraniu danych dla arkusza X." (all the failed sheets: "dla arkuszy: X, Y."), the errors go to the technical column,
 //                                               each with its sheet: "Errors: X: <error> | Y: <error>"
-//   RefreshLog.run(..., {opening, limitSeconds})  a scheduled run opens its entry when it STARTS (status "Nieznany (w trakcie lub błąd wykonania)", no end) and completes it at the end,
-//                                               so a run the platform kills at 30 minutes still shows; checkTime() / timeIsUp() fail it after limitSeconds (1700) with the log written
+//   Every run opens its entry when it STARTS (status "Nieznany (w trakcie lub błąd wykonania)", no end), writes it over after each sheet with what is known and completes it at
+//                                               the end, so a run the platform kills still shows. The row is found again by the hash of its cells; not found (edited by the user) = a new row.
+//   RefreshLog.run(..., {limitSeconds})         checkTime() / timeIsUp() fail the run after limitSeconds (the scheduled one: 1700) with the log written
 //   RefreshLog.logOnly(source, technical, status)   an entry for a run that refreshed nothing on purpose (a clock trigger that deleted itself)
 //
 // Writing the log never fails a refresh: a failure there is console.error and a note on the live check run.
@@ -35,15 +36,16 @@ const RefreshLog = {
   session_: null,
 
   /**
-   * @param opts {{opening?: boolean, limitSeconds?: number}} `opening`: an entry with just the start and what is known is written when the run starts (status
-   *   REFRESH_LOG_UNKNOWN) and completed at the end - a run the platform kills leaves it as it was. `limitSeconds`: checkTime() fails after that long.
+   * An entry with just the start and what is known is written when the run STARTS (status REFRESH_LOG_UNKNOWN), written over again after every sheet with what is
+   * known by then, and completed at the end - a run the platform kills leaves the last of these. The row is found again by its hash (RefreshLogGrid.rowHash).
+   * @param opts {{limitSeconds?: number}} `limitSeconds`: checkTime() fails after that long.
    */
   run(source, technical, work, opts){
     if(RefreshLog.session_) return work();
     const start = new Date();
     const session = RefreshLog.session_ = {source: source, technical: technical, start: start, sheets: [], problems: [], failures: [], error: null,
-      deadline: opts && opts.limitSeconds ? start.getTime() + opts.limitSeconds * 1000 : null, limitSeconds: opts && opts.limitSeconds, opened: null};
-    if(opts && opts.opening) session.opened = RefreshLog.open_(session);
+      deadline: opts && opts.limitSeconds ? start.getTime() + opts.limitSeconds * 1000 : null, limitSeconds: opts && opts.limitSeconds, hash: null};
+    session.hash = RefreshLog.open_(session);
     try{
       return work();
     }catch(err){
@@ -51,7 +53,7 @@ const RefreshLog = {
       throw err;
     }finally{
       RefreshLog.session_ = null;
-      RefreshLog.write_(RefreshLog.entry_(session,new Date()),session.opened);
+      RefreshLog.write_(RefreshLog.entry_(session,new Date()),session.hash);
     }
   },
 
@@ -66,20 +68,37 @@ const RefreshLog = {
     if(RefreshLog.timeIsUp()) throw new RefreshTimeLimitError(`Przekroczono limit czasu odświeżania (${RefreshLog.session_.limitSeconds} s).`);
   },
 
-  /** The entry of a run that has just started: the start and what is known, no end. Returns the entry written, or null when it could not be written. */
+  /** The entry of a run that has just started: the start and what is known, no end. Returns the hash of the row written, or null when it could not be written. */
   open_(session){
-    const entry = {source: session.source, start: session.start, end: null, duration: "", status: REFRESH_LOG_UNKNOWN, sheets: "", technical: session.technical};
     try{
-      RefreshLogGrid.append(MainSettings.getLogSheetName(),entry);
-      return entry;
+      return RefreshLogGrid.append(MainSettings.getLogSheetName(),RefreshLog.openEntry_(session));
     }catch(err){
       RefreshLog.reportWriteFailure_(err);
       return null;
     }
   },
 
+  /** What is known while the run goes on: the sheets so far (and the errors so far in the technical text); no end, no duration, the status unknown. */
+  openEntry_(session){
+    return Object.assign(RefreshLog.entry_(session,session.start),{end: null, duration: "", status: REFRESH_LOG_UNKNOWN});
+  },
+
+  /** A sheet is done: the row of the run is written over with what is known now. A failure here is not reported (the next write, at the end, reports it). */
+  progress_(){
+    const session = RefreshLog.session_;
+    if(!session || !session.hash) return;
+    try{
+      session.hash = RefreshLogGrid.update(MainSettings.getLogSheetName(),session.hash,RefreshLog.openEntry_(session));
+    }catch(err){
+      dbgLog(`The download log not updated after a sheet: ${err}`);
+    }
+  },
+
   noteSheet(name, rows){
-    if(RefreshLog.session_) RefreshLog.session_.sheets.push({name: name, rows: rows});
+    if(RefreshLog.session_){
+      RefreshLog.session_.sheets.push({name: name, rows: rows});
+      RefreshLog.progress_();
+    }
   },
 
   noteProblem(text){
@@ -92,7 +111,10 @@ const RefreshLog = {
   },
 
   noteFailedSheet(name, error){
-    if(RefreshLog.session_) RefreshLog.session_.failures.push({name: String(name), message: String(error && error.message || error)});
+    if(RefreshLog.session_){
+      RefreshLog.session_.failures.push({name: String(name), message: String(error && error.message || error)});
+      RefreshLog.progress_();
+    }
   },
 
   logOnly(source, technical, status){
@@ -130,9 +152,9 @@ const RefreshLog = {
     };
   },
 
-  write_(entry, opened){
+  write_(entry, hash){
     try{
-      if(opened) RefreshLogGrid.update(MainSettings.getLogSheetName(),opened,entry);
+      if(hash) RefreshLogGrid.update(MainSettings.getLogSheetName(),hash,entry);
       else RefreshLogGrid.append(MainSettings.getLogSheetName(),entry);
     }catch(err){
       RefreshLog.reportWriteFailure_(err);

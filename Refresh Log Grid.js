@@ -39,6 +39,7 @@ const RefreshLogGrid = {
    * Inserts one entry as the first row under the headers. The sheet is made (with its headers) when it is not there.
    * @param sheetName {String}
    * @param entry {{source: String, start: Date, end: Date, duration: String, status: String, sheets: String, technical: String}}
+   * @returns {String} The hash of the row as written (rowHash), for update() to find it again.
    */
   append(sheetName, entry) {
     const L = REFRESH_LOG_LAYOUT;
@@ -69,7 +70,36 @@ const RefreshLogGrid = {
       column(L.technicalCol).setFontFamily(L.technicalFont);
       column(L.technicalCol).setFontSize(L.technicalSize);
     }
+    RefreshLogGrid.commit_(grid);
+    return RefreshLogGrid.rowHash(RefreshLogGrid.values_(entry));
+  },
+
+  /** One commit, then a flush: the row is in the sheet when this returns (a run the platform ends right after still leaves it). */
+  commit_(grid) {
     grid.commit();
+    try { SpreadsheetApp.flush(); } catch (err) { dbgLog(`Log sheet not flushed: ${err}`); }
+  },
+
+  /** The cells of an entry, in the order of the columns (an entry that has no end yet has an empty cell there). */
+  values_(entry) {
+    return [entry.source, entry.start, entry.end ?? "", entry.duration ?? "", entry.status, entry.sheets ?? "", entry.technical];
+  },
+
+  /**
+   * A hash of the cells of a row: the same for the values an entry is written with and for the values read back from the sheet (a date counts to the second, any
+   * other cell as its text). A row the user has edited has another hash. (cyrb53: not a security measure, only a fingerprint.)
+   */
+  rowHash(values) {
+    const text = values.map(x => Object.prototype.toString.call(x) === "[object Date]" ? "d" + Math.round(x.getTime() / 1000) : "s" + String(x ?? "")).join("\u0001");
+    let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text.charCodeAt(i);
+      h1 = Math.imul(h1 ^ ch, 2654435761);
+      h2 = Math.imul(h2 ^ ch, 1597334677);
+    }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
   },
 
   /**
@@ -79,31 +109,32 @@ const RefreshLogGrid = {
    */
   writeEntry_(grid, rowNumber, entry) {
     const L = REFRESH_LOG_LAYOUT;
-    grid.getRange(rowNumber, 1, 1, L.headers.length).setValues([[entry.source, entry.start, entry.end ?? "", entry.duration ?? "", entry.status, entry.sheets ?? "", entry.technical]]);
+    grid.getRange(rowNumber, 1, 1, L.headers.length).setValues([RefreshLogGrid.values_(entry)]);
     const tz = grid.getTimeZone();
     grid.getRange(rowNumber, 2).setNumberFormat(`${L.timeFormat} "${SettingsGrid.offsetName(entry.start, tz)}"`);
     if (entry.end) grid.getRange(rowNumber, 3).setNumberFormat(`${L.timeFormat} "${SettingsGrid.offsetName(entry.end, tz)}"`);
   },
 
   /**
-   * Completes the entry that was opened when the run started (`opened`: the entry as it was written then): the row is found among the first rows by its status
-   * (REFRESH_LOG_UNKNOWN), its start (to the second) and the technical text; other runs may have put entries above it meanwhile. The row is fitted to its content.
-   * When the row cannot be found (the sheet was cleared, renamed ...) the entry is added as a new one, so nothing is lost.
+   * Writes the entry over the row of the previous one: the entry the run wrote last (when it started, or after the previous sheet). The row is found among the first
+   * rows by the HASH of its cells (rowHash) - other runs may have put entries above it meanwhile. The row is fitted to its content.
+   * When the row is not found (the user edited it, the sheet was cleared, renamed ...) the entry is added as a new row, so nothing is lost.
+   * @param previousHash {String} What append() / update() returned for the previous entry of this run.
+   * @returns {String} The hash of the row as written now.
    */
-  update(sheetName, opened, entry) {
+  update(sheetName, previousHash, entry) {
     const L = REFRESH_LOG_LAYOUT;
     const grid = Grid.open({ sheetName: sheetName, window: REFRESH_LOG_LOOKUP_ROWS });
     if (!grid) return RefreshLogGrid.append(sheetName, entry);
     let found = 0;
     for (let r = L.firstEntryRow; r <= grid.rows && !found; r++) {
-      const v = grid.getRange(r, 1, 1, L.headers.length).getValues()[0];
-      const at = v[1] && typeof v[1].getTime == "function" ? v[1].getTime() : NaN;
-      if (v[4] === opened.status && v[6] === opened.technical && v[0] === opened.source && Math.abs(at - opened.start.getTime()) < 1000) found = r;
+      if (RefreshLogGrid.rowHash(grid.getRange(r, 1, 1, L.headers.length).getValues()[0]) === previousHash) found = r;
     }
     if (!found) return RefreshLogGrid.append(sheetName, entry);
     RefreshLogGrid.writeEntry_(grid, found, entry);
     grid.fitRows.push(found);
-    grid.commit();
+    RefreshLogGrid.commit_(grid);
+    return RefreshLogGrid.rowHash(RefreshLogGrid.values_(entry));
   }
 };
 
