@@ -41,3 +41,15 @@ the interval, at least an hour); the next refresh is the last one + the interval
 and permit; the legacy trigger then finds a permit that is not its own and deletes itself). Nothing else is used as a marker: every set-up of this version writes a permit
 (also when it switches the refresh off, then `issuedFor` is null), and a permit is never deleted, so no extra document property is needed. Only the sidebar uses the guess;
 the trigger logic (`ScheduleRefresh.current`) does not.
+
+## The two stamps of a scheduled run on the permit
+
+| stamp | written | by | meaning |
+|---|---|---|---|
+| `lastFired` | when the trigger fires and holds the permit, **saved at once** (`Settings.markRefreshFired`, `ScheduleRefresh.stampFired_`) | the handlers, before the refresh | the trigger is alive; a run that was cut off by the platform (30 min), failed or is still going leaves it |
+| `lastRun` (+ `lastDurationMs`, `lastSheets`, `nextRefresh`) | when the run **completed** (`touchRefreshPermit` from `finishRun_`) | a run that was fully correct | the last refresh the user is told about |
+
+Where each is used: "is the trigger alive" - a permit that names a trigger which is not this user's but was used lately (`current`), the count of recent clock triggers, forgetting a record in
+the registry - takes the latest sign of life (set up, fired, completed), so a trigger whose runs always fail or time out is still known to exist. The anchor of the schedule when the permit
+has no planned time (`current`, `nextAfterRun_`) is the firing. "Ostatnio odświeżone" in the panel and the list of triggers show the completed run; when the trigger fired after it the panel adds
+"Ostatnie uruchomienie: ... (w trakcie, przerwane lub zakończone błędem)". The user's record of the trigger (Refresh Registry) keeps `lastFired` as well.

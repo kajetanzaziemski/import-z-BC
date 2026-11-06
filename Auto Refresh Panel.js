@@ -39,6 +39,8 @@ const AutoRefreshPanel = {
         sheets: Array.isArray(permit.lastSheets) ? permit.lastSheets : null
       };
     }
+    // the trigger fired after the last completed run: a run in progress, cut off by the platform or failed (the permit's `lastFired` is the first stamp of a run, `lastRun` the second)
+    if(permit?.lastFired && permit.lastFired > (permit.lastRun ?? 0)) out.attempt = {at: stamp(permit.lastFired)};
     out.setupError = AutoRefreshPanel.setupError_(tz);
     out.sheet = AutoRefreshPanel.fromSheet_(now, tz, current, stamp);
     out.triggers = AutoRefreshPanel.triggerList_(now, tz, permit, current);

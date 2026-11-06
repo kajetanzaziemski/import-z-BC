@@ -814,6 +814,38 @@ module.exports = function register(t) {
     assert.strictEqual(permit(run).lastRun, undefined, 'not recorded');
   });
 
+  test('permit stamps: "fired" is written (and saved) when the trigger fires - before the refresh, so a run that is cut off or fails leaves it; "completed" (lastRun) only by a run that completed', () => {
+    const start = { settings: { refreshPermit: { issuedFor: 'trig-A', lastRefresh: 1, intervalHours: 6, nextRefresh: Date.now() } } };
+    const cut = scenario(start);
+    cut.ex.eval(`RefreshAll.scheduled = () => { globalThis.__duringStored = JSON.stringify(JSON.parse(__props_document()).refreshPermit); throw new Error('Exceeded maximum execution time'); }`.replace('__props_document()', 'PropertiesService.getDocumentProperties().getProperty("importSettingsArray")'));
+    assert.throws(() => cut.ex.eval(`autoRefreshHandler(${event('trig-A')})`), /Exceeded/);
+    const during = JSON.parse(cut.ex.eval(`__duringStored`));
+    assert.strictEqual(typeof during.lastFired, 'number', 'stored while the refresh was still running (not with the closing actions)');
+    assert.strictEqual(during.lastRun, undefined);
+    cut.save();
+    assert.strictEqual(permit(cut).lastRun, undefined, 'a failed run is not completed');
+    assert.strictEqual(typeof permit(cut).lastFired, 'number');
+    const ok = scenario(start);
+    ok.ex.eval(`autoRefreshHandler(${event('trig-A')})`);
+    ok.save();
+    assert.ok(permit(ok).lastFired <= permit(ok).lastRun, 'fired first, completed after');
+    // not the permit holder: no stamp
+    const other = scenario({ settings: { refreshPermit: { issuedFor: 'trig-B', lastRefresh: 1, intervalHours: 6 } } });
+    other.ex.eval(`autoRefreshHandler(${event('trig-A')})`);
+    assert.strictEqual(permit(other).lastFired, undefined);
+  });
+
+  test('permit stamps: a trigger that fires but never completes is still alive (a foreign trigger used lately; the schedule runs from the firing)', () => {
+    const HOUR = 3600000, now = Date.now();
+    const fired = scenario({ settings: { refreshPermit: { issuedFor: 'other', lastRefresh: now - 100 * HOUR, lastRun: now - 90 * HOUR, lastFired: now - 2 * HOUR, intervalHours: 24 } } });
+    const c = plain(fired.ex.eval(`ScheduleRefresh.current(new Date(${now}))`));
+    assert.strictEqual(c.active, true, 'fired lately although the last completed run is old');
+    assert.strictEqual(c.foreign, true);
+    assert.strictEqual(Date.parse(c.next), now - 2 * HOUR + 24 * HOUR, 'from the firing');
+    const dead = scenario({ settings: { refreshPermit: { issuedFor: 'other', lastRefresh: now - 100 * HOUR, lastRun: now - 90 * HOUR, lastFired: now - 80 * HOUR, intervalHours: 24 } } });
+    assert.strictEqual(plain(dead.ex.eval(`ScheduleRefresh.current(new Date(${now}))`)).active, false);
+  });
+
   test('trigger: a refresh that fails writes no message; a message that cannot be written does not fail the run (the permit still records it)', () => {
     const failing = scenario({ settings: { refreshPermit: { issuedFor: 'trig-A', lastRefresh: 1, intervalHours: 6, nextRefresh: Date.now() } } });
     failing.ex.eval(MSG);

@@ -3,7 +3,7 @@
 //
 //   import settings (document scope, one StorageObject under "importSettingsArray")
 //       Settings.addonStatus() / setAddonStatus(x), settingsSheetName() / setSettingsSheetName(name),
-//       refreshPermit() / issueRefreshPermit(triggerId, hours) / updateRefreshPermit(permit) / touchRefreshPermit(triggerId),
+//       refreshPermit() / issueRefreshPermit(triggerId, hours) / updateRefreshPermit(permit) / touchRefreshPermit(triggerId) / markRefreshFired(triggerId),
 //       get(name) / set(name, value)  for the rest
 //   BC connection (tenant, environment, company; each in document, user and script scope; the active one is document > user > script)
 //       Settings.bc()  -> the GlobalSettings object ("Global Add-on Settings.js")
@@ -58,6 +58,19 @@ const Settings = {
     if (extra) Object.assign(current, extra);                              // what the run did: lastDurationMs, lastSheets (the side panel shows them)
     if (current.intervalHours && !(extra && extra.nextRefresh)) current.nextRefresh = current.lastRun + current.intervalHours * 3600000;
     Settings.updateRefreshPermit(current);
+    return true;
+  },
+
+  /**
+   * The permit has two stamps for a scheduled run: `lastFired` - the trigger fired and holds the permit (written at once, so a run the platform ends leaves it) - and
+   * `lastRun` - the run COMPLETED (touchRefreshPermit). Only when the permit is still issued for the given trigger. Saved straight away (not with the closing actions).
+   */
+  markRefreshFired(triggerUid) {
+    const current = Settings.store().getFreshProperty("refreshPermit");
+    if (!current || current.issuedFor !== triggerUid) return false;
+    current.lastFired = Date.now();
+    Settings.updateRefreshPermit(current);
+    Settings.store().saveArray();
     return true;
   },
 

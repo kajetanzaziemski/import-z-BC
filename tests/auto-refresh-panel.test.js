@@ -93,6 +93,17 @@ module.exports = function register(t) {
     assert.ok(/info\.current\.legacy/.test(html) && /nie może potwierdzić/.test(html), 'the page says it is a guess');
   });
 
+  test('panel: a run that fired after the last completed one (in progress, cut off, failed) is told as the last start; a completed one is not', () => {
+    const base = permit({ lastRun: NOW - 30 * HOUR });
+    const cut = scenario({ permit: Object.assign({}, base, { lastFired: NOW - 6 * HOUR }), triggers: ['t1'] }).info();
+    assert.deepStrictEqual(cut.attempt, { at: '2026-11-02 05:00:00 UTC+1' });
+    assert.strictEqual(cut.last.at, '2026-11-01 05:00:00 UTC+1', 'the last refresh is the completed one');
+    const done = scenario({ permit: Object.assign({}, base, { lastFired: NOW - 31 * HOUR }), triggers: ['t1'] }).info();
+    assert.strictEqual(done.attempt, undefined);
+    const html = fs.readFileSync(path.join(ROOT, 'New Status Sidebar.html'), 'utf8');
+    assert.ok(/info\.attempt\.at/.test(html));
+  });
+
   test('panel: a permit whose trigger is not this user\'s: used lately -> shown as another user\'s (foreign); not used for a long time -> nothing', () => {
     const lately = scenario({ permit: permit({ lastRun: NOW - 2 * HOUR }), triggers: [] }).info();
     assert.strictEqual(lately.current.foreign, true);

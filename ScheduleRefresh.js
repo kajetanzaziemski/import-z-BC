@@ -95,7 +95,7 @@ const ScheduleRefresh = {
     const ids = new Set(ScheduleRefresh.triggersSeen_().filter(t => String(t.getEventType()) == "CLOCK").map(t => t.getUniqueId()));
     try{
       const now = Date.now();
-      RefreshRegistry.all().forEach(r => { if(now - Math.max(r.seenAt ?? 0, r.setAt ?? 0, r.lastRun ?? 0) < CLOCK_TRIGGER_RECENT_MS) ids.add(r.id); });
+      RefreshRegistry.all().forEach(r => { if(now - Math.max(r.seenAt ?? 0, r.setAt ?? 0, r.lastFired ?? 0, r.lastRun ?? 0) < CLOCK_TRIGGER_RECENT_MS) ids.add(r.id); });
     }catch(err){ dbgLog(`Refresh trigger records not read for the count: ${err}`); }
     if(except) ids.delete(except);
     return [...ids];
@@ -139,7 +139,7 @@ const ScheduleRefresh = {
       const restored = ScheduleRefresh.createTrigger_(days ? "days" : "hrs", days ? permit.intervalHours / 24 : permit.intervalHours, startAt);
       MainSettings.updateRefreshPermit(Object.assign({}, permit, {issuedFor: restored.getUniqueId()}));
       ScheduleRefresh.register_(restored.getUniqueId(),{intervalHours: permit.intervalHours, startAt: permit.startAt ?? undefined, timeZone: permit.timeZone ?? undefined,
-                                                       setAt: permit.lastRefresh, nextRefresh: permit.nextRefresh, lastRun: permit.lastRun, lastDurationMs: permit.lastDurationMs, lastSheets: permit.lastSheets});
+                                                       setAt: permit.lastRefresh, nextRefresh: permit.nextRefresh, lastFired: permit.lastFired, lastRun: permit.lastRun, lastDurationMs: permit.lastDurationMs, lastSheets: permit.lastSheets});
     }catch(err){
       dbgLog(`The previous refresh trigger could not be put back: ${err}`);
       MainSettings.updateRefreshPermit(Object.assign({}, permit, {off: true}));
@@ -410,7 +410,7 @@ const ScheduleRefresh = {
       const permit = MainSettings.getRefreshPermit();
       const triggers = ScriptApp.getProjectTriggers().filter(t => ["autoRefresh","autoRefreshHandler"].includes(t.getHandlerFunction())).map(t => t.getUniqueId());
       return {permitFor: permit?.issuedFor ?? null, off: !!permit?.off, issuedByMe: !!permit?.issuedBy && permit.issuedBy === ScheduleRefresh.ownerToken_(false),
-              hasToken: !!permit?.issuedBy, intervalHours: permit?.intervalHours ?? null, lastRun: permit?.lastRun ?? null, triggers: triggers,
+              hasToken: !!permit?.issuedBy, intervalHours: permit?.intervalHours ?? null, lastFired: permit?.lastFired ?? null, lastRun: permit?.lastRun ?? null, triggers: triggers,
               named: !!permit?.issuedFor && triggers.includes(permit.issuedFor), seenRecently: Store.cache.get("document","refreshTriggerSeen") === (permit?.issuedFor ?? null), at: now.toISOString()};
     }catch(err){
       return {error: String(err && err.message || err)};
@@ -441,9 +441,9 @@ const ScheduleRefresh = {
       if(!exists && permit.issuedBy && permit.issuedBy === ScheduleRefresh.ownerToken_(false)) return {active:false};
       // getProjectTriggers() lists the triggers of the current user only. A permit that names a trigger which is not there but was used lately (within
       // two and a half intervals) points to a trigger set by another user: it is shown, marked, with what the permit remembers.
-      const lately = (permit.lastRun ?? permit.lastRefresh ?? 0) + 2.5 * step > now.getTime();
+      const lately = Math.max(permit.lastFired ?? 0, permit.lastRun ?? 0, permit.lastRefresh ?? 0) + 2.5 * step > now.getTime();       // the latest sign of life: fired, completed, set up
       if(!exists && !lately) return {active:false};
-      let next = permit.nextRefresh ?? ((permit.lastRun ?? permit.lastRefresh ?? now.getTime()) + step);
+      let next = permit.nextRefresh ?? ((permit.lastFired ?? permit.lastRun ?? permit.lastRefresh ?? now.getTime()) + step);       // the schedule runs from the firing
       if(next <= now.getTime()) next += Math.ceil((now.getTime() - next + 1) / step) * step;
       return {active:true, foreign:!exists, intervalHours:hours, startAt:permit.startAt ?? null,
               frequency:{freq: days ? hours / 24 : hours, unit: days ? "days" : "hrs"}, next: new Date(next)};
@@ -518,11 +518,26 @@ const ScheduleRefresh = {
     }
 
     Controller.intent("refresh.scheduled",{sheet: null, changeType: null});
+    ScheduleRefresh.stampFired_(e.triggerUid);
     const sheets = ScheduleRefresh.tickedResultSheets_();
     const started = Date.now();
     const fullyCorrect = RefreshAll.scheduled(ScheduleRefresh.triggerText_(e.triggerUid,false));
     
     if(fullyCorrect !== false) ScheduleRefresh.finishRun_(e.triggerUid,sheets,started);       // a failed attempt (BC's error for a sheet) is not recorded on the permit either
+  },
+
+  /**
+   * The first stamp of a scheduled run: the trigger FIRED and holds the permit (permit.lastFired, saved at once; the user's record of the trigger too). The second, `lastRun`,
+   * is written when the run completes (finishRun_). Where each is used: "is the trigger alive" (a foreign trigger used lately, the count of recent triggers, forgetting a record)
+   * and the anchor of the schedule take the later of the signs, fired included - a trigger whose runs fail or are cut off is alive; "last refresh" shown to the user
+   * (the panel, the list of triggers) is the completed one. Never fails the run.
+   */
+  stampFired_(triggerUid){
+    try{
+      if(MainSettings.markRefreshFired(triggerUid)) RefreshRegistry.touch(triggerUid,{lastFired: Date.now()});
+    }catch(err){
+      dbgLog(`Fired stamp not written: ${err}`);
+    }
   },
 
   /** What the log says about the clock trigger that fired. */
@@ -560,7 +575,7 @@ const ScheduleRefresh = {
   nextAfterRun_(permit, started){
     const step = (permit?.intervalHours || 0) * 3600000;
     if(!step) return 0;
-    let next = permit.nextRefresh ?? ((permit.lastRun ?? permit.lastRefresh ?? started) + step);
+    let next = permit.nextRefresh ?? ((permit.lastFired ?? permit.lastRun ?? permit.lastRefresh ?? started) + step);
     const limit = started + step / 2;
     if(next <= limit) next += Math.ceil((limit - next + 1) / step) * step;
     return next;
@@ -603,6 +618,7 @@ const ScheduleRefresh = {
     }
 
     Controller.intent("refresh.scheduled",{sheet: null, changeType: null});
+    ScheduleRefresh.stampFired_(e.triggerUid);
     const sheets = ScheduleRefresh.tickedResultSheets_();
     const started = Date.now();
     const fullyCorrect = RefreshAll.scheduled(ScheduleRefresh.triggerText_(e.triggerUid,true));

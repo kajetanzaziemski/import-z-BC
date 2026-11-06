@@ -8,7 +8,8 @@
 //     docId, docName, url, gid (the settings sheet), docTz        the document the trigger refreshes (as of the last write)
 //     intervalHours, startAt ("17:30"), timeZone                  how it was set up
 //     setAt, nextRefresh                                           when it was set up; the next planned run
-//     lastRun, lastDurationMs, lastSheets                          the last scheduled run
+//     lastFired                                                    the last time the trigger fired and held the permit (a run in progress, cut off or failed counts)
+//     lastRun, lastDurationMs, lastSheets                          the last scheduled run that COMPLETED
 //     seenAt                                                       the last time the list saw the trigger
 //
 // One property per trigger, not one for all: the runs of different documents can write at the same moment and a whole-snapshot write-back would lose one
@@ -71,7 +72,7 @@ const RefreshRegistry = {
   /** What the refresh permit of this document (document properties, shared by all users of the document) says about its trigger, as record fields. */
   fromPermit(permit){
     return {intervalHours: permit.intervalHours, startAt: permit.startAt ?? undefined, timeZone: permit.timeZone ?? undefined, setAt: permit.lastRefresh,
-            nextRefresh: permit.nextRefresh, lastRun: permit.lastRun, lastDurationMs: permit.lastDurationMs, lastSheets: permit.lastSheets};
+            nextRefresh: permit.nextRefresh, lastFired: permit.lastFired, lastRun: permit.lastRun, lastDurationMs: permit.lastDurationMs, lastSheets: permit.lastSheets};
   },
 
   /** The record is replaced as a whole (put() only adds to it: a field that is gone from the new data would stay). */
@@ -89,7 +90,7 @@ const RefreshRegistry = {
     if(!permit?.issuedFor || !permit.intervalHours || permit.off) return;
     const id = permit.issuedFor, rec = RefreshRegistry.get(id);
     const fromPermit = RefreshRegistry.fromPermit(permit);
-    const stale = !rec || !rec.docId || rec.intervalHours !== permit.intervalHours || (rec.startAt ?? null) !== (permit.startAt ?? null) || (permit.lastRun ?? 0) > (rec.lastRun ?? 0);
+    const stale = !rec || !rec.docId || rec.intervalHours !== permit.intervalHours || (rec.startAt ?? null) !== (permit.startAt ?? null) || (permit.lastRun ?? 0) > (rec.lastRun ?? 0) || (permit.lastFired ?? 0) > (rec.lastFired ?? 0);
     if(stale) RefreshRegistry.replace(id,Object.assign(RefreshRegistry.document_(),fromPermit,rec?.seenAt ? {seenAt: rec.seenAt} : {}));
   },
 
@@ -103,7 +104,7 @@ const RefreshRegistry = {
     RefreshRegistry.all().forEach(rec => {
       if(seenIds.includes(rec.id)){
         if(!rec.seenAt || now - rec.seenAt > REFRESH_REGISTRY_SEEN_EVERY_MS) RefreshRegistry.put(rec.id,{seenAt: now});
-      }else if(now - (rec.seenAt ?? rec.setAt ?? rec.lastRun ?? 0) > REFRESH_REGISTRY_FORGET_MS){
+      }else if(now - (rec.seenAt ?? rec.setAt ?? rec.lastFired ?? rec.lastRun ?? 0) > REFRESH_REGISTRY_FORGET_MS){
         RefreshRegistry.remove(rec.id);
       }
     });

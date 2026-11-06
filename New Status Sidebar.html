@@ -239,6 +239,10 @@
           }
         }
 
+        if (info.attempt) {
+          html += '<p class="gray">Ostatnie uruchomienie: ' + escapeHtml(info.attempt.at) + ' (w trakcie, przerwane lub zakończone błędem).</p>';
+        }
+
         // the last set-up of the refresh that failed (nothing here when the last one went right): the message of the settings sheet, the platform's error folded
         html += '<h1> Zmiana ustawień: </h1>';
         if (info.setupError) html += renderSetupError(info.setupError);
