@@ -79,9 +79,10 @@ const SettingsGrid = {
     // brief (the sidebar): the headline, the sentence about the limit of clock triggers when that was the cause, and the time of the attempt - nothing about what is
     // set now (the sidebar shows that itself) and no pointer to the menu (the user is looking at the add-on)
     // `advise` (the first time the sidebar shows this error): first of all, try again with the button of the sidebar; once the button was used and the error came again, the plain message
+    // the sentence about the limit of clock triggers comes with the plain message (after the retry), not with the first one: that only advises to try again
     if (brief) return ["Ustawienia odświeżania nie zostały zaktualizowane!",
                        ...(report.advise ? [SettingsGrid.retryAdvice] : []),
-                       ...(report.limit ? [SettingsGrid.triggerLimitText] : []),
+                       ...(report.limit && !report.advise ? [SettingsGrid.triggerLimitText] : []),
                        `Próba zmiany ustawień została podjęta ${stamp(report.when)}.`];
     return ["Ustawienia odświeżania nie zostały zaktualizowane!",
             ...(report.current ? status(report.current) : []),

@@ -146,3 +146,5 @@ Retry advice: the first time the tab shows an error it begins with "Spróbuj pon
 
 Fit to data (log sheet): the columns are sized like "Dopasuj do danych" in the column menu (`autoResizeDimensions` / `autoResizeColumns`, after the values are written; the service path flushes first). A column that wraps is fitted by its wrapped layout and comes out narrow, so the
 wrapping is a property of the column, set on every write for all entry rows (an older log sheet is put right): only "Źródło" (200 px) and "Odświeżone arkusze" (300 px) wrap, the technical text is cut, the other columns are one line; the headers are one line too.
+
+The first message of the sidebar (the advice to retry) does not carry the sentence about the limit of clock triggers; the plain message after the retry does.
