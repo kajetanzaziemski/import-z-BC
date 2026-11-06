@@ -1,5 +1,8 @@
 // The settings sheet of the add-on: which config sheets exist (and which refresh automatically), when the last refresh was and how often
 // to refresh. It does not touch the spreadsheet itself: the cells are read and written through SettingsGrid (Settings Grid.js).
+/** The note on the time of the last refresh after an attempt that failed: the cell still shows the last time everything went right. */
+const LAST_REFRESH_FAILED_NOTE = "Komórka pokazuje czas ostatniego w pełni poprawnego odświeżania. Sprawdź arkusz dziennika pobrań, żeby zobaczyć informacje o wszystkich próbach odświeżania.";
+
 const TIME_ZONE_EDIT_MESSAGE = "Godzina odświeżania jest ustawiana wg. strefy czasowej dokumentu, więc tej wartości nie można zmienić tutaj (przywrócono poprzednią).\n\n" +
   "Aby zmienić strefę czasową dokumentu wejdź w: Plik -> Ustawienia -> Ogólne -> Strefa czasowa.\n" +
   "Po zmianie strefy dodatek przeliczy godzinę odświeżania tak, żeby wypadała w tym samym momencie (przy ponownym otwarciu dokumentu).";
@@ -174,6 +177,13 @@ class SettingsSheet{
     time = time ?? new Date();
     this.grid.writeLastRefresh(this.lastRefreshPos,time);
     this.lastRefresh = this.readLastRefresh();
+  }
+
+  /** A scheduled refresh was tried and failed: the time of the last refresh stays, with a note that says so (the next fully correct refresh removes it, setLastRefresh). */
+  markLastRefreshAttemptFailed(){
+    if(!this.lastRefreshPos) this.readSheetList();
+    if(!this.lastRefreshPos) this.lastRefreshPos = this.grid.addLastRefreshRow();
+    this.grid.noteLastRefresh(this.lastRefreshPos,LAST_REFRESH_FAILED_NOTE);
   }
 
   addNewSheetInfo(configSheetName,resultSheetName,refresh=false){

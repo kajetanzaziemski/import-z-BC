@@ -481,6 +481,16 @@ module.exports = function register(t) {
     assert.ok(/op == "=" \? " =" : op/.test(fs.readFileSync(path.join(ROOT, 'Data Validations.js'), 'utf8')));
   });
 
+  test('live check: after a scheduled refresh the time of the last refresh has the note of a failed attempt when the run failed and no note when it was fully correct', () => {
+    const src = fs.readFileSync(path.join(ROOT, 'Live Check Verifiers.js'), 'utf8');
+    assert.ok(/out\.lastRefreshNote = sheet\.getRange\(r,4\)\.getNote\(\)/.test(src), 'the note is read from D of the lastRefresh line');
+    const fn = src.slice(src.indexOf('function lcVerifyScheduledRefresh_(c)'), src.indexOf('function lcVerifyRetiredRefresh_'));
+    assert.ok(/if\(c\.error\) c\.expectEqual\("the time of the last refresh has the note of a failed attempt",settings\.lastRefreshNote,FAILED_NOTE\)/.test(fn));
+    assert.ok(/else c\.expectEqual\("a fully correct refresh: the time of the last refresh has no note",settings\.lastRefreshNote \?\? "",""\)/.test(fn));
+    const text = src.match(/const FAILED_NOTE = "([^"]*)"/)[1];
+    assert.strictEqual(text, fs.readFileSync(path.join(ROOT, 'Settings Sheet.js'), 'utf8').match(/const LAST_REFRESH_FAILED_NOTE = "([^"]*)"/)[1], 'the same words as the add-on writes');
+  });
+
   const THREE_ROWS = `ODataConnection.prototype.getDataArray = () => [['No'], ['C1'], ['C2']];`;
   const FMT = /number format uniform in every column/;
   test('live check, end to end: a result column whose number format differs between data rows -> FAIL naming the column and the actual formats (header shown, not judged)', () => {

@@ -47,6 +47,7 @@ module.exports = function register(t) {
     ex.eval(`Agents.ensureActive = () => {}`);
     ex.eval(FAKES);
     ex.eval(`globalThis.__logged = []; RefreshLogGrid.append = (name, e) => __logged.push(Object.assign({ name }, e));`);
+    ex.eval(`globalThis.__noted = 0; { const g = getMainSettings; getMainSettings = () => Object.assign(g(), { markLastRefreshAttemptFailed: () => { if (__cfgNoteFails) throw new Error('note failed'); __noted++; } }); }; globalThis.__cfgNoteFails = false;`);
     const stored = () => JSON.parse(p.props.document.importSettingsArray);
     return { p, ex, log, cfg, calls: () => plain(log), stored,
       save: () => ex.eval(`getImportSettings().saveArray()`),
@@ -727,6 +728,24 @@ module.exports = function register(t) {
     legacy.p.triggers.push(NAMED('trig-L', 'autoRefresh'));
     legacy.ex.eval(`autoRefresh(${event('trig-L')})`);
     assert.strictEqual(plain(legacy.ex.eval(`__logged[0].technical`)), 'Clock trigger trig-L (old version: autoRefresh function)');
+  });
+
+  test('last refresh: a scheduled refresh that failed leaves the time alone and puts a note on it; a fully correct one does not (the note is removed by setLastRefresh); a note that cannot be written never hides the error', () => {
+    const failed = scenario({ refreshError: 'boom' });
+    assert.throws(() => failed.ex.eval(`RefreshAll.scheduled()`), /boom/);
+    assert.strictEqual(failed.ex.eval(`__noted`), 1, 'noted once');
+    assert.ok(!failed.calls().some(c => c[0] === 'lastRefresh'), 'the time is not written');
+    const fine = scenario();
+    fine.ex.eval(`RefreshAll.scheduled()`);
+    assert.strictEqual(fine.ex.eval(`__noted`), 0);
+    assert.ok(fine.calls().some(c => c[0] === 'lastRefresh'));
+    const noteFails = scenario({ refreshError: 'boom' });
+    noteFails.ex.eval(`__cfgNoteFails = true`);
+    assert.throws(() => noteFails.ex.eval(`RefreshAll.scheduled()`), /boom/, 'the refresh error, not the note\'s');
+    // the menu refreshes do not touch the time of the last refresh
+    const menu = scenario({ refreshError: 'boom' });
+    assert.throws(() => menu.ex.eval(`refreshAll()`), /boom/);
+    assert.strictEqual(menu.ex.eval(`__noted`), 0);
   });
 
   test('log: a scheduled refresh that fails writes the entry with the error as the status, and the error goes on', () => {

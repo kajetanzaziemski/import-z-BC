@@ -34,8 +34,19 @@ const RefreshAll = {
    */
   scheduled(technical = "Clock trigger"){
     RefreshLog.run(REFRESH_LOG_SOURCES.auto,technical,() => {
-      RefreshAll.ticked();
+      try{
+        RefreshAll.ticked();
+      }catch(err){
+        RefreshAll.noteFailedAttempt_();       // the time stays as it was, with a note that says why
+        throw err;
+      }
       getMainSettings().setLastRefresh(new Date());
     });
+  },
+
+  /** The attempt failed: a note on the time of the last refresh. Never hides the error that is on its way. */
+  noteFailedAttempt_(){
+    try{ getMainSettings().markLastRefreshAttemptFailed(); }
+    catch(err){ dbgLog(`Note on the last refresh not written: ${err}`); }
   }
 };

@@ -325,6 +325,30 @@ module.exports = function register(t) {
     assert.strictEqual((sh.cells['7,5'] || {}).v, 'UTC+9');
   }));
 
+  MODES.forEach(mode => test('a failed scheduled refresh puts a note on the time of the last refresh (the time stays); the next fully correct refresh (setLastRefresh) removes it; no lastRefresh line yet: it is added [' + mode + ']', () => {
+    const s = scope(mode);
+    s.run(`globalThis.__ss = new SettingsSheet()`);
+    const sh = s.book.sheets['Ustawienia'];
+    const note = () => (sh.cells['5,4'] || {}).note ?? '';
+    const NOTE = 'Komórka pokazuje czas ostatniego w pełni poprawnego odświeżania. Sprawdź arkusz dziennika pobrań, żeby zobaczyć informacje o wszystkich próbach odświeżania.';
+    s.run(`__ss.setLastRefresh(new Date(1750000000000))`);
+    const time = sh.cells['5,4'].v;
+    assert.strictEqual(note(), '');
+    s.run(`__ss.markLastRefreshAttemptFailed()`);
+    assert.strictEqual(note(), NOTE);
+    assert.strictEqual(sh.cells['5,4'].v, time, 'the time is as it was');
+    s.run(`__ss.markLastRefreshAttemptFailed()`);
+    assert.strictEqual(note(), NOTE, 'a second failed attempt: the same note');
+    s.run(`__ss.setLastRefresh(new Date(1750003600000))`);
+    assert.strictEqual(note(), '', 'a fully correct refresh removes it');
+    assert.notStrictEqual(sh.cells['5,4'].v, time);
+    // a sheet without the lastRefresh line: the line is added for the note
+    const bare = scope(mode, sh2 => fillSettings(sh2, { configs: CONFIGS, noLast: true }));
+    bare.run(`globalThis.__ss = new SettingsSheet(); __ss.markLastRefreshAttemptFailed()`);
+    const row = bare.run(`__ss.lastRefreshPos`);
+    assert.ok(row > 0 && ((bare.book.sheets['Ustawienia'].cells[row + ',4'] || {}).note) === NOTE);
+  }));
+
   MODES.forEach(mode => test('row 3 is where the config list starts: the first config line takes it and the general settings lines (and the message) move down, found by key [' + mode + ']', () => {
     const s = scope(mode);
     s.run(`globalThis.__ss = new SettingsSheet(); __ss.addNewSheetInfo('N', 'Dane N', true)`);

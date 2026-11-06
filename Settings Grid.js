@@ -174,7 +174,8 @@ const SettingsGrid = {
    *   frequency(row)                [number, unit] of the refreshFrequency line at `row`
    *   lastRefresh(row)              the time (D) of the lastRefresh line at `row`
    *   addLastRefreshRow()           a lastRefresh line after the last row; returns its row number
-   *   writeLastRefresh(row, time)   time into D, the time zone's name into E
+   *   writeLastRefresh(row, time)   time into D, the time zone's name into E, and the note of a failed attempt removed from D
+   *   noteLastRefresh(row, text)    a note on the time (D) of the lastRefresh line
    *   refreshTime()                 {hour, minute, timeZone} from the refreshTime line (D): "17:30", "5:30 PM", a time value; null when empty, not a time or no such line
    *   retime(plan)                  makes the zone labels of lastRefresh and refreshTime (column E) read what they should for the spreadsheet's zone now - judged from the labels in the sheet;
    *                                 plan({zoneChanged, lastKnown, fromOffset, toOffset}) may give a function that converts the time of day of refreshTime; when the zone changed the time of
@@ -300,6 +301,11 @@ const SettingsGrid = {
       writeLastRefresh(row, time) {
         const zone = SettingsGrid.offsetName(time, grid.getTimeZone());
         grid.getRange(row, L.valueCol, 1, 2).setValues([[time, zone]]);
+        grid.getRange(row, L.valueCol).setNote("");                       // a fully correct refresh: the note of a failed attempt goes
+        save();
+      },
+      noteLastRefresh(row, text) {
+        grid.getRange(row, L.valueCol).setNote(text);
         save();
       },
       addConfigRow(after, config, result, refresh) {

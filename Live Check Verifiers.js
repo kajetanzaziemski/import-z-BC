@@ -74,7 +74,7 @@ function lcDocTriggers_(){
 
 /** The settings sheet as the add-on lays it out: B..E of every row, labels in column B. */
 function lcReadSettingsSheet_(){
-  const out = {name: null, exists: false, b2: null, configs: [], lastRefreshRow: null, lastRefresh: null, lastRefreshTz: null, freqRow: null, freq: null, unit: null, timeRow: null, timeZoneLabel: null};
+  const out = {name: null, exists: false, b2: null, configs: [], lastRefreshRow: null, lastRefresh: null, lastRefreshNote: null, lastRefreshTz: null, freqRow: null, freq: null, unit: null, timeRow: null, timeZoneLabel: null};
   out.name = lcImportSettings_().importSheetName ?? null;
   if(!out.name) return out;
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(out.name);
@@ -88,7 +88,7 @@ function lcReadSettingsSheet_(){
     const r = i + 1;
     switch(row[0]){
       case "configSheet": out.configs.push({row: r, config: row[1], result: row[2], refresh: row[3]}); break;
-      case "lastRefresh": out.lastRefreshRow = r; out.lastRefresh = row[2]; out.lastRefreshTz = row[3]; break;
+      case "lastRefresh": out.lastRefreshRow = r; out.lastRefresh = row[2]; out.lastRefreshTz = row[3]; out.lastRefreshNote = sheet.getRange(r,4).getNote(); break;
       case "refreshFrequency": out.freqRow = r; out.freq = row[2]; out.unit = row[3]; break;
       case "refreshTime": out.timeRow = r; out.timeZoneLabel = row[3]; break;
     }
@@ -1237,6 +1237,10 @@ function lcVerifyScheduledRefresh_(c){
   const triggerStillThere = lcTriggersSeen_().some(t => t.getUniqueId() === uid);
   const settings = c.now("settingsSheet");
   c.expect("permitted trigger stays installed",triggerStillThere,"trigger removed itself");
+  // The time of the last refresh is the last FULLY correct one: a failed attempt leaves it with a note, a correct one removes the note
+  const FAILED_NOTE = "Komórka pokazuje czas ostatniego w pełni poprawnego odświeżania. Sprawdź arkusz dziennika pobrań, żeby zobaczyć informacje o wszystkich próbach odświeżania.";
+  if(c.error) c.expectEqual("the time of the last refresh has the note of a failed attempt",settings.lastRefreshNote,FAILED_NOTE);
+  else c.expectEqual("a fully correct refresh: the time of the last refresh has no note",settings.lastRefreshNote ?? "","");
   if(c.error) return;
   const permit = c.settings().refreshPermit;
   c.expect("permit issued for this trigger",!!permit && permit.issuedFor === uid,JSON.stringify(permit));
