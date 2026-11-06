@@ -6,8 +6,8 @@ Apps Script allows a user a small number of clock (time-based) triggers for an a
 ## What the code does about the limit
 - **Counting** (`ScheduleRefresh.clockTriggerIds_`): the clock triggers the trigger list shows (union of three looks - the list is not reliable, see `triggersSeen_`) plus the triggers the user's records
   (`refreshTrigger:<id>`, `Refresh Registry.js`) saw or made within the last 10 minutes (the list may lag behind a trigger just made). All documents count. A trigger about to be replaced does not.
-- **Refusing** (`assertRoomForTrigger_`): when 5 are counted the set-up throws an error with `triggerLimit = true` - "Nie utworzono triggera: masz już 5 wyzwalaczy czasowych (limit Apps Script: 5 na użytkownika...) ... Triggery: <ids>".
-  The set-up asks BEFORE it removes anything, so the old trigger and the permit stay as they were. Before the count, the leftovers of THIS document (its records, not the permit's) are deleted: they would only take places.
+- **Refusing** (`assertRoomForTrigger_`): when 5 OTHER triggers are counted (the one this document's set-up is about to replace - the permit's - is not among them: it is removed first, so the total after the operation is the same) the set-up throws an error with `triggerLimit = true` - "Nie utworzono triggera: masz już 5 wyzwalaczy czasowych (limit Apps Script: 5 na użytkownika...) ... Triggery: <ids>".
+  The set-up asks BEFORE it removes anything, so when it is refused the old trigger and the permit stay as they were. Changing this document's own trigger when the user has exactly 5 is allowed: 4 others + the old one -> the old one is removed, the new one installed, 5 again. Before the count, the leftovers of THIS document (its records, not the permit's) are deleted: they would only take places.
 - The check sits in `createTrigger_` itself, so no path to a new trigger can skip it (the set-up passes `checked = true` after its own check, which can count the trigger it replaces).
 
 ## Every case in which a clock trigger is created, and what happens

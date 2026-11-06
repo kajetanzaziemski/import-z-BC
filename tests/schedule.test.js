@@ -376,6 +376,29 @@ module.exports = function register(t) {
     assert.throws(() => fresh5.ex.eval(`ScheduleRefresh.apply(__ss)`), /limit Apps Script: 5/);
   });
 
+  test('limit: changing THIS document\'s trigger at exactly 5 clock triggers is allowed - the old one is removed, the new one installed, 5 again; also when the list does not show the old one (its record and the permit name it)', () => {
+    const now = Date.now();
+    const shown = scenario({ settings: PERMIT('t-old') });
+    shown.p.triggers.push(NAMED('t-old')); clockIds(shown, 4);                                   // 5 in all, one of them this document's
+    shown.p.props.user['refreshTrigger:t-old'] = DOC_REC({ seenAt: now - 1000 });
+    applySettings(shown, { freq: 4, unit: 'hrs' });
+    shown.ex.eval(`ScheduleRefresh.apply(__ss)`);
+    assert.deepStrictEqual(triggers(shown.p).map(x => x.id).sort(), ['c0', 'c1', 'c2', 'c3', 'trig-1'], 'the old one is gone, the new one is there: 5');
+
+    const hidden = scenario({ settings: PERMIT('t-old') });                                         // the old trigger is not in the list at all, but its record is recent
+    clockIds(hidden, 4);
+    hidden.p.props.user['refreshTrigger:t-old'] = DOC_REC({ seenAt: now - 1000 });
+    applySettings(hidden, { freq: 4, unit: 'hrs' });
+    hidden.ex.eval(`ScheduleRefresh.apply(__ss)`);
+    assert.strictEqual(triggers(hidden.p).filter(x => x.id === 'trig-1').length, 1);
+
+    const other = scenario({ settings: PERMIT('t-old') });                                          // 5 in all but NONE of them this document's: a new one is too many
+    other.p.triggers.push(NAMED('t-old')); clockIds(other, 4);
+    other.ex.eval(`MainSettings.setRefreshPermit('t-not-there', 4)`);
+    applySettings(other, { freq: 4, unit: 'hrs' });
+    assert.throws(() => other.ex.eval(`ScheduleRefresh.apply(__ss)`), /masz już 5 wyzwalaczy/);
+  });
+
   test('limit: triggers the list does not show still count when the user\'s records saw or made them in the last ten minutes; older records do not', () => {
     const now = Date.now();
     const sc = scenario();
