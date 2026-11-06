@@ -7,8 +7,9 @@
 //                                               A refresh inside a refresh is one entry (the outer one). The error `work` throws is written as the status and thrown on.
 //   RefreshLog.noteSheet(name, rows)            (RefreshSheet) a result sheet was written
 //   RefreshLog.noteProblem(text)                (RefreshSheet) a failure the add-on handled itself (BC answered with an error, no table in the config sheet): the status
-//   RefreshLog.noteFailedSheet(name, error)     (RefreshSheet) pulling the data for this sheet threw an error: the status says "Błąd ❗️ Przy pobieraniu danych dla arkusza X.", the error goes to the
-//                                               technical column (the sheets are listed: "dla arkuszy: X, Y.")
+//   RefreshLog.noteFailedSheet(name, error)     (RefreshSheet) the data of this sheet could not be pulled - the platform threw an error, or BC answered with an error document: the status only says
+//                                               "Błąd ❗️ Przy pobieraniu danych dla arkusza X." (all the failed sheets: "dla arkuszy: X, Y."), the errors go to the technical column,
+//                                               each with its sheet: "Errors: X: <error> | Y: <error>"
 //   RefreshLog.logOnly(source, technical, status)   an entry for a run that refreshed nothing on purpose (a clock trigger that deleted itself)
 //
 // Writing the log never fails a refresh: a failure there is console.error and a note on the live check run.
@@ -80,7 +81,7 @@ const RefreshLog = {
       duration: AutoRefreshPanel.duration(end.getTime() - session.start.getTime()),
       status: status,
       sheets: [`${n} ${RefreshLog.plural_(n,"arkusz","arkusze","arkuszy")}${n ? ":" : ""}`].concat(lines).join("\n"),
-      technical: failure ? `${session.technical}. Platform error: ${session.failures.map(x => x.message).join(" | ")}` : session.technical
+      technical: failure ? `${session.technical}. Errors: ${session.failures.map(x => `${x.name}: ${x.message}`).join(" | ")}` : session.technical
     };
   },
 

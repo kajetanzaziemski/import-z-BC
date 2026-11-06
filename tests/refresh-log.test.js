@@ -167,7 +167,7 @@ module.exports = function register(t) {
     assert.throws(() => u.ex.eval(`RefreshLog.run('Odświeżanie jednego arkusza', 'Menu: refresh one sheet (config sheet: K1)', () => RefreshSheet.run('K1'))`), /getAllAttributeValuesArraysFromChildren/);
     const [e] = u.entries();
     assert.strictEqual(e.status, 'Błąd ❗️ Przy pobieraniu danych dla arkusza Dane K1.');
-    assert.strictEqual(e.technical, "Menu: refresh one sheet (config sheet: K1). Platform error: Cannot read properties of null (reading 'getAllAttributeValuesArraysFromChildren')");
+    assert.strictEqual(e.technical, "Menu: refresh one sheet (config sheet: K1). Errors: Dane K1: Cannot read properties of null (reading 'getAllAttributeValuesArraysFromChildren')");
     assert.ok(!/getAllAttribute/.test(e.status));
   });
 
@@ -181,7 +181,24 @@ module.exports = function register(t) {
     u.ex.eval(`RefreshLog.run('Odświeżanie wszystkich arkuszy', 'Menu: refresh all sheets', () => { RefreshLog.noteProblem('Brak tabeli w arkuszu konfiguracji „K9”'); RefreshLog.noteFailedSheet('Dane K1', new Error('a')); RefreshLog.noteFailedSheet('Dane K2', new Error('b')); RefreshLog.noteFailedSheet('Dane K3', new Error('c')); })`);
     const [e] = u.entries();
     assert.strictEqual(e.status, 'Brak tabeli w arkuszu konfiguracji „K9”; Błąd ❗️ Przy pobieraniu danych dla arkuszy: Dane K1, Dane K2, Dane K3.');
-    assert.strictEqual(e.technical, 'Menu: refresh all sheets. Platform error: a | b | c');
+    assert.strictEqual(e.technical, 'Menu: refresh all sheets. Errors: Dane K1: a | Dane K2: b | Dane K3: c');
+  });
+
+  test('entry: sheets that failed in different ways - BC answered with an error document (two of them), the platform threw (one) - ALL are named in the generic status and ALL have their error in the technical column, each with its sheet', () => {
+    const u = useCase();
+    u.ex.eval(`RefreshLog.run('Odświeżanie wszystkich arkuszy', 'Menu: refresh all sheets', () => {
+      RefreshLog.noteFailedSheet('Dane wg. Konfiguracja 4', 'BC BadRequest: Could not find a property named \\'SalesOrderSalesLines\\' on type \\'NAV.Zapisy_księgi_głównej_Excel\\'.  CorrelationId:  420b4d7d');
+      RefreshLog.noteSheet('Dane wg. Konfiguracja 1', 12);
+      RefreshLog.noteFailedSheet('Dane wg. Konfiguracja 6', "BC BadRequest: Term '(;$top=100;$count=true)' is not valid in a $select or $expand expression.  CorrelationId:  122bd183");
+      RefreshLog.noteFailedSheet('Dane wg. Konfiguracja 2', new TypeError("Cannot read properties of null (reading 'getAllAttributeValuesArraysFromChildren')"));
+    })`);
+    const [e] = u.entries();
+    assert.strictEqual(e.status, 'Błąd ❗️ Przy pobieraniu danych dla arkuszy: Dane wg. Konfiguracja 4, Dane wg. Konfiguracja 6, Dane wg. Konfiguracja 2.');
+    assert.ok(!/BadRequest|CorrelationId/.test(e.status), 'no BC message in the status');
+    assert.strictEqual(e.sheets, '1 arkusz:\nDane wg. Konfiguracja 1 (12 wierszy)', 'only the sheet that went through');
+    ['Dane wg. Konfiguracja 4: BC BadRequest: Could not find a property named', 'Dane wg. Konfiguracja 6: BC BadRequest: Term', "Dane wg. Konfiguracja 2: Cannot read properties of null (reading 'getAllAttributeValuesArraysFromChildren')"]
+      .forEach(part => assert.ok(e.technical.includes(part), part + ' | ' + e.technical));
+    assert.ok(e.technical.startsWith('Menu: refresh all sheets. Errors: '));
   });
 
   test('entry: an error that is not tied to a sheet (no sheet was being pulled) is still the status as it is', () => {
@@ -243,7 +260,7 @@ module.exports = function register(t) {
     const [e] = u.entries();
     assert.strictEqual(e.sheets, '2 arkusze:\nR1 (10 wierszy)\nR3 (20 wierszy)', 'the two that went through: counted and listed');
     assert.strictEqual(e.status, 'Błąd ❗️ Przy pobieraniu danych dla arkuszy: R2, R4.');
-    assert.strictEqual(e.technical, 'Menu: refresh all sheets. Platform error: Brak połączenia | Brak połączenia');
+    assert.strictEqual(e.technical, 'Menu: refresh all sheets. Errors: R2: Brak połączenia | R4: Brak połączenia');
     // one failed sheet: singular
     const one = useCase(); one.ex.eval(STUBS);
     one.ex.eval(`getMainSettings = () => ({ getSheetList: () => [{ configSheet: 'K1', resultSheet: 'R1' }, { configSheet: 'BAD', resultSheet: 'R2' }] })`);
@@ -266,10 +283,11 @@ module.exports = function register(t) {
     assert.ok(/logRetired_\(e\.triggerUid,false\)/.test(text) && /logRetired_\(e\.triggerUid,true\)/.test(text), 'both handlers log a retired trigger');
   });
 
-  test('the sheets: RefreshSheet notes a written result sheet with its data rows (header not counted), a BC error document as a problem, a config sheet without a table as a problem', () => {
+  test('the sheets: RefreshSheet notes a written result sheet with its data rows (header not counted), a BC error document as a FAILED sheet, a config sheet without a table as a problem', () => {
     const text = fs.readFileSync(path.join(ROOT, 'RefreshSheet.js'), 'utf8');
     assert.ok(/refreshed = bcError \? null : \{name: sheetName, rows: Math\.max\(table\.length - 1,0\)\}/.test(text) && /if\(refreshed\) RefreshLog\.noteSheet\(refreshed\.name,refreshed\.rows\)/.test(text), 'a sheet counts as refreshed only at the very end');
-    assert.ok(/RefreshLog\.noteProblem\(`BC \(\$\{sheetName\}\): /.test(text) && /RefreshLog\.noteProblem\(`Brak tabeli w arkuszu konfiguracji/.test(text));
+    assert.ok(/RefreshLog\.noteFailedSheet\(sheetName,`BC \$\{\[bcError\.code,bcError\.message\]/.test(text), 'a BC error document is a failed sheet');
+    assert.ok(/RefreshLog\.noteProblem\(`Brak tabeli w arkuszu konfiguracji/.test(text));
   });
 
   // ---- the developer tools are not mentioned to the user -----------------------------------------------------------------------------------

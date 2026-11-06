@@ -160,3 +160,7 @@ Last refresh after a failed attempt: when a scheduled refresh throws (a sheet th
 "Komórka pokazuje czas ostatniego w pełni poprawnego odświeżania. Sprawdź arkusz dziennika pobrań, żeby zobaczyć informacje o wszystkich próbach odświeżania." (the line is added when the sheet has none). The next fully correct scheduled refresh writes the time and removes the note
 (`SettingsGrid.writeLastRefresh`). A problem the add-on handled itself (a BC error document, a config sheet without a table) is not an error of the run: the time is noted as before and no note is put. The menu refreshes never touch that cell. The live check reads the note after a scheduled refresh
 (present when the run failed, absent when it was fully correct).
+
+Every failed sheet is reported the same way (download log): a BC error document (BadRequest, ...) counts as a failed sheet exactly like an error the platform threw - the status only says "Błąd ❗️ Przy pobieraniu danych dla arkusza/arkuszy: ..." naming ALL of them, and the technical column
+carries every error with its sheet ("<what fired it>. Errors: <sheet>: <error> | <sheet>: <error>"; BC's as "BC <code>: <message>"). Only a config sheet without a table is still a handled problem that stays in the status as text. Note: a sheet with a BC error document still does not throw, so
+the time of the last refresh / the permit are noted for such a run as before (open: should it count as a failed attempt - no time, the note - like a thrown error?).

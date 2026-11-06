@@ -754,7 +754,7 @@ module.exports = function register(t) {
     assert.throws(() => sc.ex.eval(`autoRefreshHandler(${event('trig-A')})`), /BC down/);
     // the error came while the data of a sheet was pulled: the status says for which sheet, the error itself is in the technical column
     assert.deepStrictEqual(plain(sc.ex.eval(`__logged.map(e => [e.source, e.status, e.technical])`)),
-      [['Autoodświeżanie', 'Błąd ❗️ Przy pobieraniu danych dla arkuszy: R1, R3.', 'Clock trigger trig-A. Platform error: BC down | BC down']]);       // both ticked sheets were tried
+      [['Autoodświeżanie', 'Błąd ❗️ Przy pobieraniu danych dla arkuszy: R1, R3.', 'Clock trigger trig-A. Errors: R1: BC down | R3: BC down']]);       // both ticked sheets were tried
   });
 
   test('log: a trigger that does not hold the permit deletes itself and writes an entry that says so - technical: the trigger and that it was deleted, status: nothing was refreshed (both handlers)', () => {

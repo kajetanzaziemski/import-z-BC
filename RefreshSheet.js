@@ -59,7 +59,8 @@ const RefreshSheet = {
       const sheetName = resultSheetName ?? getMainSettings().getResultSheetName(configSheetName);
       ResultSheet.write(sheetName,table,columnDataTypes);
       const bcError = odConnection.getError();
-      if(bcError) RefreshLog.noteProblem(`BC (${sheetName}): ${[bcError.code,bcError.message].filter(x => x).join(": ")}`);
+      // BC answered with an error document (shown in the result sheet): the data of this sheet was NOT pulled - for the download log a failed sheet like any other
+      if(bcError) RefreshLog.noteFailedSheet(sheetName,`BC ${[bcError.code,bcError.message].filter(x => x).join(": ")}`);
       refreshed = bcError ? null : {name: sheetName, rows: Math.max(table.length - 1,0)};
     } catch (e) {
       shCoed.switchDataWritingControl(false);
