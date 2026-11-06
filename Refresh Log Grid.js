@@ -13,9 +13,10 @@
 //   F Odświeżone arkusze  how many sheets ("2 arkusze:"), and each with its number of rows (one cell, a line per sheet)
 //   G Dane techniczne   what fired it (the clock trigger and its id, the menu item); for a trigger that deleted itself: that, and that nothing was refreshed
 //
-// Look: the headers grey like the headers of a config sheet, bold, centred, wrapped, and frozen (the first row stays in view); the entries wrap (the technical column
-// is cut at the edge of the cell instead), are top aligned and left aligned; the technical column is Courier New 8 pt; the columns fit their content, except
-// "Źródło" (200 px) and "Odświeżone arkusze" (300 px). The row of a new entry is fitted to its content (the Sheets API does not grow a row for wrapped text by itself).
+// Look: the headers grey like the headers of a config sheet, bold, centred, and frozen (the first row stays in view); the entries are top and left aligned; the technical
+// column is Courier New 8 pt and cut at the edge of its cell; the columns fit their content ("Dopasuj do danych"), except "Źródło" (200 px) and "Odświeżone arkusze"
+// (300 px), which are the two that wrap. Fitting a column that wraps would size it by the wrapped layout, so the other columns do not wrap. The row of a new entry is
+// fitted to its content (the Sheets API does not grow a row for wrapped text by itself).
 // One read of the first rows only (the log grows; the entries below are not needed to insert above them) and one commit per entry.
 // ---------------------------------------------------------------------------
 
@@ -51,7 +52,7 @@ const RefreshLogGrid = {
       head.setFontWeight("bold");
       head.setBackground(L.headerBackground);
       head.setHorizontalAlignment("center");
-      head.setWrapStrategy("WRAP");
+      head.setWrapStrategy("CLIP");                                       // a header is one line: it must not make a fitted column narrow
       grid.freezeRows(L.headerRow);
       grid.setColumnWidth(L.sourceCol, L.sourceWidth);
       grid.setColumnWidth(L.sheetsCol, L.sheetsWidth);
@@ -63,7 +64,6 @@ const RefreshLogGrid = {
     row.setBackground(null);
     row.setHorizontalAlignment("left");
     row.setVerticalAlignment("top");
-    row.setWrapStrategy("WRAP");
     // the time and the zone it is in: the cell keeps the wall clock of the spreadsheet's zone, so the zone (as UTC+N, the offset at that moment) is part of its format -
     // it stays true for an old entry when the zone of the spreadsheet is changed later
     const tz = grid.getTimeZone();
@@ -72,7 +72,16 @@ const RefreshLogGrid = {
     const technical = grid.getRange(L.firstEntryRow, L.technicalCol);
     technical.setFontFamily(L.technicalFont);
     technical.setFontSize(L.technicalSize);
-    technical.setWrapStrategy("CLIP");                                      // the technical text is cut at the edge of the cell, not wrapped
+    // The wrapping is a property of the COLUMN, set for every entry row on every write (so a log sheet made by an older version is put right too): only the two columns of a
+    // fixed width wrap (a long source name, the sheets one per line), the technical text is cut at the edge of its cell, the rest is one line. "Fit to data" sizes a column
+    // by its longest text - a wrapped column would be fitted by its wrapped layout and come out narrow.
+    const dataRows = Math.max(grid.maxRows - L.headerRow, 1);
+    const wrap = (col, cols, strategy) => grid.getRange(L.firstEntryRow, col, dataRows, cols).setWrapStrategy(strategy);
+    wrap(L.sourceCol, 1, "WRAP");
+    wrap(L.sourceCol + 1, L.sheetsCol - L.sourceCol - 1, "OVERFLOW");
+    wrap(L.sheetsCol, 1, "WRAP");
+    wrap(L.technicalCol, 1, "CLIP");
+    grid.getRange(L.headerRow, 1, 1, cols).setWrapStrategy("CLIP");         // a header is one line: it must not make a fitted column narrow
     grid.autoResizeColumns(L.sourceCol + 1, L.sheetsCol - L.sourceCol - 1);     // every column but "Źródło" and "Odświeżone arkusze" (fixed widths) fits its content
     grid.autoResizeColumns(L.technicalCol, 1);
     grid.commit();

@@ -54,15 +54,17 @@ module.exports = function register(t) {
     assert.strictEqual(f(2, 6).vAlign, 'top');
   }));
 
-  MODES.forEach(mode => test('log sheet: headers bold, centred, wrapped and FROZEN; "Źródło" 200 px and "Odświeżone arkusze" 300 px, the other columns fitted; the technical text CLIPPED (cut) in Courier New 8 pt; the technical column Courier New 8 pt on every entry; entries left aligned, top, wrapped (not the technical column); the new row is fitted to its content [' + mode + ']', () => {
+  MODES.forEach(mode => test('log sheet: headers bold, centred, clipped and FROZEN; "Źródło" 200 px and "Odświeżone arkusze" 300 px, the other columns fitted; the technical text CLIPPED (cut) in Courier New 8 pt; the technical column Courier New 8 pt on every entry; entries left aligned, top; wrap only in the two fixed columns, the technical text cut, the rest one line; the new row is fitted to its content [' + mode + ']', () => {
     const s = gridScope(mode);
     s.run(`RefreshLogGrid.append('Dziennik pobrań', ${entry(1)})`);
     s.run(`RefreshLogGrid.append('Dziennik pobrań', ${entry(2)})`);
     const sh = s.book.sheets['Dziennik pobrań'];
     const f = (r, c) => (sh.cells[r + ',' + c] || { fmt: {} }).fmt;
-    for (let c = 1; c <= 7; c++) assert.deepStrictEqual([f(1, c).bold, f(1, c).hAlign, f(1, c).wrap], [true, 'center', 'WRAP'], 'header ' + c);
+    for (let c = 1; c <= 7; c++) assert.deepStrictEqual([f(1, c).bold, f(1, c).hAlign, f(1, c).wrap], [true, 'center', 'CLIP'], 'header ' + c);
     for (const r of [2, 3]) {
-      for (let c = 1; c <= 7; c++) assert.deepStrictEqual([f(r, c).hAlign, f(r, c).vAlign, f(r, c).wrap], ['left', 'top', c == 7 ? 'CLIP' : 'WRAP'], `entry ${r} column ${c}: the technical text is cut, the rest wraps`);
+      for (let c = 1; c <= 7; c++) assert.deepStrictEqual([f(r, c).hAlign, f(r, c).vAlign], ['left', 'top'], `entry ${r} column ${c}`);
+      // only the two columns of a fixed width wrap; the fitted ones are one line (a wrapped column would be fitted by its wrapped layout); the technical text is cut
+      assert.deepStrictEqual([1, 2, 3, 4, 5, 6, 7].map(c => f(r, c).wrap), ['WRAP', 'OVERFLOW', 'OVERFLOW', 'OVERFLOW', 'OVERFLOW', 'WRAP', 'CLIP'], 'wrap of entry ' + r);
       assert.deepStrictEqual([f(r, 7).family, f(r, 7).size], ['Courier New', 8], 'technical column, row ' + r);
       assert.ok(!f(r, 5).family && !f(r, 5).size, 'only the technical column has the small monospaced font');
     }
@@ -73,6 +75,18 @@ module.exports = function register(t) {
     assert.ok(snap.fitted.columns.some(x => x[0] === 2 && x[1] === 4) && snap.fitted.columns.some(x => x[0] === 7 && x[1] === 1), 'columns B-E and G fit their content: ' + JSON.stringify(snap.fitted.columns));
     assert.ok(!snap.fitted.columns.some(x => x[0] <= 1 && x[0] + x[1] > 1) && !snap.fitted.columns.some(x => x[0] <= 6 && x[0] + x[1] > 6), 'not the two fixed ones');
     assert.ok(snap.fitted.rows.length > 0, 'the new row is fitted to its wrapped content');
+  }));
+
+  MODES.forEach(mode => test('log sheet: the wrapping is set per COLUMN for all entries on every write - a log sheet made by an older version (every column wrapped) is put right, so "fit to data" sizes the columns by their text [' + mode + ']', () => {
+    const s = gridScope(mode);
+    s.run(`RefreshLogGrid.append('Dziennik pobrań', ${entry(1)})`);
+    s.run(`RefreshLogGrid.append('Dziennik pobrań', ${entry(2)})`);
+    const sh = s.book.sheets['Dziennik pobrań'];
+    for (let r = 1; r <= 3; r++) for (let c = 1; c <= 7; c++) (sh.cells[r + ',' + c] || (sh.cells[r + ',' + c] = { v: '', f: '', note: '', dv: null, fmt: {} })).fmt.wrap = 'WRAP';        // as an older version left it
+    s.run(`RefreshLogGrid.append('Dziennik pobrań', ${entry(3)})`);
+    const wrap = (r, c) => (sh.cells[r + ',' + c] || { fmt: {} }).fmt.wrap;
+    for (const r of [2, 3, 4]) assert.deepStrictEqual([1, 2, 3, 4, 5, 6, 7].map(c => wrap(r, c)), ['WRAP', 'OVERFLOW', 'OVERFLOW', 'OVERFLOW', 'OVERFLOW', 'WRAP', 'CLIP'], 'entry row ' + r + ' (also the older ones)');
+    assert.deepStrictEqual([1, 2, 3, 4, 5, 6, 7].map(c => wrap(1, c)), Array(7).fill('CLIP'), 'the headers');
   }));
 
   MODES.forEach(mode => test('log sheet: the time cells carry the zone of the moment they were written in (UTC+N in the format), per cell; the freeze and the width are set once, with the sheet [' + mode + ']', () => {

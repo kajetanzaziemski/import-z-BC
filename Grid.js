@@ -808,6 +808,7 @@ class Grid {
     });
 
     Object.keys(this.rowSizes).forEach(r => sheet.setRowHeight(Number(r), this.rowSizes[r]));
+    if (this.colFits.length) SpreadsheetApp.flush();                       // the service sizes a column by what the sheet shows: the writes above have to be there
     this.colFits.forEach(x => sheet.autoResizeColumns(x.first, x.count));
     Object.keys(this.colWidths).forEach(c => sheet.setColumnWidth(Number(c), this.colWidths[c]));
     if (this.freezeTo !== null) sheet.setFrozenRows(this.freezeTo);
