@@ -45,12 +45,12 @@ function devToolsMenu_(ui){
 
 /** Menu "Ustawienia" -> "Ogólne" (the old "Stan konfiguracji"). */
 function statusCheck(){
-  return Controller.run("requestStatusCheck",()=>StatusManager.statusSidebar("status"));
+  return Controller.run("menuSettingsGeneral",()=>StatusManager.statusSidebar("status"));
 }
 
 /** Menu "Ustawienia" -> "Auto-odświeżanie". */
 function autoRefreshSettings(){
-  return Controller.run("requestStatusCheck",()=>StatusManager.statusSidebar("refresh"));
+  return Controller.run("menuSettingsAutoRefresh",()=>StatusManager.statusSidebar("refresh"));
 }
 
 function listAllTriggers(){
@@ -67,7 +67,7 @@ function checkConfigSheet(){
 
 /** Menu "Ustawienia" -> "Połączenie z BC": the settings sidebar on the tab with the connection settings. */
 function connectionSetup(){
-  Controller.run("menuConnectionSetup",()=>StatusManager.statusSidebar("help"));
+  Controller.run("menuSettingsConnection",()=>StatusManager.statusSidebar("help"));
 }
 
 function refreshCurrentSheet(){

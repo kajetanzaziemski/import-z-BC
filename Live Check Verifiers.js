@@ -656,12 +656,17 @@ function buildLiveCheckVerifiers_(){
       }
     },
 
-    menuConnectionSetup: {
+    menuSettingsConnection: {
       needs: ["sheets","docProps"],
       verify(c){ lcVerifyNothingChanged_(c,menuNoise); c.skip("sidebar shown","the UI cannot be read back by a script"); }
     },
 
-    requestStatusCheck: {
+    menuSettingsGeneral: {
+      needs: ["sheets","docProps"],
+      verify(c){ lcVerifyNothingChanged_(c); c.skip("sidebar shown","the UI cannot be read back by a script"); }
+    },
+
+    menuSettingsAutoRefresh: {
       needs: ["sheets","docProps"],
       verify(c){ lcVerifyNothingChanged_(c); c.skip("sidebar shown","the UI cannot be read back by a script"); }
     },

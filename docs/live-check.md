@@ -67,7 +67,7 @@ Each run gets two sets of checks: the trigger's (bookkeeping, power) and the job
 | `menuEstimateForCurrentSheet` | F2 is a number formatted `#,##0`, estimate info shown, indicators idle |
 | `menuRefreshCurrentSheet`, `menuRefreshAll` | result sheet exists; data rows = estimate in F2 (±5 % warns, approximate when `extend` is used); every column has a header and a uniform number format; formats match the cached data types; indicators idle |
 | `menuAuthFlow`, `menuLogoutFlow`, `requestAuthCallback` | nothing changed / OAuth token key removed / stored |
-| `menuConnectionSetup`, `requestStatusCheck`, `requestListAllTriggers`, `requestLiveCheckSidebar` | read-only |
+| `menuSettingsConnection`, `menuSettingsGeneral`, `menuSettingsAutoRefresh`, `requestListAllTriggers`, `requestLiveCheckSidebar` | read-only |
 | `requestAddonStatus`, `requestChangeAddonStatus`, `requestSettingsSheetName`, `requestSetSettingsSheetName`, `requestPermitsInfo` | returned / stored value matches; ON → settings sheet name stored, agents active; a sheet with the chosen name must have the settings signature |
 | `forceAgentRefresh` | one edit + one change trigger installed for this document, returned id matches, both logged ON for document and user, pair in the agent array (≤ 5), no logged trigger missing from the project, suspect flag cleared |
 | `requestDeleteAllAgents` | agent array empty, only the agents' triggers removed, log entries gone |
@@ -184,3 +184,8 @@ It is part of `menuRefreshCurrentSheet` (a config sheet), `menuRefreshAll`, the 
 ## Quiet jobs
 `sheet.ignored`, `change.ignored` and `change.own` (`LIVE_CHECK_QUIET_JOBS`, `Live Check.js`) only look at an event and do nothing; they were most of the report. While they **pass** (or skip) nothing is logged, stored or shown, and their "running" placeholder
 is removed at once. One that fails or warns (an edit in a config sheet wrongly ignored) is recorded and shown like any other run. `settings.edit` and `agent.skipped` also do nothing but are still reported.
+
+## The menu "Ustawienia" (hashes of `Live Check.js` / `Live Check Verifiers.js` re-pinned)
+
+The menu items "Stan konfiguracji" and "Ustawienia połączenia BC" became the submenu "Ustawienia" (Ogólne, Połączenie z BC, Auto-odświeżanie), all three opening the same sidebar on a tab.
+Their entry points are `menuSettingsGeneral`, `menuSettingsConnection`, `menuSettingsAutoRefresh` (read-only, as `requestStatusCheck` / `menuConnectionSetup` were, which are gone).

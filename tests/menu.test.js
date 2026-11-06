@@ -98,7 +98,7 @@ module.exports = function register(t) {
 
   test('menu: the action names the live check and the gate rely on are kept', () => {
     const text = fs.readFileSync(path.join(ROOT, 'Menu.js'), 'utf8');
-    ['requestCheckConfigSheet', 'menuConnectionSetup', 'menuAuthFlow', 'menuInsertImportWizard', 'menuLogoutFlow', 'requestStatusCheck', 'requestListAllTriggers']
+    ['requestCheckConfigSheet', 'menuSettingsConnection', 'menuSettingsGeneral', 'menuSettingsAutoRefresh', 'menuAuthFlow', 'menuInsertImportWizard', 'menuLogoutFlow', 'requestListAllTriggers']
       .forEach(a => assert.ok(text.includes('Controller.run("' + a + '"'), a));
   });
 
