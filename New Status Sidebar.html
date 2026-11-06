@@ -258,7 +258,6 @@
         // switching it off on purpose (the settings in the sheet are cleaned, the trigger removed): a second press within 4 s confirms
         html += '<h1> Wyłącz autoodświeżanie: </h1>';
         html += '<p><button id="turnOffRefreshBtn" onclick="turnOffRefresh()"' + (info.current ? '' : ' disabled') + '> Wyłącz autoodświeżanie </button></p>';
-        html += '<div id="applyRefreshError"></div>';
 
         html += '<hr /><h1> Arkusze, które odświeżasz automatycznie: </h1>' + renderTriggerList(info.triggers);
         // this document is refreshed by another user's trigger: it is not in the list, and the note says why
@@ -266,7 +265,7 @@
           html += '<p><a href="#" onclick="showRefreshHelp(); return false;">Dlaczego nie widzę tego arkusza?</a></p>';
         }
         html += '<p class="gray">Strefa czasowa: ' + escapeHtml(info.zone) + '</p>';
-        html += '<details><summary class="gray">Szczegóły techniczne</summary><pre style="white-space:pre-wrap;font-size:11px">' + escapeHtml(JSON.stringify(info.diag, null, 1)) + '</pre></details>';
+        html += '<details><summary class="gray">Szczegóły techniczne</summary><pre style="white-space:pre-wrap;font-size:11px">' + escapeHtml((info.sheet && info.sheet.error ? 'Nie udało się odczytać arkusza ustawień: ' + info.sheet.error + '\n\n' : '') + JSON.stringify(info.diag, null, 1)) + '</pre></details>';
         document.getElementById('refreshInfo-panel').innerHTML = html;
       }
 
@@ -303,8 +302,7 @@
       function showRefreshHelp() {
         google.script.run
           .withFailureHandler(function (error) {
-            var box = document.getElementById('applyRefreshError');
-            if (box) box.innerHTML = "<font color='red'>Błąd: " + escapeHtml(error.message) + "</font>";
+            alert('Błąd: ' + error.message);
           })
           .showRefreshHelp();
       }
@@ -327,9 +325,7 @@
         google.script.run
           .withSuccessHandler(function () { loadRefreshInfo(); })
           .withFailureHandler(function (error) {
-            loadRefreshInfo();
-            var box = document.getElementById('applyRefreshError');
-            if (box) box.innerHTML = "<font color='red'>Błąd: " + escapeHtml(error.message) + "</font>";
+            loadRefreshInfo(); // the failure is shown by the panel itself (the message of the settings sheet)
           })
           .turnOffRefresh();
       }
@@ -340,9 +336,7 @@
         google.script.run
           .withSuccessHandler(function () { loadRefreshInfo(); })
           .withFailureHandler(function (error) {
-            loadRefreshInfo();
-            var box = document.getElementById('applyRefreshError');
-            if (box) box.innerHTML = "<font color='red'>Błąd: " + escapeHtml(error.message) + "</font>";
+            loadRefreshInfo(); // the failure is shown by the panel itself (the message of the settings sheet)
           })
           .applyRefreshSettings();
       }

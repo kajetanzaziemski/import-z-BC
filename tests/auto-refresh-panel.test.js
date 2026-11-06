@@ -353,9 +353,11 @@ module.exports = function register(t) {
     const html = fs.readFileSync(path.join(ROOT, 'New Status Sidebar.html'), 'utf8');
     const body = html.slice(html.indexOf('function showRefreshInfo(info)'), html.indexOf('function renderTriggerList'));
     const at = t => { const i = body.indexOf(t); assert.ok(i >= 0, t); return i; };
-    const order = ['Aktualne ustawienia:', 'Ostatnio odświeżone:', 'Zmiana ustawień:', 'renderSetupError(info.setupError)', 'id="applyRefreshBtn"', 'Wyłącz autoodświeżanie:', 'id="turnOffRefreshBtn"', 'id="applyRefreshError"', 'Arkusze, które odświeżasz automatycznie:', 'Strefa czasowa:', 'Szczegóły techniczne'].map(at);
+    const order = ['Aktualne ustawienia:', 'Ostatnio odświeżone:', 'Zmiana ustawień:', 'renderSetupError(info.setupError)', 'id="applyRefreshBtn"', 'Wyłącz autoodświeżanie:', 'id="turnOffRefreshBtn"', 'Arkusze, które odświeżasz automatycznie:', 'Strefa czasowa:', 'Szczegóły techniczne'].map(at);
     assert.deepStrictEqual(order, [...order].sort((a, b) => a - b));
     assert.ok(/Odśwież informacje w tym panelu/.test(html));
+    assert.ok(!/applyRefreshError/.test(html), 'no red error under the buttons - the panel shows the failure');
+    assert.ok(/Nie udało się odczytać arkusza ustawień: ' \+ info\.sheet\.error/.test(html), 'the error of reading the settings sheet is in the technical details');
   });
 
   test('page: the section "Arkusze, które odświeżasz automatycznie:" shows the document as a link in a new tab, under it how often and the last refresh; everything is escaped', () => {
