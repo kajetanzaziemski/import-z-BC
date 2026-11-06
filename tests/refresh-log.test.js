@@ -54,6 +54,23 @@ module.exports = function register(t) {
     assert.strictEqual(f(2, 6).vAlign, 'top');
   }));
 
+  MODES.forEach(mode => test('log sheet: an opened entry (start only, status "Nieznany ...") is completed IN PLACE even when newer entries came above it; one that is not there is added as a new entry [' + mode + ']', () => {
+    const s = gridScope(mode);
+    const open = `({ source: 'Autoodświeżanie', start: new Date(Date.UTC(2026, 10, 5, 10, 7)), end: null, duration: '', status: 'Nieznany (w trakcie lub błąd wykonania)', sheets: '', technical: 'Clock trigger t7' })`;
+    const done = `({ source: 'Autoodświeżanie', start: new Date(Date.UTC(2026, 10, 5, 10, 7)), end: new Date(Date.UTC(2026, 10, 5, 10, 8)), duration: '1 m 0 s', status: 'OK ✅', sheets: '1 arkusz:\\nDane K1 (3 wiersze)', technical: 'Clock trigger t7' })`;
+    s.run(`RefreshLogGrid.append('Dziennik pobrań', ${open})`);
+    const sh = s.book.sheets['Dziennik pobrań'];
+    const v = (r, c) => (sh.cells[r + ',' + c] || {}).v ?? '';
+    assert.deepStrictEqual([v(2, 3), v(2, 4), v(2, 5)], ['', '', 'Nieznany (w trakcie lub błąd wykonania)'], 'no end yet');
+    s.run(`RefreshLogGrid.append('Dziennik pobrań', ${entry(2)})`);          // another run puts its entry above
+    s.run(`RefreshLogGrid.update('Dziennik pobrań', ${open}, ${done})`);
+    assert.deepStrictEqual([v(2, 7), v(3, 7), v(4, 7)], ['Clock trigger t2', 'Clock trigger t7', ''], 'still two entries, the opened one completed where it was');
+    assert.deepStrictEqual([v(3, 4), v(3, 5), v(3, 6)], ['1 m 0 s', 'OK ✅', '1 arkusz:\nDane K1 (3 wiersze)']);
+    assert.ok(/UTC\+9/.test((sh.cells['3,3'].fmt || {}).numFmt), 'the end has its date format');
+    s.run(`RefreshLogGrid.update('Dziennik pobrań', ${open}, ${entry(9)})`);   // the opened row is not there any more (it was completed)
+    assert.deepStrictEqual([v(2, 7), v(3, 7), v(4, 7)], ['Clock trigger t9', 'Clock trigger t2', 'Clock trigger t7']);
+  }));
+
   const WIDTHS = [200, 200, 200, 100, 200, 300, 200];
   const WRAPS = ['WRAP', 'WRAP', 'WRAP', 'WRAP', 'WRAP', 'WRAP', 'CLIP'];
 
@@ -127,7 +144,7 @@ module.exports = function register(t) {
     const p = new FakePlatform();
     p.props.document.importSettingsArray = JSON.stringify(Object.assign({ addonStatus: true, importSheetName: 'Ustawienia' }, over && over.settings || {}));
     const ex = p.execution(USE_CASE_BASE.concat(files || []), {});
-    ex.eval(`globalThis.__entries = []; RefreshLogGrid = { append: (name, e) => { if (globalThis.__appendFails) throw new Error('sheet unavailable'); __entries.push({ name, ...e }); } };`);
+    ex.eval(`globalThis.__entries = []; RefreshLogGrid = { append: (name, e) => { if (globalThis.__appendFails) throw new Error('sheet unavailable'); __entries.push({ name, ...e }); }, update: (name, opened, e) => { if (globalThis.__appendFails) throw new Error('sheet unavailable'); const i = __entries.findIndex(x => x.status === opened.status && x.start === opened.start); if (i < 0) throw new Error('opened entry not found'); __entries[i] = { name, ...e }; } };`);
     return { p, ex, entries: () => plain(ex.eval(`__entries`)) };
   }
 
@@ -281,6 +298,56 @@ module.exports = function register(t) {
     const text = fs.readFileSync(path.join(ROOT, 'ScheduleRefresh.js'), 'utf8');
     assert.ok(/RefreshAll\.scheduled\(ScheduleRefresh\.triggerText_\(e\.triggerUid,false\)\)/.test(text) && /RefreshAll\.scheduled\(ScheduleRefresh\.triggerText_\(e\.triggerUid,true\)\)/.test(text));
     assert.ok(/logRetired_\(e\.triggerUid,false\)/.test(text) && /logRetired_\(e\.triggerUid,true\)/.test(text), 'both handlers log a retired trigger');
+  });
+
+  test('scheduled run: the entry is opened when the run STARTS (start, source, technical; status "Nieznany (w trakcie lub błąd wykonania)", no end) and completed at the end, in place', () => {
+    const u = useCase(); u.ex.eval(STUBS);
+    u.ex.eval(`globalThis.__seen = []; { const f = RefreshAll.ticked; RefreshAll.ticked = () => { __seen.push(JSON.parse(JSON.stringify(__entries))); return f(); }; }`);
+    u.ex.eval(`RefreshAll.scheduled('Clock trigger t1')`);
+    const during = plain(u.ex.eval(`__seen[0]`));
+    assert.strictEqual(during.length, 1);
+    assert.deepStrictEqual([during[0].source, during[0].status, during[0].end, during[0].duration, during[0].sheets, during[0].technical],
+      ['Autoodświeżanie', 'Nieznany (w trakcie lub błąd wykonania)', null, '', '', 'Clock trigger t1']);
+    const after = u.entries();
+    assert.strictEqual(after.length, 1, 'completed in place, not added');
+    assert.deepStrictEqual([after[0].status, after[0].start], ['OK ✅', during[0].start]);
+    // the menu refreshes do not open an entry (they run in front of the user)
+    const menu = useCase(); menu.ex.eval(`RefreshLog.run('Odświeżanie wszystkich arkuszy', 'Menu', () => { globalThis.__n = __entries.length; })`);
+    assert.strictEqual(menu.ex.eval(`__n`), 0);
+  });
+
+  test('scheduled run: a run that never finishes (killed by the platform) leaves the opened entry as "Nieznany ..."; an entry that cannot be written never fails the run; a lost row is added as a new entry', () => {
+    const u = useCase(); u.ex.eval(STUBS);
+    u.ex.eval(`RefreshAll.ticked = () => { globalThis.__open = JSON.parse(JSON.stringify(__entries)); }`);
+    u.ex.eval(`RefreshAll.scheduled('Clock trigger t1')`);
+    assert.strictEqual(plain(u.ex.eval(`__open`))[0].status, 'Nieznany (w trakcie lub błąd wykonania)');
+    const down = useCase(); down.ex.eval(STUBS); down.ex.eval(`globalThis.__appendFails = true`);
+    assert.doesNotThrow(() => down.ex.eval(`RefreshAll.scheduled('Clock trigger t1')`));
+    const lost = useCase(); lost.ex.eval(STUBS);
+    lost.ex.eval(`RefreshLogGrid.update = (name, opened, e) => RefreshLogGrid.append(name, e)`);
+    lost.ex.eval(`RefreshAll.scheduled('Clock trigger t1')`);
+    assert.deepStrictEqual(lost.entries().map(e => e.status), ['Nieznany (w trakcie lub błąd wykonania)', 'OK ✅']);
+  });
+
+  test('scheduled run: out of time (1700 s) the rest of the sheets is not tried, the entry says so and lists them, the run fails with the log written', () => {
+    const u = useCase(); u.ex.eval(STUBS);
+    u.ex.eval(`{ const g = getMainSettings; getMainSettings = () => Object.assign(g(), { getSheetListWithRefreshTrue: () => [{ configSheet: 'K1', resultSheet: 'Dane K1', refresh: true }, { configSheet: 'K2', resultSheet: 'Dane K2', refresh: true }, { configSheet: 'K3', resultSheet: 'Dane K3', refresh: true }] }); }`);
+    u.ex.eval(`globalThis.__clock = Date.now(); Date.now = () => __clock; globalThis.__tried = []; RefreshSheet.run = (c, r) => { __tried.push(c); __clock += 1000 * 1000; RefreshLog.noteSheet(r, 1); };`);
+    assert.throws(() => u.ex.eval(`RefreshAll.scheduled('Clock trigger t1')`), /Przekroczono limit czasu odświeżania \(1700 s\)\. Nie odświeżono arkuszy: Dane K3\./);
+    assert.deepStrictEqual(plain(u.ex.eval(`__tried`)), ['K1', 'K2']);
+    const [e] = u.entries();
+    assert.ok(/Przekroczono limit czasu odświeżania \(1700 s\)\. Nie odświeżono arkuszy: Dane K3\./.test(e.status), e.status);
+    assert.ok(e.sheets.startsWith('2 arkusze'), e.sheets);
+    // the paging of one sheet checks the time too
+    const paging = fs.readFileSync(path.join(ROOT, 'OData Connection.js'), 'utf8');
+    assert.ok(/RefreshLog\.checkTime\(\);[^\n]*\n\s*this\.fetchHttpResponse\(this\.nextPage\)/.test(paging), 'checked before every page');
+    const none = useCase(); none.ex.eval(`RefreshLog.run('Odświeżanie jednego arkusza', 'Menu', () => { RefreshLog.checkTime(); })`);
+    assert.strictEqual(none.entries()[0].status, 'OK ✅', 'no limit, no failure');
+  });
+
+  test('the clock triggers log their id with Logger.log (not only with the debug log on)', () => {
+    const text = fs.readFileSync(path.join(ROOT, 'ScheduleRefresh.js'), 'utf8');
+    assert.ok(/Logger\.log\(`Clock trigger autoRefreshHandler\. Id = \$\{e\.triggerUid\}/.test(text) && /Logger\.log\(`Clock trigger autoRefresh \(old version\)\. Id = \$\{e\.triggerUid\}/.test(text));
   });
 
   test('the sheets: RefreshSheet notes a written result sheet with its data rows (header not counted), a BC error document as a FAILED sheet, a config sheet without a table as a problem', () => {

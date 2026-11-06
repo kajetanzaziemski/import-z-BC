@@ -506,7 +506,7 @@ const ScheduleRefresh = {
 
   /** @param e {Object} The time-based trigger event (e.triggerUid). */
   run(e){
-    dbgLog(`Running autoRefreshHandler. Id = ${e.triggerUid}.`);
+    Logger.log(`Clock trigger autoRefreshHandler. Id = ${e.triggerUid}.`);       // always, not only with the debug log on
     let myPermit = MainSettings.getRefreshPermit();
     if(myPermit) dbgLog(`Permit issued for ${myPermit.issuedFor} (${myPermit.issuedFor !== e.triggerUid ? 'NOT my permit. Removing...' : 'my permit'})`);
     // Registry doesn't point at me anymore → delete my own trigger and stop
@@ -585,7 +585,7 @@ const ScheduleRefresh = {
 
   /** This only serves the legacy version: older triggers run autoRefresh() rather than autoRefreshHandler(e). */
   runLegacy(e){
-    dbgLog(`Running autoRefresh. Id = ${e.triggerUid}.`);
+    Logger.log(`Clock trigger autoRefresh (old version). Id = ${e.triggerUid}.`);
     let myPermit = MainSettings.getRefreshPermit();
     // There was no permits for autoRefresh. Reissue my own permit.
     if (!myPermit) {

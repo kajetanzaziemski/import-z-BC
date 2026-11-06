@@ -164,3 +164,16 @@ Last refresh after a failed attempt: when a scheduled refresh throws (a sheet th
 Every failed sheet is reported the same way (download log): a BC error document (BadRequest, ...) counts as a failed sheet exactly like an error the platform threw - the status only says "Błąd ❗️ Przy pobieraniu danych dla arkusza/arkuszy: ..." naming ALL of them, and the technical column
 carries every error with its sheet ("<what fired it>. Errors: <sheet>: <error> | <sheet>: <error>"; BC's as "BC <code>: <message>"). Only a config sheet without a table is still a handled problem that stays in the status as text. Note: a sheet with a BC error document still does not throw, so
 such a run counts as a failed attempt too: no time of the last refresh, the failed-attempt note on it, and the run is not recorded on the permit - like a thrown error.
+
+### A scheduled refresh that does not finish
+
+A clock trigger is ended by the platform after 30 minutes, and a run that is ended leaves no trace in the download log. So a scheduled refresh (`RefreshAll.scheduled`) **opens its entry when it starts**:
+source, start and the technical text (the trigger id) are written at once, with the status "Nieznany (w trakcie lub błąd wykonania)" and no end, duration or sheets. At the end the same row is
+completed with the usual information (`RefreshLogGrid.update` finds it by status, start and technical text among the first 30 rows - other runs may have put entries above it; a row that
+is not found is added as a new entry). A run the platform kills leaves the row as it was. The menu refreshes (the user is watching) write their entry at the end only.
+
+The run also keeps its own time (`REFRESH_TIME_LIMIT_SECONDS`, 1700 s): the time is checked before every sheet and before every page of BC's answer. When it is up, the remaining sheets are not tried,
+the entry says "Przekroczono limit czasu odświeżania (1700 s). Nie odświeżono arkuszy: ..." and the run fails like any failed attempt (the note on the time of the last refresh, no record on the permit),
+with time left to write the log. A single request to BC that hangs longer cannot be interrupted.
+
+Both clock handlers write their trigger id with `Logger.log` at the start (always, not only with the debug log on).

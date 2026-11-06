@@ -46,7 +46,7 @@ module.exports = function register(t) {
     const ex = p.execution(FILES, { __cfg: cfg, __log: log });
     ex.eval(`Agents.ensureActive = () => {}`);
     ex.eval(FAKES);
-    ex.eval(`globalThis.__logged = []; RefreshLogGrid.append = (name, e) => __logged.push(Object.assign({ name }, e));`);
+    ex.eval(`globalThis.__logged = []; RefreshLogGrid.append = (name, e) => __logged.push(Object.assign({ name }, e)); RefreshLogGrid.update = (name, opened, e) => { const i = __logged.findIndex(x => x.status === opened.status && x.start === opened.start && x.technical === opened.technical); if (i < 0) throw new Error('opened entry not found'); __logged[i] = Object.assign({ name }, e); };`);
     ex.eval(`globalThis.__noted = 0; { const g = getMainSettings; getMainSettings = () => Object.assign(g(), { markLastRefreshAttemptFailed: () => { if (__cfgNoteFails) throw new Error('note failed'); __noted++; } }); }; globalThis.__cfgNoteFails = false;`);
     const stored = () => JSON.parse(p.props.document.importSettingsArray);
     return { p, ex, log, cfg, calls: () => plain(log), stored,

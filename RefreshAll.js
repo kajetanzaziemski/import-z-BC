@@ -15,7 +15,16 @@ const RefreshAll = {
   /** Refreshes every pair, one after the other. A pair that fails does not stop the rest; the first error is thrown when all were tried. */
   each_(list){
     const errors = [];
-    list.forEach(cfg => {
+    list.forEach((cfg, i) => {
+      if(errors.length && errors[errors.length - 1] instanceof RefreshTimeLimitError) return;
+      if(RefreshLog.timeIsUp()){
+        // out of time: the rest is not tried (the platform would end the execution), the log says which sheets were left
+        const left = list.slice(i).map(x => x.resultSheet || x.configSheet).join(", ");
+        const err = new RefreshTimeLimitError(`Przekroczono limit czasu odświeżania (${REFRESH_TIME_LIMIT_SECONDS} s). Nie odświeżono arkuszy: ${left}.`);
+        RefreshLog.noteProblem(err.message);
+        errors.push(err);
+        return;
+      }
       try{ RefreshSheet.run(cfg.configSheet,cfg.resultSheet); }
       catch(err){ errors.push(err); }
     });
@@ -49,7 +58,7 @@ const RefreshAll = {
       }
       getMainSettings().setLastRefresh(new Date());
       return true;
-    });
+    },{opening: true, limitSeconds: REFRESH_TIME_LIMIT_SECONDS});
   },
 
   /** The attempt failed: a note on the time of the last refresh. Never hides the error that is on its way. */

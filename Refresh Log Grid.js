@@ -58,13 +58,7 @@ const RefreshLogGrid = {
     }
     // The new entry goes in as "insert a row above" the first entry: the sheet gives it the look of the entries (formats, row height), whatever the user has done to them.
     grid.insertRowsAfter(L.headerRow, 1, { plain: true, fit: true, fromBelow: true });
-    const row = grid.getRange(L.firstEntryRow, 1, 1, cols);
-    row.setValues([[entry.source, entry.start, entry.end, entry.duration, entry.status, entry.sheets, entry.technical]]);
-    // the time and the zone it is in: the cell keeps the wall clock of the spreadsheet's zone, so the zone (as UTC+N, the offset at that moment) is part of its format -
-    // it stays true for an old entry when the zone of the spreadsheet is changed later. This differs from entry to entry, so it is set for every entry.
-    const tz = grid.getTimeZone();
-    grid.getRange(L.firstEntryRow, 2).setNumberFormat(`${L.timeFormat} "${SettingsGrid.offsetName(entry.start, tz)}"`);
-    grid.getRange(L.firstEntryRow, 3).setNumberFormat(`${L.timeFormat} "${SettingsGrid.offsetName(entry.end, tz)}"`);
+    RefreshLogGrid.writeEntry_(grid, L.firstEntryRow, entry);
     if (created) {
       // The look of the entries, set ONCE for the rows under the headers when the sheet is made (the rows after it take it from the entries below them)
       const dataRows = Math.max(grid.maxRows - L.headerRow, 1);
@@ -76,5 +70,41 @@ const RefreshLogGrid = {
       column(L.technicalCol).setFontSize(L.technicalSize);
     }
     grid.commit();
+  },
+
+  /**
+   * Writes the entry into the row. The time and the zone it is in: the cell keeps the wall clock of the spreadsheet's zone, so the zone (as UTC+N, the offset at that
+   * moment) is part of its format - it stays true for an old entry when the zone of the spreadsheet is changed later. This differs from entry to entry.
+   * An entry that has no end yet (the one opened when a run starts) leaves the cell empty.
+   */
+  writeEntry_(grid, rowNumber, entry) {
+    const L = REFRESH_LOG_LAYOUT;
+    grid.getRange(rowNumber, 1, 1, L.headers.length).setValues([[entry.source, entry.start, entry.end ?? "", entry.duration ?? "", entry.status, entry.sheets ?? "", entry.technical]]);
+    const tz = grid.getTimeZone();
+    grid.getRange(rowNumber, 2).setNumberFormat(`${L.timeFormat} "${SettingsGrid.offsetName(entry.start, tz)}"`);
+    if (entry.end) grid.getRange(rowNumber, 3).setNumberFormat(`${L.timeFormat} "${SettingsGrid.offsetName(entry.end, tz)}"`);
+  },
+
+  /**
+   * Completes the entry that was opened when the run started (`opened`: the entry as it was written then): the row is found among the first rows by its status
+   * (REFRESH_LOG_UNKNOWN), its start (to the second) and the technical text; other runs may have put entries above it meanwhile. The row is fitted to its content.
+   * When the row cannot be found (the sheet was cleared, renamed ...) the entry is added as a new one, so nothing is lost.
+   */
+  update(sheetName, opened, entry) {
+    const L = REFRESH_LOG_LAYOUT;
+    const grid = Grid.open({ sheetName: sheetName, window: REFRESH_LOG_LOOKUP_ROWS });
+    if (!grid) return RefreshLogGrid.append(sheetName, entry);
+    let found = 0;
+    for (let r = L.firstEntryRow; r <= grid.rows && !found; r++) {
+      const v = grid.getRange(r, 1, 1, L.headers.length).getValues()[0];
+      const at = v[1] && typeof v[1].getTime == "function" ? v[1].getTime() : NaN;
+      if (v[4] === opened.status && v[6] === opened.technical && v[0] === opened.source && Math.abs(at - opened.start.getTime()) < 1000) found = r;
+    }
+    if (!found) return RefreshLogGrid.append(sheetName, entry);
+    RefreshLogGrid.writeEntry_(grid, found, entry);
+    grid.fitRows.push(found);
+    grid.commit();
   }
 };
+
+const REFRESH_LOG_LOOKUP_ROWS = 30;        // how far down the opened entry is looked for (the newest entries are on top)

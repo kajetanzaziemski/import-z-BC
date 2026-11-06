@@ -61,6 +61,7 @@ class ODataConnection{
       while(this.nextPage){
         // dbgLog(`Reading page ${i++} of ${this.totalPages ?? "unknown"}...`);
         if(shCoed) shCoed.switchConnectionControl(true);
+        if(typeof RefreshLog !== "undefined") RefreshLog.checkTime();       // a scheduled refresh that ran out of time fails here, with time left to write the log
         this.fetchHttpResponse(this.nextPage);
         this.readPage();
         i++;
