@@ -77,18 +77,21 @@ module.exports = function register(t) {
     assert.ok(snap.fitted.rows.length > 0, 'the new row is fitted to its wrapped content');
   }));
 
-  MODES.forEach(mode => test('log sheet: widths and wrapping are set per COLUMN for all entries on every write - a log sheet made by an older version (fitted columns, other wraps) is put right [' + mode + ']', () => {
+  MODES.forEach(mode => test('log sheet: widths, wrapping and the look of the entries are set ONCE, with the sheet; a later entry is inserted as "a row above" the first entry and takes ITS look - what the user changed stays, and the headers\' look does not leak in [' + mode + ']', () => {
     const s = gridScope(mode);
     s.run(`RefreshLogGrid.append('Dziennik pobrań', ${entry(1)})`);
-    s.run(`RefreshLogGrid.append('Dziennik pobrań', ${entry(2)})`);
     const sh = s.book.sheets['Dziennik pobrań'];
-    for (let r = 1; r <= 3; r++) for (let c = 1; c <= 7; c++) (sh.cells[r + ',' + c] || (sh.cells[r + ',' + c] = { v: '', f: '', note: '', dv: null, fmt: {} })).fmt.wrap = c % 2 ? 'OVERFLOW' : 'CLIP';   // as an older version left it
-    for (let c = 1; c <= 7; c++) sh.colPx[c] = 77;
+    // the user changes the look of the entry and the width of a column
+    for (let c = 1; c <= 7; c++) { const fmt = (sh.cells['2,' + c] || (sh.cells['2,' + c] = { v: '', f: '', note: '', dv: null, fmt: {} })).fmt; fmt.wrap = 'OVERFLOW'; fmt.bg = '#ffffcc'; fmt.size = 11; }
+    sh.colPx[4] = 333;
+    s.run(`RefreshLogGrid.append('Dziennik pobrań', ${entry(2)})`);
     s.run(`RefreshLogGrid.append('Dziennik pobrań', ${entry(3)})`);
-    const wrap = (r, c) => (sh.cells[r + ',' + c] || { fmt: {} }).fmt.wrap;
-    for (const r of [2, 3, 4]) assert.deepStrictEqual([1, 2, 3, 4, 5, 6, 7].map(c => wrap(r, c)), WRAPS, 'entry row ' + r + ' (also the older ones)');
-    assert.deepStrictEqual([1, 2, 3, 4, 5, 6, 7].map(c => wrap(1, c)), Array(7).fill('WRAP'), 'the headers');
-    assert.deepStrictEqual([1, 2, 3, 4, 5, 6, 7].map(c => sh.colPx[c]), WIDTHS, 'the widths');
+    const f = (r, c) => (sh.cells[r + ',' + c] || { fmt: {} }).fmt;
+    for (const r of [2, 3]) for (let c = 1; c <= 7; c++) assert.deepStrictEqual([f(r, c).wrap, f(r, c).bg, f(r, c).size, f(r, c).bold], ['OVERFLOW', '#ffffcc', 11, undefined], `new entry row ${r} column ${c} looks like the entry it was inserted above`);
+    assert.strictEqual(sh.colPx[4], 333, 'the width the user set is left');
+    assert.deepStrictEqual([1, 2, 3, 5, 6, 7].map(c => sh.colPx[c]), [200, 200, 200, 200, 300, 200]);
+    assert.strictEqual(f(1, 1).bg, '#cccccc', 'the headers keep theirs');
+    assert.strictEqual(f(4, 1).bg, '#ffffcc');
   }));
 
   MODES.forEach(mode => test('log sheet: the time cells carry the zone of the moment they were written in (UTC+N in the format), per cell; the freeze is set once, with the sheet (the user may unfreeze) [' + mode + ']', () => {

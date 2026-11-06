@@ -113,7 +113,7 @@ a failure the add-on handles itself (`noteProblem`: a BC error document, a confi
 
 The sheet (name chosen in the sidebar, Ogólne, "Arkusz dziennika pobrań"; default "Dziennik pobrań"; made by the first entry, headers in row 1): columns Źródło (Autoodświeżanie / Odświeżanie jednego arkusza / Odświeżanie wszystkich arkuszy), Początek, Koniec, Czas trwania,
 Status ("OK ✅", the handled failure, or the platform error), Odświeżone arkusze (one cell: "2 arkusze" and a line "name (n wierszy)" per sheet), Dane techniczne (in English: "Clock trigger <id>" / "Menu: refresh one sheet (config sheet: K1)" / "Menu: refresh all sheets"). NEWEST FIRST: an entry is inserted as row 2, under the headers and above the older entries
-(`Grid.insertRowsAfter(1, 1)` with the row reformatted: not bold, no grey; the grid reads only the first rows and commits once per entry). The name may not be the settings sheet, a config sheet or a result sheet (`MainSettings.setLogSheetName`).
+(`Grid.insertRowsAfter(1, 1, { fromBelow: true })`: the grid reads only the first rows and commits once per entry). The name may not be the settings sheet, a config sheet or a result sheet (`MainSettings.setLogSheetName`).
 An older log sheet stays where it is when the name is changed (nothing is renamed or moved).
 
 Look of the log sheet (`Refresh Log Grid.js`): headers grey (`#cccccc`, the grey of a config sheet's headers), bold, centred, wrapped, the header row frozen; entries left aligned and top, rows fitted to their content; the technical column Courier New 8 pt; widths and wrapping are FIXED per column (see below); the freeze is set once, with the sheet; "Odświeżone arkusze" starts with "N arkusze:" (no colon for "0 arkuszy": nothing follows). The start and end carry
@@ -146,6 +146,7 @@ Retry advice: the first time the tab shows an error it begins with "Spróbuj pon
 
 The first message of the sidebar (the advice to retry) does not carry the sentence about the limit of clock triggers; the plain message after the retry does.
 
-Widths and wrapping of the log sheet (fixed, per column, set on every write for all entry rows - a log sheet made by an older version is put right; a column the user resizes goes back to these on the next entry; the freeze is set once, with the sheet):
-Źródło 200 px wrap | Początek 200 px wrap | Koniec 200 px wrap | Czas trwania 100 px wrap | Status 200 px wrap | Odświeżone arkusze 300 px wrap | Dane techniczne 200 px cut (the text is cut at the edge of its cell). Nothing is fitted to its content
-(this replaces the "fit to data" attempt: a script's fit and the menu's differ, and a wrapped column is fitted by its wrapped layout). The row of a new entry is fitted to its content.
+Widths and wrapping of the log sheet (fixed, per column; set ONCE, when the sheet is made, together with the freeze and the look of the entries - what the user changes afterwards stays):
+Źródło 200 px wrap | Początek 200 px wrap | Koniec 200 px wrap | Czas trwania 100 px wrap | Status 200 px wrap | Odświeżone arkusze 300 px wrap | Dane techniczne 200 px cut (the text is cut at the edge of its cell). Nothing is fitted to its content.
+A later entry is inserted as "a row above" the first entry (`Grid.insertRowsAfter(1, 1, { fromBelow: true })`: the API's `inheritFromBelow`, the service's `insertRowsBefore`), so the sheet gives it the look of the entries - formats, row height before the fit -
+and the look of the headers does not leak in; only what differs from entry to entry is set for each (the start and end formats with their zone, and the row is fitted to its wrapped content). A log sheet made by an older version keeps its look: set the widths by hand once.

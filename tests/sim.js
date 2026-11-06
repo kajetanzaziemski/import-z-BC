@@ -64,13 +64,14 @@ class SimSheet {
   }
 
   /** New rows after row `after` (1-based), formats and validation inherited from that row, like inheritFromBefore. */
-  insertRows(after, n) {
+  insertRows(after, n, fromBelow) {
     const moved = {};
     Object.keys(this.cells).forEach(k => { const [r, c] = unkey(k); moved[key(r > after ? r + n : r, c)] = this.cells[k]; });
     this.cells = moved; this.rowCount += n;
+    const source = fromBelow ? after + n + 1 : after;                      // inheritFromBefore false: the row that was below (it has moved down by n)
     Object.keys(moved).forEach(k => {
       const [r, c] = unkey(k);
-      if (r !== after) return;
+      if (r !== source) return;
       for (let i = 1; i <= n; i++) {
         const x = moved[k], y = this.cell(after + i, c, true);
         y.fmt = Object.assign({}, x.fmt); y.dv = x.dv;
@@ -271,6 +272,7 @@ class SimBook {
         return book.rangeObj(s, r, c, nr === undefined ? 1 : nr, nc === undefined ? 1 : nc);
       },
       insertRowsAfter: (after, n) => { call(); s.insertRows(after, n); },
+      insertRowsBefore: (before, n) => { call(); s.insertRows(before - 1, n, true); },
       getParent: () => book.spreadsheet(),
       getConditionalFormatRules: () => { call(); return s.condRules.map(x => book.ruleObj(JSON.parse(JSON.stringify(x)))); },
       setConditionalFormatRules: rules => { call(); book.condWrites++; s.condRules = rules.map(r => JSON.parse(JSON.stringify(r.__spec))); },
@@ -456,7 +458,7 @@ class SimBook {
         this.byId(x.sheetId).condRules.splice(x.index, 1);
       } else if (k === 'insertDimension') {
         const s = this.byId(x.range.sheetId), n = x.range.endIndex - x.range.startIndex;
-        if (x.range.dimension === 'ROWS') s.insertRows(x.range.startIndex, n); else s.insertCols(x.range.startIndex, n);
+        if (x.range.dimension === 'ROWS') s.insertRows(x.range.startIndex, n, x.inheritFromBefore === false); else s.insertCols(x.range.startIndex, n);
       } else if (k === 'appendDimension') {
         const s = this.byId(x.sheetId);
         if (x.dimension === 'ROWS') s.rowCount += x.length; else s.colCount += x.length;

@@ -143,9 +143,10 @@ class Grid {
   /**
    * `opts.plain`: the new rows do not inherit the look of the row above them in one respect: no data validation (checkboxes, lists).
    * `opts.fit`: the new rows do not keep the height they inherit: at the end of the commit they are fitted to their content.
+   * `opts.fromBelow`: the new rows take the look of the row BELOW them (the one that was there: "insert rows above" of the menu) instead of the row above.
    */
   insertRowsAfter(after, n, opts) {
-    this.ops.push({ t: 'ir', at: after, n: n, plain: !!(opts && opts.plain) });
+    this.ops.push({ t: 'ir', at: after, n: n, plain: !!(opts && opts.plain), below: !!(opts && opts.fromBelow) });
     this.maxRows += n;
     if (after < this.anchorRow) this.anchorRow += n;    // rows above the anchor: it moves down with them
     const blank = () => new Array(this.cols).fill('');
@@ -445,7 +446,7 @@ class Grid {
       if (op.t === 'ir' && op.at >= rowCount) { req.push({ appendDimension: { sheetId: sid, dimension: 'ROWS', length: op.n } }); rowCount += op.n; }   // past the last row
       else if (op.t === 'ir') {
         rowCount += op.n;
-        req.push({ insertDimension: { range: { sheetId: sid, dimension: 'ROWS', startIndex: op.at, endIndex: op.at + op.n }, inheritFromBefore: true } });
+        req.push({ insertDimension: { range: { sheetId: sid, dimension: 'ROWS', startIndex: op.at, endIndex: op.at + op.n }, inheritFromBefore: !op.below } });
         if (op.plain) req.push({ repeatCell: { range: { sheetId: sid, startRowIndex: op.at, endRowIndex: op.at + op.n }, cell: {}, fields: 'dataValidation' } });
       }
       else if (op.t === 'ic') req.push({ insertDimension: { range: { sheetId: sid, dimension: 'COLUMNS', startIndex: op.at, endIndex: op.at + op.n }, inheritFromBefore: true } });
@@ -676,7 +677,7 @@ class Grid {
   _commitService() {
     const sheet = this.source.sheet;
     this.ops.forEach(op => {
-      if (op.t === 'ir') { sheet.insertRowsAfter(op.at, op.n); if (op.plain) sheet.getRange(op.at + 1, 1, op.n, sheet.getMaxColumns()).clearDataValidations(); }   // the whole rows, also right of the window
+      if (op.t === 'ir') { if (op.below) sheet.insertRowsBefore(op.at + 1, op.n); else sheet.insertRowsAfter(op.at, op.n); if (op.plain) sheet.getRange(op.at + 1, 1, op.n, sheet.getMaxColumns()).clearDataValidations(); }   // the whole rows, also right of the window
       else if (op.t === 'ic') sheet.insertColumnsAfter(op.at, op.n);
       else if (op.t === 'ac') sheet.insertColumnsAfter(sheet.getMaxColumns(), op.n);
       else sheet.deleteColumns(op.at, op.n);

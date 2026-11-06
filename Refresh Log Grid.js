@@ -14,7 +14,8 @@
 //   G Dane techniczne   what fired it (the clock trigger and its id, the menu item); for a trigger that deleted itself: that, and that nothing was refreshed
 //
 // Look: the headers grey like the headers of a config sheet, bold, centred, and frozen (the first row stays in view); the entries are top and left aligned; the technical
-// column is Courier New 8 pt. FIXED widths and wrapping, per column (set on every write for all entry rows, so a log sheet made by an older version is put right too):
+// column is Courier New 8 pt. FIXED widths and wrapping, per column, set ONCE when the sheet is made (what the user changes afterwards stays); a new entry is inserted as
+// "a row above" the first entry, so the sheet itself gives it the look of the entries:
 //   Źródło 200 px wrap | Początek 200 px wrap | Koniec 200 px wrap | Czas trwania 100 px wrap | Status 200 px wrap | Odświeżone arkusze 300 px wrap | Dane techniczne 200 px cut
 // ("cut" = the text is cut at the edge of its cell). The row of a new entry is fitted to its content (the Sheets API does not grow a row for wrapped text by itself).
 // One read of the first rows only (the log grows; the entries below are not needed to insert above them) and one commit per entry.
@@ -43,37 +44,37 @@ const RefreshLogGrid = {
     const L = REFRESH_LOG_LAYOUT;
     const cols = L.headers.length;
     let grid = Grid.open({ sheetName: sheetName, window: 3 });
-    if (!grid) {
+    const created = !grid;
+    if (created) {
       grid = Grid.create({ sheetName: sheetName, rows: L.headerRow, cols: cols });
       const head = grid.getRange(L.headerRow, 1, 1, cols);
       head.setValues([L.headers]);
       head.setFontWeight("bold");
       head.setBackground(L.headerBackground);
       head.setHorizontalAlignment("center");
+      head.setWrapStrategy("WRAP");
       grid.freezeRows(L.headerRow);
+      L.widths.forEach((px, i) => grid.setColumnWidth(i + 1, px));
     }
-    grid.insertRowsAfter(L.headerRow, 1, { plain: true, fit: true });      // the new row takes the look of the header above it: put right below
+    // The new entry goes in as "insert a row above" the first entry: the sheet gives it the look of the entries (formats, row height), whatever the user has done to them.
+    grid.insertRowsAfter(L.headerRow, 1, { plain: true, fit: true, fromBelow: true });
     const row = grid.getRange(L.firstEntryRow, 1, 1, cols);
     row.setValues([[entry.source, entry.start, entry.end, entry.duration, entry.status, entry.sheets, entry.technical]]);
-    row.setFontWeight("normal");
-    row.setBackground(null);
-    row.setHorizontalAlignment("left");
-    row.setVerticalAlignment("top");
     // the time and the zone it is in: the cell keeps the wall clock of the spreadsheet's zone, so the zone (as UTC+N, the offset at that moment) is part of its format -
-    // it stays true for an old entry when the zone of the spreadsheet is changed later
+    // it stays true for an old entry when the zone of the spreadsheet is changed later. This differs from entry to entry, so it is set for every entry.
     const tz = grid.getTimeZone();
     grid.getRange(L.firstEntryRow, 2).setNumberFormat(`${L.timeFormat} "${SettingsGrid.offsetName(entry.start, tz)}"`);
     grid.getRange(L.firstEntryRow, 3).setNumberFormat(`${L.timeFormat} "${SettingsGrid.offsetName(entry.end, tz)}"`);
-    const technical = grid.getRange(L.firstEntryRow, L.technicalCol);
-    technical.setFontFamily(L.technicalFont);
-    technical.setFontSize(L.technicalSize);
-    // The widths and the wrapping are a property of the COLUMN, set for every entry row on every write (the fixed layout above; an older log sheet is put right too)
-    const dataRows = Math.max(grid.maxRows - L.headerRow, 1);
-    L.widths.forEach((px, i) => {
-      grid.setColumnWidth(i + 1, px);
-      grid.getRange(L.firstEntryRow, i + 1, dataRows, 1).setWrapStrategy(L.wraps[i]);
-    });
-    grid.getRange(L.headerRow, 1, 1, cols).setWrapStrategy("WRAP");
+    if (created) {
+      // The look of the entries, set ONCE for the rows under the headers when the sheet is made (the rows after it take it from the entries below them)
+      const dataRows = Math.max(grid.maxRows - L.headerRow, 1);
+      const column = (col) => grid.getRange(L.firstEntryRow, col, dataRows, 1);
+      L.wraps.forEach((strategy, i) => column(i + 1).setWrapStrategy(strategy));
+      grid.getRange(L.firstEntryRow, 1, dataRows, cols).setVerticalAlignment("top");
+      grid.getRange(L.firstEntryRow, 1, dataRows, cols).setHorizontalAlignment("left");
+      column(L.technicalCol).setFontFamily(L.technicalFont);
+      column(L.technicalCol).setFontSize(L.technicalSize);
+    }
     grid.commit();
   }
 };
