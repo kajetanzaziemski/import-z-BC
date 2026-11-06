@@ -58,9 +58,9 @@ const SettingsGrid = {
 
   /**
    * The lines of the status message for a report ({ ok, off, when, frequency, next, current, limit }); `stamp` writes a time. Used for the message in the settings sheet
-   * and for the error shown in the sidebar, which says the same.
+   * and, `brief`, for the error shown in the sidebar.
    */
-  messageLines(report, stamp) {
+  messageLines(report, stamp, brief) {
     const status = c => c && c.active
       ? [`Dane będą odświeżane automatycznie co ${c.frequency.freq} ${SettingsGrid.unitName(c.frequency)}.`, `Następne odświeżenie ${stamp(c.next)}.`]
       : ["Odświeżanie automatyczne jest wyłączone."];
@@ -70,6 +70,11 @@ const SettingsGrid = {
               `Następne odświeżenie ${stamp(report.next)}.`,
               `Odświeżanie zostało ustawione ${stamp(report.when)}.`];
     }
+    // brief (the sidebar): the headline, the sentence about the limit of clock triggers when that was the cause, and the time of the attempt - nothing about what is
+    // set now (the sidebar shows that itself) and no pointer to the menu (the user is looking at the add-on)
+    if (brief) return ["Ustawienia odświeżania nie zostały zaktualizowane!",
+                       ...(report.limit ? [SettingsGrid.triggerLimitText] : []),
+                       `Próba zmiany ustawień została podjęta ${stamp(report.when)}.`];
     return ["Ustawienia odświeżania nie zostały zaktualizowane!",
             ...(report.limit ? [SettingsGrid.triggerLimitText] : []),
             ...(report.current ? status(report.current) : []),

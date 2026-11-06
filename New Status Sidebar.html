@@ -267,12 +267,10 @@
         document.getElementById('refreshInfo-panel').innerHTML = html;
       }
 
-      // The failed set-up: the lines of the red message of the settings sheet (the menu path in bold), and "Szczegóły błędu" - the platform's error - folded.
+      // The failed set-up: the headline and the time of the attempt (and the sentence about the limit of clock triggers when that was the cause) in a red box,
+      // and "Szczegóły błędu" - the platform's error - folded.
       function renderSetupError(e) {
-        var lines = e.lines.map(function (line) {
-          var html = escapeHtml(line);
-          return html.replace(escapeHtml(e.path), '<b>' + escapeHtml(e.path) + '</b>');
-        });
+        var lines = e.lines.map(function (line) { return escapeHtml(line); });
         return '<div class="errbox"><p>' + lines.join('<br />') + '</p>' +
           '<details><summary>Szczegóły błędu</summary><pre style="white-space:pre-wrap;font-size:11px">' + escapeHtml(e.details) + '</pre></details></div>';
       }

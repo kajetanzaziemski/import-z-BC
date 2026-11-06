@@ -43,8 +43,9 @@ const AutoRefreshPanel = {
   },
 
   /**
-   * The last set-up of the automatic refresh that failed, for the sidebar: the same text as the red message in the settings sheet (with the sentence about the limit of
-   * clock triggers when that was the cause) and the platform's error for the collapsed "Szczegóły błędu". null when the last set-up went right.
+   * The last set-up of the automatic refresh that failed, for the sidebar: only the headline of the red message of the settings sheet and the time of the attempt (with the
+   * sentence about the limit of clock triggers between them when that was the cause) - not what is set now, the sidebar shows that itself - and the platform's error for the
+   * collapsed "Szczegóły błędu". null when the last set-up went right.
    */
   setupError_(tz){
     try{
@@ -52,8 +53,8 @@ const AutoRefreshPanel = {
       if(!e) return null;
       const stamp = ms => SettingsGrid.stamp(new Date(ms), tz);
       const current = e.current && Object.assign({}, e.current, {next: e.current.next ? new Date(e.current.next) : null});
-      const lines = SettingsGrid.messageLines({ok: false, when: e.at, current: current, limit: !!e.limit}, d => SettingsGrid.stamp(Object.prototype.toString.call(d) === "[object Date]" ? d : new Date(d), tz));
-      return {lines: lines, path: SettingsGrid.messagePath, limit: !!e.limit, details: e.details ?? "", at: stamp(e.at)};
+      const lines = SettingsGrid.messageLines({ok: false, when: e.at, current: current, limit: !!e.limit}, d => SettingsGrid.stamp(Object.prototype.toString.call(d) === "[object Date]" ? d : new Date(d), tz), true);
+      return {lines: lines, limit: !!e.limit, details: e.details ?? "", at: stamp(e.at)};
     }catch(err){
       dbgLog(`Auto refresh panel: set-up error not read: ${err}`);
       return null;

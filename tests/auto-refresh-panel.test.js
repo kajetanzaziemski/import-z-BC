@@ -392,36 +392,42 @@ module.exports = function register(t) {
     assert.strictEqual(withError(undefined).info().setupError, null);
   });
 
-  test('error: the message of the settings sheet (the red one) as lines - headline, what is set now, where to look, the time of the attempt - and the platform\'s error as details', () => {
+  test('error: the sidebar shows only the headline of the red message and the time of the attempt - nothing about what is set now, no pointer to the menu - and the platform\'s error as details', () => {
     const e = withError(SETUP_ERROR()).info().setupError;
     assert.deepStrictEqual(e.lines, [
       'Ustawienia odświeżania nie zostały zaktualizowane!',
-      'Dane będą odświeżane automatycznie co 1 dzień.',
-      'Następne odświeżenie 2026-11-02 18:00:00 UTC+1.',
-      'Zmień ustawienia, żeby spróbować ponownie lub zobacz szczegóły w menu dodatku:',
-      'Import z BC -> Ustawienia.',
       'Próba zmiany ustawień została podjęta 2026-11-02 08:00:00 UTC+1.']);
-    assert.deepStrictEqual([e.path, e.limit, e.details], ['Import z BC -> Ustawienia', false, 'Exception: Boom\n    at Object.setUp (ScheduleRefresh:57:30)']);
-    const off = withError(SETUP_ERROR({ current: { active: false } })).info().setupError;
-    assert.strictEqual(off.lines[1], 'Odświeżanie automatyczne jest wyłączone.');
-    assert.strictEqual(withError(SETUP_ERROR({ current: null })).info().setupError.lines.length, 4, 'no state known: no status lines');
+    assert.deepStrictEqual([e.limit, e.details], [false, 'Exception: Boom\n    at Object.setUp (ScheduleRefresh:57:30)']);
+    assert.ok(!('path' in e));
+    // whatever was set at the moment, it is not in the sidebar's error
+    assert.deepStrictEqual(withError(SETUP_ERROR({ current: { active: false } })).info().setupError.lines, e.lines);
+    assert.deepStrictEqual(withError(SETUP_ERROR({ current: null })).info().setupError.lines, e.lines);
   });
 
-  test('error: when the set-up failed on the limit of clock triggers the main message says so, right after the headline and before what is set now (the platform\'s error stays in the details)', () => {
+  test('error: the sheet\'s own message is unchanged - the headline, what is set now, where to look, the time (SettingsGrid.messageLines without "brief")', () => {
+    const sc = scenario();
+    const lines = brief => plain(sc.ex.eval(`SettingsGrid.messageLines({ ok: false, when: 1, current: { active: true, frequency: { freq: 1, unit: 'days' }, next: new Date(2) } }, d => 'T', ${brief})`));
+    assert.deepStrictEqual(lines(false), ['Ustawienia odświeżania nie zostały zaktualizowane!', 'Dane będą odświeżane automatycznie co 1 dzień.', 'Następne odświeżenie T.',
+      'Zmień ustawienia, żeby spróbować ponownie lub zobacz szczegóły w menu dodatku:', 'Import z BC -> Ustawienia.', 'Próba zmiany ustawień została podjęta T.']);
+    assert.deepStrictEqual(lines(true), ['Ustawienia odświeżania nie zostały zaktualizowane!', 'Próba zmiany ustawień została podjęta T.']);
+  });
+
+  test('error: when the set-up failed on the limit of clock triggers the main message says so, between the headline and the time of the attempt (the platform\'s error stays in the details)', () => {
     const e = withError(SETUP_ERROR({ limit: true, details: 'Exception: Ten dodatek utworzył zbyt wiele wyzwalaczy' })).info().setupError;
     assert.strictEqual(e.limit, true);
+    assert.strictEqual(e.lines.length, 3);
     assert.strictEqual(e.lines[0], 'Ustawienia odświeżania nie zostały zaktualizowane!');
     assert.ok(/^Przekroczono limit 5 wyzwalaczy czasowych na użytkownika/.test(e.lines[1]) && /Triggery odświeżania/.test(e.lines[1]), e.lines[1]);
-    assert.strictEqual(e.lines[2], 'Dane będą odświeżane automatycznie co 1 dzień.');
+    assert.ok(/^Próba zmiany ustawień została podjęta/.test(e.lines[2]));
     assert.ok(/zbyt wiele wyzwalaczy/.test(e.details));
   });
 
-  test('page: the error is a red box with the lines (the menu path in bold) and "Szczegóły błędu" in a closed <details> that holds the platform\'s error; it sits after the last refresh and before the buttons', () => {
+  test('page: the error is a red box with the lines and "Szczegóły błędu" in a closed <details> that holds the platform\'s error; it sits after the last refresh and before the buttons', () => {
     const html = fs.readFileSync(path.join(ROOT, 'New Status Sidebar.html'), 'utf8');
     const fn = html.slice(html.indexOf('function renderSetupError(e)'), html.indexOf('function renderTriggerList'));
     assert.ok(/class="errbox"/.test(fn) && /<details><summary>Szczegóły błędu<\/summary><pre[^>]*>' \+ escapeHtml\(e\.details\)/.test(fn), 'closed by default (no "open"), the details escaped');
     assert.ok(!/<details open/.test(fn));
-    assert.ok(/replace\(escapeHtml\(e\.path\), '<b>' \+ escapeHtml\(e\.path\) \+ '<\/b>'\)/.test(fn), 'the path in bold');
+    assert.ok(!/e\.path/.test(fn), 'no menu path in the sidebar\'s error');
     assert.ok(/e\.lines\.map/.test(fn) && /escapeHtml\(line\)/.test(fn), 'every line escaped');
     assert.ok(/\.errbox \{[^}]*#f4cccc/.test(html), 'the red of the settings sheet message');
   });
