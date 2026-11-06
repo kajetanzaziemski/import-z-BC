@@ -227,6 +227,16 @@ module.exports = function register(t) {
     assert.ok(/RefreshLog\.noteProblem\(`BC \(\$\{sheetName\}\): /.test(text) && /RefreshLog\.noteProblem\(`Brak tabeli w arkuszu konfiguracji/.test(text));
   });
 
+  // ---- the developer tools are not mentioned to the user -----------------------------------------------------------------------------------
+  test('rule: no message the user can see (errors, error details, dialogs, sidebars) refers to the developer tools menu ("Narzędzia programisty"); only the menu itself and the live check (a developer\'s tool) name it', () => {
+    const strip = text => text.replace(/\/\*[\s\S]*?\*\//g, '').split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
+    const offenders = fs.readdirSync(ROOT).filter(f => /\.(js|html)$/.test(f) && !/^Live Check/.test(f) && f !== 'Menu.js')
+      .filter(f => /Narzędzia programisty/.test(strip(fs.readFileSync(path.join(ROOT, f), 'utf8'))));
+    assert.deepStrictEqual(offenders, []);
+    const menu = strip(fs.readFileSync(path.join(ROOT, 'Menu.js'), 'utf8'));
+    assert.strictEqual((menu.match(/Narzędzia programisty/g) || []).length, 1, 'Menu.js: only the title of the submenu');
+  });
+
   // ---- the name of the log sheet ----------------------------------------------------------------------------------------------------------------
   test('name: the default is "Dziennik pobrań"; the name is trimmed, empty = the default, longer than 100 characters is refused', () => {
     const u = useCase();

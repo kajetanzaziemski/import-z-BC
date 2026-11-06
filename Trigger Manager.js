@@ -61,7 +61,7 @@ class AgentManager{
 	installNew(){
 		const mine = TriggerGateway.getUserTriggers().filter(trigger => [ScriptApp.EventType.ON_EDIT,ScriptApp.EventType.ON_CHANGE].includes(trigger.getEventType()));
 		const others = TriggerGateway.getProjectTriggers().length - mine.length;
-		if(others + 2 > TRIGGER_QUOTA_PER_USER) throw new SimpleError(`Nie można zainstalować agenta: masz już ${others} triggerów tego dodatku, a limit platformy to ${TRIGGER_QUOTA_PER_USER} na użytkownika (limit triggerów). Usuń zbędne triggery (menu Narzędzia programisty -> Wszystkie triggery).`);
+		if(others + 2 > TRIGGER_QUOTA_PER_USER) throw new SimpleError(`Nie można zainstalować agenta: masz już ${others} triggerów tego dodatku, a limit platformy to ${TRIGGER_QUOTA_PER_USER} na użytkownika (limit triggerów). Usuń zbędne triggery i spróbuj ponownie.`);
 		TriggerGateway.deleteAllUserEditTriggersInDocument().deleteAllUserChangeTriggersInDocument();
 		let editId = TriggerGateway.createOnEditTrigger("sheetEdit");
 		let changeId;

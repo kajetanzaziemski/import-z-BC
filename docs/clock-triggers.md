@@ -27,7 +27,7 @@ Nothing else creates a clock trigger: `onOpen` / the time zone check, the schedu
 ## Where the count can be wrong
 - **Too low** (the platform may still refuse - case 6): a trigger the list does not show for longer than ten minutes AND the records do not know (made by an older version of the add-on, before the records existed), or a record lost with the user properties.
 - **Too high** (a set-up is refused although a place is free): a trigger deleted by hand in the trigger editor is counted for up to ten minutes (its record was seen recently); a stale list never lowers the count.
-- **Where to get places back**: the developer tool "Narzędzia programisty -> Triggery odświeżania" lists the user's clock triggers and deletes one (it cleans nothing else: the permit and the record stay, see `docs/use-cases.md`).
+- **Where to get places back** (not named in any message the user sees): the developer tool "Narzędzia programisty -> Triggery odświeżania" lists the user's clock triggers and deletes one (it cleans nothing else: the permit and the record stay, see `docs/use-cases.md`).
 
 ## The live check
 A refusal is an expected error of the jobs `settings.refreshFrequency` / `settings.refreshApply`: the verifier then only requires that the permit is as it was (`lcVerifyRefreshTrigger_`).

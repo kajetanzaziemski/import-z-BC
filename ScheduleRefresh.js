@@ -105,7 +105,7 @@ const ScheduleRefresh = {
   assertRoomForTrigger_(except){
     const ids = ScheduleRefresh.clockTriggerIds_(except);
     if(ids.length >= CLOCK_TRIGGER_LIMIT){
-      const err = new Error(`Nie utworzono triggera: masz już ${ids.length} wyzwalaczy czasowych (limit Apps Script: ${CLOCK_TRIGGER_LIMIT} na użytkownika, wszystkie dokumenty razem). Usuń niepotrzebne w menu Narzędzia programisty -> Triggery odświeżania. Triggery: ${ids.join(", ")}.`);
+      const err = new Error(`Nie utworzono triggera: masz już ${ids.length} wyzwalaczy czasowych (limit Apps Script: ${CLOCK_TRIGGER_LIMIT} na użytkownika, wszystkie dokumenty razem). Zobacz listę odświeżanych arkuszy w panelu Autoodświeżanie. Triggery: ${ids.join(", ")}.`);
       err.triggerLimit = true;
       throw err;
     }
