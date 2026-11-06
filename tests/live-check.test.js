@@ -426,8 +426,12 @@ module.exports = function register(t) {
     assert.deepStrictEqual(fails(run(['Odświeżanie jednego arkusza'].concat(GOOD.slice(1)))), ['log source']);
     assert.deepStrictEqual(fails(run(GOOD.slice(0, 6).concat(['Menu']))), ['log technical text']);
     assert.deepStrictEqual(fails(run([GOOD[0], { t: T - 600000 }].concat(GOOD.slice(2)))).slice(0, 1), ['log start is inside this run'], 'an older entry: nothing was written by this run');
-    assert.deepStrictEqual(fails(run(GOOD.slice(0, 4).concat(['OK'], GOOD.slice(5)), { error: true })), ['log status is the error the run ended with'], 'the run failed but the status says OK');
-    assert.deepStrictEqual(fails(run(GOOD.slice(0, 4).concat(['BC down'], GOOD.slice(5)), { error: true })), []);
+    const STATUS_FAILED = 'log status tells that the run failed (a sheet: with the error in the technical column; else the error itself)';
+    assert.deepStrictEqual(fails(run(GOOD.slice(0, 4).concat(['OK'], GOOD.slice(5)), { error: true })), [STATUS_FAILED], 'the run failed but the status says OK');
+    assert.deepStrictEqual(fails(run(GOOD.slice(0, 4).concat(['BC down'], GOOD.slice(5)), { error: true })), [], 'an error that is not tied to a sheet: the status is the error');
+    const sheetFailed = (technical) => GOOD.slice(0, 4).concat(['Błąd ❗️ Przy pobieraniu danych dla arkusza Dane K1.', GOOD[5], technical]);
+    assert.deepStrictEqual(fails(run(sheetFailed('Clock trigger t1. Platform error: BC down'), { error: true })), [], 'a sheet: the status names it, the error is in the technical column');
+    assert.deepStrictEqual(fails(run(sheetFailed('Clock trigger t1'), { error: true })), [STATUS_FAILED], 'the error is not in the technical column');
     const src = fs.readFileSync(path.join(ROOT, 'Live Check Verifiers.js'), 'utf8');
     ['menuRefreshCurrentSheet: {', 'menuRefreshAll: {'].forEach(k => assert.ok(/lcVerifyRefreshLog_\(c,/.test(src.slice(src.indexOf(k), src.indexOf(k) + 900)), k));
     assert.ok(/function lcVerifyScheduledRefresh_\(c\)\{[\s\S]*?lcVerifyRefreshLog_\(c,"Autoodświeżanie"/.test(src) && /function lcVerifyRetiredRefresh_\(c\)\{[\s\S]*?lcVerifyRefreshLog_\(c,"Autoodświeżanie",\/no refresh was performed\//.test(src));

@@ -123,10 +123,10 @@ module.exports = function register(t) {
   });
 
   // ---- the entry: what it says ------------------------------------------------------------------------------------------------------------------
-  function useCase(over) {
+  function useCase(over, files) {
     const p = new FakePlatform();
     p.props.document.importSettingsArray = JSON.stringify(Object.assign({ addonStatus: true, importSheetName: 'Ustawienia' }, over && over.settings || {}));
-    const ex = p.execution(USE_CASE_BASE, {});
+    const ex = p.execution(USE_CASE_BASE.concat(files || []), {});
     ex.eval(`globalThis.__entries = []; RefreshLogGrid = { append: (name, e) => { if (globalThis.__appendFails) throw new Error('sheet unavailable'); __entries.push({ name, ...e }); } };`);
     return { p, ex, entries: () => plain(ex.eval(`__entries`)) };
   }
@@ -159,6 +159,35 @@ module.exports = function register(t) {
     assert.throws(() => u.ex.eval(`RefreshLog.run('Odświeżanie wszystkich arkuszy', 'Menu', () => { RefreshLog.noteSheet('Dane K1', 7); throw new Error('Exceeded maximum execution time'); })`), /Exceeded maximum execution time/);
     const [e] = u.entries();
     assert.deepStrictEqual([e.status, e.sheets], ['Exceeded maximum execution time', '1 arkusz:\nDane K1 (7 wierszy)']);
+  });
+
+  test('entry: an error while the data of a sheet was pulled - the status only says for which sheet, the error itself goes to the technical column; the error is thrown on', () => {
+    const u = useCase(null, ['RefreshSheet.js']);
+    u.ex.eval(`getMainSettings = () => ({ getResultSheetName: n => 'Dane ' + n, getConfigSheetNames: () => ['K1'] }); RefreshSheet.run_ = () => { throw new TypeError("Cannot read properties of null (reading 'getAllAttributeValuesArraysFromChildren')"); };`);
+    assert.throws(() => u.ex.eval(`RefreshLog.run('Odświeżanie jednego arkusza', 'Menu: refresh one sheet (config sheet: K1)', () => RefreshSheet.run('K1'))`), /getAllAttributeValuesArraysFromChildren/);
+    const [e] = u.entries();
+    assert.strictEqual(e.status, 'Błąd ❗️ Przy pobieraniu danych dla arkusza Dane K1.');
+    assert.strictEqual(e.technical, "Menu: refresh one sheet (config sheet: K1). Platform error: Cannot read properties of null (reading 'getAllAttributeValuesArraysFromChildren')");
+    assert.ok(!/getAllAttribute/.test(e.status));
+  });
+
+  test('entry: the sheet is named by its result sheet, else the settings\' result sheet of the config sheet, else the config sheet; more than one failed sheet: "dla arkuszy: A, B."; handled problems stay in the status before the error', () => {
+    const u = useCase(null, ['RefreshSheet.js']);
+    const name = (cfg, res, settings) => { u.ex.eval(`getMainSettings = () => (${settings})`); return u.ex.eval(`RefreshSheet.nameForLog_(${JSON.stringify(cfg)}, ${JSON.stringify(res)})`); };
+    assert.strictEqual(name('K1', 'Wynik 1', `{ getResultSheetName: () => 'x' }`), 'Wynik 1');
+    assert.strictEqual(name('K1', undefined, `{ getResultSheetName: () => 'Dane K1' }`), 'Dane K1');
+    assert.strictEqual(name('K1', undefined, `{ getResultSheetName: () => null }`), 'K1');
+    assert.strictEqual(name('K1', undefined, `{ getResultSheetName: () => { throw new Error('settings unreadable'); } }`), 'K1', 'never throws');
+    u.ex.eval(`RefreshLog.run('Odświeżanie wszystkich arkuszy', 'Menu: refresh all sheets', () => { RefreshLog.noteProblem('Brak tabeli w arkuszu konfiguracji „K9”'); RefreshLog.noteFailedSheet('Dane K1', new Error('a')); RefreshLog.noteFailedSheet('Dane K2', new Error('b')); RefreshLog.noteFailedSheet('Dane K3', new Error('c')); })`);
+    const [e] = u.entries();
+    assert.strictEqual(e.status, 'Brak tabeli w arkuszu konfiguracji „K9”; Błąd ❗️ Przy pobieraniu danych dla arkuszy: Dane K1, Dane K2, Dane K3.');
+    assert.strictEqual(e.technical, 'Menu: refresh all sheets. Platform error: a | b | c');
+  });
+
+  test('entry: an error that is not tied to a sheet (no sheet was being pulled) is still the status as it is', () => {
+    const u = useCase();
+    assert.throws(() => u.ex.eval(`RefreshLog.run('Autoodświeżanie', 'Clock trigger t1', () => { throw new Error('Exceeded maximum execution time'); })`), /Exceeded/);
+    assert.deepStrictEqual(u.entries().map(e => [e.status, e.technical]), [['Exceeded maximum execution time', 'Clock trigger t1']]);
   });
 
   test('entry: a refresh inside a refresh is ONE entry (the outer one); notes outside of any refresh are ignored', () => {

@@ -733,7 +733,9 @@ module.exports = function register(t) {
     const sc = scenario({ settings: { refreshPermit: { issuedFor: 'trig-A', lastRefresh: 1, intervalHours: 6 } }, refreshError: 'BC down' });
     sc.p.triggers.push(NAMED('trig-A'));
     assert.throws(() => sc.ex.eval(`autoRefreshHandler(${event('trig-A')})`), /BC down/);
-    assert.deepStrictEqual(plain(sc.ex.eval(`__logged.map(e => [e.source, e.status])`)), [['Autoodświeżanie', 'BC down']]);
+    // the error came while the data of a sheet was pulled: the status says for which sheet, the error itself is in the technical column
+    assert.deepStrictEqual(plain(sc.ex.eval(`__logged.map(e => [e.source, e.status, e.technical])`)),
+      [['Autoodświeżanie', 'Błąd ❗️ Przy pobieraniu danych dla arkusza R1.', 'Clock trigger trig-A. Platform error: BC down']]);
   });
 
   test('log: a trigger that does not hold the permit deletes itself and writes an entry that says so - technical: the trigger and that it was deleted, status: nothing was refreshed (both handlers)', () => {

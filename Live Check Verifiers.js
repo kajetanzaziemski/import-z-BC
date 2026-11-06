@@ -266,7 +266,12 @@ function lcVerifyRefreshLog_(c,source,technical){
     }
     c.expect("log end is not before its start",isDate(row[2]) && isDate(row[1]) && row[2].getTime() >= row[1].getTime(),`${row[1]} - ${row[2]}`);
     c.expect("log has a duration and a status",String(row[3]).trim() !== "" && String(row[4]).trim() !== "",`duration ${JSON.stringify(row[3])}, status ${JSON.stringify(row[4])}`);
-    if(c.error) c.expectEqual("log status is the error the run ended with",String(row[4]),String(c.error.message ?? c.error));
+    if(c.error){
+      // an error while the data of a sheet was pulled: the status says for which sheet ("Błąd ❗️ Przy pobieraniu danych dla arkusza X.") and the error is in the technical column;
+      // an error that is not tied to a sheet is the status as it is
+      const message = String(c.error.message ?? c.error), status = String(row[4]);
+      c.expect("log status tells that the run failed (a sheet: with the error in the technical column; else the error itself)",status === message || (/^Błąd ❗️/.test(status) && String(row[6]).indexOf(message) >= 0),`status ${JSON.stringify(status)}, technical ${JSON.stringify(String(row[6]))}, error ${JSON.stringify(message)}`);
+    }
     if(technical) c.expect("log technical text",technical.test(String(row[6])),`reads ${JSON.stringify(row[6])}`);
   });
 }

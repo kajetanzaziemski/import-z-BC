@@ -150,3 +150,8 @@ Widths and wrapping of the log sheet (fixed, per column; set ONCE, when the shee
 Źródło 200 px wrap | Początek 200 px wrap | Koniec 200 px wrap | Czas trwania 100 px wrap | Status 200 px wrap | Odświeżone arkusze 300 px wrap | Dane techniczne 200 px cut (the text is cut at the edge of its cell). Nothing is fitted to its content.
 A later entry is inserted as "a row above" the first entry (`Grid.insertRowsAfter(1, 1, { fromBelow: true })`: the API's `inheritFromBelow`, the service's `insertRowsBefore`), so the sheet gives it the look of the entries - formats, row height before the fit -
 and the look of the headers does not leak in; only what differs from entry to entry is set for each (the start and end formats with their zone, and the row is fitted to its wrapped content). A log sheet made by an older version keeps its look: set the widths by hand once.
+
+Errors while pulling data (download log): `RefreshSheet.run` notes the sheet whose data could not be pulled (`RefreshLog.noteFailedSheet`, the result sheet's name, else the config sheet's) and throws the error on. The entry's status then only says
+"Błąd ❗️ Przy pobieraniu danych dla arkusza X." (or "... dla arkuszy: X, Y." for more than one; handled problems stay before it) and the error goes to the TECHNICAL column ("<what fired it>. Platform error: <message>"). An error that is not tied
+to a sheet (the lock, the settings sheet ...) is still the status as it is. Note: `RefreshAll` stops at the first sheet that fails, so today one sheet is named; the plural is there for a loop that goes on.
+The live check requires, for a failed run, the status to be the error itself or "Błąd ❗️ ..." with the error in the technical column.

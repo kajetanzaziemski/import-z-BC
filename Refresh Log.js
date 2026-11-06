@@ -7,6 +7,8 @@
 //                                               A refresh inside a refresh is one entry (the outer one). The error `work` throws is written as the status and thrown on.
 //   RefreshLog.noteSheet(name, rows)            (RefreshSheet) a result sheet was written
 //   RefreshLog.noteProblem(text)                (RefreshSheet) a failure the add-on handled itself (BC answered with an error, no table in the config sheet): the status
+//   RefreshLog.noteFailedSheet(name, error)     (RefreshSheet) pulling the data for this sheet threw an error: the status says "Błąd ❗️ Przy pobieraniu danych dla arkusza X.", the error goes to the
+//                                               technical column (the sheets are listed: "dla arkuszy: X, Y.")
 //   RefreshLog.logOnly(source, technical, status)   an entry for a run that refreshed nothing on purpose (a clock trigger that deleted itself)
 //
 // Writing the log never fails a refresh: a failure there is console.error and a note on the live check run.
@@ -23,7 +25,7 @@ const RefreshLog = {
 
   run(source, technical, work){
     if(RefreshLog.session_) return work();
-    const session = RefreshLog.session_ = {source: source, technical: technical, start: new Date(), sheets: [], problems: [], error: null};
+    const session = RefreshLog.session_ = {source: source, technical: technical, start: new Date(), sheets: [], problems: [], failures: [], error: null};
     try{
       return work();
     }catch(err){
@@ -43,9 +45,13 @@ const RefreshLog = {
     if(RefreshLog.session_) RefreshLog.session_.problems.push(String(text));
   },
 
+  noteFailedSheet(name, error){
+    if(RefreshLog.session_) RefreshLog.session_.failures.push({name: String(name), message: String(error && error.message || error)});
+  },
+
   logOnly(source, technical, status){
     const now = new Date();
-    RefreshLog.write_(RefreshLog.entry_({source: source, technical: technical, start: now, sheets: [], problems: [status], error: null},now));
+    RefreshLog.write_(RefreshLog.entry_({source: source, technical: technical, start: now, sheets: [], problems: [status], failures: [], error: null},now));
   },
 
   /** 1 arkusz, 2 arkusze, 5 arkuszy, 22 arkusze, 12 arkuszy ... */
@@ -58,14 +64,23 @@ const RefreshLog = {
   entry_(session, end){
     const n = session.sheets.length;
     const lines = session.sheets.map(x => `${x.name} (${x.rows} ${RefreshLog.plural_(x.rows,"wiersz","wiersze","wierszy")})`);
+    // A failure while the data of a sheet was pulled: the status only says for which sheet(s); the error itself is for the technical column. An error that is
+    // not tied to a sheet (the lock, the settings sheet ...) is the status as it is.
+    const failed = session.failures.map(x => x.name);
+    const failure = !failed.length ? null
+      : failed.length == 1 ? `Błąd ❗️ Przy pobieraniu danych dla arkusza ${failed[0]}.`
+      : `Błąd ❗️ Przy pobieraniu danych dla arkuszy: ${failed.join(", ")}.`;
+    const status = failure ? session.problems.concat([failure]).join("; ")
+      : session.error ? String(session.error.message ?? session.error)
+      : session.problems.length ? session.problems.join("; ") : "OK ✅";
     return {
       source: session.source,
       start: session.start,
       end: end,
       duration: AutoRefreshPanel.duration(end.getTime() - session.start.getTime()),
-      status: session.error ? String(session.error.message ?? session.error) : session.problems.length ? session.problems.join("; ") : "OK ✅",
+      status: status,
       sheets: [`${n} ${RefreshLog.plural_(n,"arkusz","arkusze","arkuszy")}${n ? ":" : ""}`].concat(lines).join("\n"),
-      technical: session.technical
+      technical: failure ? `${session.technical}. Platform error: ${session.failures.map(x => x.message).join(" | ")}` : session.technical
     };
   },
 

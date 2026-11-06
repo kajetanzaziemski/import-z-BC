@@ -11,6 +11,25 @@ const RefreshSheet = {
    * @param resultSheetName {String} Result sheet; default: the one the settings sheet lists for this config sheet.
    */
   run(configSheetName,resultSheetName){
+    try{
+      RefreshSheet.run_(configSheetName,resultSheetName);
+    }catch(e){
+      RefreshLog.noteFailedSheet(RefreshSheet.nameForLog_(configSheetName,resultSheetName),e);     // the download log says for which sheet the data could not be pulled
+      throw e;
+    }
+  },
+
+  /** The name of the sheet the data is pulled for, as the download log says it: the result sheet (else the config sheet). Never throws. */
+  nameForLog_(configSheetName, resultSheetName){
+    try{
+      configSheetName = configSheetName ?? getMainSettings().getConfigSheetNames()[0];
+      return resultSheetName ?? getMainSettings().getResultSheetName(configSheetName) ?? configSheetName;
+    }catch(err){
+      return configSheetName ?? resultSheetName ?? "?";
+    }
+  },
+
+  run_(configSheetName,resultSheetName){
     configSheetName = configSheetName ?? getMainSettings().getConfigSheetNames()[0];
     let shCoed = new SheetCoeditor(configSheetName,true);
     let odConnection, columnDataTypes;
