@@ -54,50 +54,50 @@ module.exports = function register(t) {
     assert.strictEqual(f(2, 6).vAlign, 'top');
   }));
 
-  MODES.forEach(mode => test('log sheet: headers bold, centred, clipped and FROZEN; "Źródło" 200 px and "Odświeżone arkusze" 300 px, the other columns fitted; the technical text CLIPPED (cut) in Courier New 8 pt; the technical column Courier New 8 pt on every entry; entries left aligned, top; wrap only in the two fixed columns, the technical text cut, the rest one line; the new row is fitted to its content [' + mode + ']', () => {
+  const WIDTHS = [200, 200, 200, 100, 200, 300, 200];
+  const WRAPS = ['WRAP', 'WRAP', 'WRAP', 'WRAP', 'WRAP', 'WRAP', 'CLIP'];
+
+  MODES.forEach(mode => test('log sheet: headers bold, centred, wrapped and FROZEN; FIXED widths 200 / 200 / 200 / 100 / 200 / 300 / 200 px (nothing fitted); wrap in all columns but the technical one, which is cut; the technical column Courier New 8 pt; entries left aligned and top; the new row is fitted to its content [' + mode + ']', () => {
     const s = gridScope(mode);
     s.run(`RefreshLogGrid.append('Dziennik pobrań', ${entry(1)})`);
     s.run(`RefreshLogGrid.append('Dziennik pobrań', ${entry(2)})`);
     const sh = s.book.sheets['Dziennik pobrań'];
     const f = (r, c) => (sh.cells[r + ',' + c] || { fmt: {} }).fmt;
-    for (let c = 1; c <= 7; c++) assert.deepStrictEqual([f(1, c).bold, f(1, c).hAlign, f(1, c).wrap], [true, 'center', 'CLIP'], 'header ' + c);
+    for (let c = 1; c <= 7; c++) assert.deepStrictEqual([f(1, c).bold, f(1, c).hAlign, f(1, c).wrap], [true, 'center', 'WRAP'], 'header ' + c);
     for (const r of [2, 3]) {
       for (let c = 1; c <= 7; c++) assert.deepStrictEqual([f(r, c).hAlign, f(r, c).vAlign], ['left', 'top'], `entry ${r} column ${c}`);
-      // only the two columns of a fixed width wrap; the fitted ones are one line (a wrapped column would be fitted by its wrapped layout); the technical text is cut
-      assert.deepStrictEqual([1, 2, 3, 4, 5, 6, 7].map(c => f(r, c).wrap), ['WRAP', 'OVERFLOW', 'OVERFLOW', 'OVERFLOW', 'OVERFLOW', 'WRAP', 'CLIP'], 'wrap of entry ' + r);
+      assert.deepStrictEqual([1, 2, 3, 4, 5, 6, 7].map(c => f(r, c).wrap), WRAPS, 'wrap of entry ' + r);
       assert.deepStrictEqual([f(r, 7).family, f(r, 7).size], ['Courier New', 8], 'technical column, row ' + r);
       assert.ok(!f(r, 5).family && !f(r, 5).size, 'only the technical column has the small monospaced font');
     }
     const snap = sh.snapshot();
     assert.strictEqual(snap.frozen, 1, 'the header row is frozen');
-    assert.deepStrictEqual([(snap.colPx || {})[1], (snap.colPx || {})[6]], [200, 300], '"Źródło" 200 px, "Odświeżone arkusze" 300 px');
-    assert.deepStrictEqual(Object.keys(snap.colPx || {}).sort(), ['1', '6'], 'the other columns are fitted, not fixed');
-    assert.ok(snap.fitted.columns.some(x => x[0] === 2 && x[1] === 4) && snap.fitted.columns.some(x => x[0] === 7 && x[1] === 1), 'columns B-E and G fit their content: ' + JSON.stringify(snap.fitted.columns));
-    assert.ok(!snap.fitted.columns.some(x => x[0] <= 1 && x[0] + x[1] > 1) && !snap.fitted.columns.some(x => x[0] <= 6 && x[0] + x[1] > 6), 'not the two fixed ones');
+    assert.deepStrictEqual([1, 2, 3, 4, 5, 6, 7].map(c => (snap.colPx || {})[c]), WIDTHS);
+    assert.deepStrictEqual(snap.fitted.columns, [], 'no column is fitted to its content');
     assert.ok(snap.fitted.rows.length > 0, 'the new row is fitted to its wrapped content');
   }));
 
-  MODES.forEach(mode => test('log sheet: the wrapping is set per COLUMN for all entries on every write - a log sheet made by an older version (every column wrapped) is put right, so "fit to data" sizes the columns by their text [' + mode + ']', () => {
+  MODES.forEach(mode => test('log sheet: widths and wrapping are set per COLUMN for all entries on every write - a log sheet made by an older version (fitted columns, other wraps) is put right [' + mode + ']', () => {
     const s = gridScope(mode);
     s.run(`RefreshLogGrid.append('Dziennik pobrań', ${entry(1)})`);
     s.run(`RefreshLogGrid.append('Dziennik pobrań', ${entry(2)})`);
     const sh = s.book.sheets['Dziennik pobrań'];
-    for (let r = 1; r <= 3; r++) for (let c = 1; c <= 7; c++) (sh.cells[r + ',' + c] || (sh.cells[r + ',' + c] = { v: '', f: '', note: '', dv: null, fmt: {} })).fmt.wrap = 'WRAP';        // as an older version left it
+    for (let r = 1; r <= 3; r++) for (let c = 1; c <= 7; c++) (sh.cells[r + ',' + c] || (sh.cells[r + ',' + c] = { v: '', f: '', note: '', dv: null, fmt: {} })).fmt.wrap = c % 2 ? 'OVERFLOW' : 'CLIP';   // as an older version left it
+    for (let c = 1; c <= 7; c++) sh.colPx[c] = 77;
     s.run(`RefreshLogGrid.append('Dziennik pobrań', ${entry(3)})`);
     const wrap = (r, c) => (sh.cells[r + ',' + c] || { fmt: {} }).fmt.wrap;
-    for (const r of [2, 3, 4]) assert.deepStrictEqual([1, 2, 3, 4, 5, 6, 7].map(c => wrap(r, c)), ['WRAP', 'OVERFLOW', 'OVERFLOW', 'OVERFLOW', 'OVERFLOW', 'WRAP', 'CLIP'], 'entry row ' + r + ' (also the older ones)');
-    assert.deepStrictEqual([1, 2, 3, 4, 5, 6, 7].map(c => wrap(1, c)), Array(7).fill('CLIP'), 'the headers');
+    for (const r of [2, 3, 4]) assert.deepStrictEqual([1, 2, 3, 4, 5, 6, 7].map(c => wrap(r, c)), WRAPS, 'entry row ' + r + ' (also the older ones)');
+    assert.deepStrictEqual([1, 2, 3, 4, 5, 6, 7].map(c => wrap(1, c)), Array(7).fill('WRAP'), 'the headers');
+    assert.deepStrictEqual([1, 2, 3, 4, 5, 6, 7].map(c => sh.colPx[c]), WIDTHS, 'the widths');
   }));
 
-  MODES.forEach(mode => test('log sheet: the time cells carry the zone of the moment they were written in (UTC+N in the format), per cell; the freeze and the width are set once, with the sheet [' + mode + ']', () => {
+  MODES.forEach(mode => test('log sheet: the time cells carry the zone of the moment they were written in (UTC+N in the format), per cell; the freeze is set once, with the sheet (the user may unfreeze) [' + mode + ']', () => {
     const s = gridScope(mode);
     s.run(`RefreshLogGrid.append('Dziennik pobrań', ${entry(1)})`);
     const sh = s.book.sheets['Dziennik pobrań'];
-    sh.colPx[6] = 410; sh.colPx[1] = 250;                                                   // the user widens two columns
-    sh.frozen = 0;                                                                          // and unfreezes the header
+    sh.frozen = 0;                                                                          // the user unfreezes the header
     s.run(`RefreshLogGrid.append('Dziennik pobrań', ${entry(2)})`);
-    assert.deepStrictEqual([sh.colPx[1], sh.colPx[6]], [250, 410], 'a later entry does not set the widths again');
-    assert.strictEqual(sh.frozen, 0, 'nor the freeze');
+    assert.strictEqual(sh.frozen, 0, 'a later entry does not freeze it again');
     assert.ok(/UTC\+9"$/.test((sh.cells['2,2'] || { fmt: {} }).fmt.numFmt) && /UTC\+9"$/.test((sh.cells['3,3'] || { fmt: {} }).fmt.numFmt));
   }));
 
@@ -132,7 +132,7 @@ module.exports = function register(t) {
     const u = useCase();
     u.ex.eval(`RefreshLog.run('Autoodświeżanie', 'Clock trigger t1', () => { RefreshLog.noteSheet('Dane K1', 1234); RefreshLog.noteSheet('Dane K3', 1); RefreshLog.noteSheet('Dane K4', 22); })`);
     const [e] = u.entries();
-    assert.deepStrictEqual([e.name, e.source, e.status, e.technical], ['Dziennik pobrań', 'Autoodświeżanie', 'OK', 'Clock trigger t1']);
+    assert.deepStrictEqual([e.name, e.source, e.status, e.technical], ['Dziennik pobrań', 'Autoodświeżanie', 'OK ✅', 'Clock trigger t1']);
     assert.strictEqual(e.sheets, '3 arkusze:\nDane K1 (1234 wiersze)\nDane K3 (1 wiersz)\nDane K4 (22 wiersze)');
     assert.ok(Date.parse(e.start) <= Date.parse(e.end));
     assert.ok(/^\d+ s$|^\d+ m \d+ s$/.test(e.duration), e.duration);
@@ -194,7 +194,7 @@ module.exports = function register(t) {
     u.ex.eval(`RefreshAll.all()`);
     u.ex.eval(`MenuActions.activeConfigSheet = () => 'K2'; MenuActions.refreshActive()`);
     const [all, one] = u.entries();
-    assert.deepStrictEqual([all.source, all.sheets, all.technical, all.status], ['Odświeżanie wszystkich arkuszy', '2 arkusze:\nDane K1 (10 wierszy)\nDane K2 (20 wierszy)', 'Menu: refresh all sheets', 'OK']);
+    assert.deepStrictEqual([all.source, all.sheets, all.technical, all.status], ['Odświeżanie wszystkich arkuszy', '2 arkusze:\nDane K1 (10 wierszy)\nDane K2 (20 wierszy)', 'Menu: refresh all sheets', 'OK ✅']);
     assert.deepStrictEqual([one.source, one.sheets, one.technical], ['Odświeżanie jednego arkusza', '1 arkusz:\nDane K2 (20 wierszy)', 'Menu: refresh one sheet (config sheet: K2)']);
   });
 
@@ -212,7 +212,7 @@ module.exports = function register(t) {
     const u = useCase(); u.ex.eval(STUBS);
     u.ex.eval(`RefreshAll.scheduled('Clock trigger t1')`);
     const [e] = u.entries();
-    assert.deepStrictEqual([e.source, e.technical, e.sheets, e.status], ['Autoodświeżanie', 'Clock trigger t1', '1 arkusz:\nDane K1 (10 wierszy)', 'OK']);
+    assert.deepStrictEqual([e.source, e.technical, e.sheets, e.status], ['Autoodświeżanie', 'Clock trigger t1', '1 arkusz:\nDane K1 (10 wierszy)', 'OK ✅']);
     const text = fs.readFileSync(path.join(ROOT, 'ScheduleRefresh.js'), 'utf8');
     assert.ok(/RefreshAll\.scheduled\(ScheduleRefresh\.triggerText_\(e\.triggerUid,false\)\)/.test(text) && /RefreshAll\.scheduled\(ScheduleRefresh\.triggerText_\(e\.triggerUid,true\)\)/.test(text));
     assert.ok(/logRetired_\(e\.triggerUid,false\)/.test(text) && /logRetired_\(e\.triggerUid,true\)/.test(text), 'both handlers log a retired trigger');

@@ -112,7 +112,7 @@ a failure the add-on handles itself (`noteProblem`: a BC error document, a confi
 (`logOnly`: status "Odświeżanie nie zostało wykonane", technical, in English: the clock trigger, that it was deleted and that no refresh was performed). Writing the log never fails a refresh (`console.error` + a note on the live check run).
 
 The sheet (name chosen in the sidebar, Ogólne, "Arkusz dziennika pobrań"; default "Dziennik pobrań"; made by the first entry, headers in row 1): columns Źródło (Autoodświeżanie / Odświeżanie jednego arkusza / Odświeżanie wszystkich arkuszy), Początek, Koniec, Czas trwania,
-Status ("OK", the handled failure, or the platform error), Odświeżone arkusze (one cell: "2 arkusze" and a line "name (n wierszy)" per sheet), Dane techniczne (in English: "Clock trigger <id>" / "Menu: refresh one sheet (config sheet: K1)" / "Menu: refresh all sheets"). NEWEST FIRST: an entry is inserted as row 2, under the headers and above the older entries
+Status ("OK ✅", the handled failure, or the platform error), Odświeżone arkusze (one cell: "2 arkusze" and a line "name (n wierszy)" per sheet), Dane techniczne (in English: "Clock trigger <id>" / "Menu: refresh one sheet (config sheet: K1)" / "Menu: refresh all sheets"). NEWEST FIRST: an entry is inserted as row 2, under the headers and above the older entries
 (`Grid.insertRowsAfter(1, 1)` with the row reformatted: not bold, no grey; the grid reads only the first rows and commits once per entry). The name may not be the settings sheet, a config sheet or a result sheet (`MainSettings.setLogSheetName`).
 An older log sheet stays where it is when the name is changed (nothing is renamed or moved).
 
@@ -144,7 +144,9 @@ Counted and refused by the add-on before it asks the platform (`ScheduleRefresh.
 Retry advice: the first time the tab shows an error it begins with "Spróbuj ponownie używając przycisku poniżej." (`SettingsGrid.retryAdvice`, the `advise` flag of `messageLines`) and the button "Ustaw wg. danych w arkuszu" is ENABLED while an error is shown, also when the sheet and what is set look the same.
 `AutoRefreshPanel.apply` (the button) sets `ScheduleRefresh.byButton_`; a set-up that fails then stores `retried: true` and the tab shows the error plainly, without the advice. An error of an edit (or of "Wyłącz") is stored `retried: false`: the advice again.
 
-Fit to data (log sheet): the columns are sized like "Dopasuj do danych" in the column menu (`autoResizeDimensions` / `autoResizeColumns`, after the values are written; the service path flushes first). A column that wraps is fitted by its wrapped layout and comes out narrow, so the
-wrapping is a property of the column, set on every write for all entry rows (an older log sheet is put right): only "Źródło" (200 px) and "Odświeżone arkusze" (300 px) wrap, the technical text is cut, the other columns are one line; the headers are one line too.
 
 The first message of the sidebar (the advice to retry) does not carry the sentence about the limit of clock triggers; the plain message after the retry does.
+
+Widths and wrapping of the log sheet (fixed, per column, set on every write for all entry rows - a log sheet made by an older version is put right; a column the user resizes goes back to these on the next entry; the freeze is set once, with the sheet):
+Źródło 200 px wrap | Początek 200 px wrap | Koniec 200 px wrap | Czas trwania 100 px wrap | Status 200 px wrap | Odświeżone arkusze 300 px wrap | Dane techniczne 200 px cut (the text is cut at the edge of its cell). Nothing is fitted to its content
+(this replaces the "fit to data" attempt: a script's fit and the menu's differ, and a wrapped column is fitted by its wrapped layout). The row of a new entry is fitted to its content.

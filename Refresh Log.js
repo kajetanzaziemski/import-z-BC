@@ -63,7 +63,7 @@ const RefreshLog = {
       start: session.start,
       end: end,
       duration: AutoRefreshPanel.duration(end.getTime() - session.start.getTime()),
-      status: session.error ? String(session.error.message ?? session.error) : session.problems.length ? session.problems.join("; ") : "OK",
+      status: session.error ? String(session.error.message ?? session.error) : session.problems.length ? session.problems.join("; ") : "OK ✅",
       sheets: [`${n} ${RefreshLog.plural_(n,"arkusz","arkusze","arkuszy")}${n ? ":" : ""}`].concat(lines).join("\n"),
       technical: session.technical
     };

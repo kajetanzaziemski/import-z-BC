@@ -9,14 +9,14 @@
 //   B Początek          start of the refresh (date, time and the zone: "2026-11-05 10:01:00 UTC+1")
 //   C Koniec            end of the refresh (the same)
 //   D Czas trwania      "27 m 11 s"
-//   E Status            "OK", the message of a failure the add-on handled, or the error the platform threw
+//   E Status            "OK ✅", the message of a failure the add-on handled, or the error the platform threw
 //   F Odświeżone arkusze  how many sheets ("2 arkusze:"), and each with its number of rows (one cell, a line per sheet)
 //   G Dane techniczne   what fired it (the clock trigger and its id, the menu item); for a trigger that deleted itself: that, and that nothing was refreshed
 //
 // Look: the headers grey like the headers of a config sheet, bold, centred, and frozen (the first row stays in view); the entries are top and left aligned; the technical
-// column is Courier New 8 pt and cut at the edge of its cell; the columns fit their content ("Dopasuj do danych"), except "Źródło" (200 px) and "Odświeżone arkusze"
-// (300 px), which are the two that wrap. Fitting a column that wraps would size it by the wrapped layout, so the other columns do not wrap. The row of a new entry is
-// fitted to its content (the Sheets API does not grow a row for wrapped text by itself).
+// column is Courier New 8 pt. FIXED widths and wrapping, per column (set on every write for all entry rows, so a log sheet made by an older version is put right too):
+//   Źródło 200 px wrap | Początek 200 px wrap | Koniec 200 px wrap | Czas trwania 100 px wrap | Status 200 px wrap | Odświeżone arkusze 300 px wrap | Dane techniczne 200 px cut
+// ("cut" = the text is cut at the edge of its cell). The row of a new entry is fitted to its content (the Sheets API does not grow a row for wrapped text by itself).
 // One read of the first rows only (the log grows; the entries below are not needed to insert above them) and one commit per entry.
 // ---------------------------------------------------------------------------
 
@@ -26,10 +26,8 @@ const REFRESH_LOG_LAYOUT = {
   firstEntryRow: 2,
   timeFormat: "yyyy-mm-dd hh:mm:ss",
   headerBackground: "#cccccc",          // the grey of the headers of a config sheet (CONFIG_HEADER_)
-  sourceCol: 1,
-  sourceWidth: 200,
-  sheetsCol: 6,
-  sheetsWidth: 300,
+  widths: [200, 200, 200, 100, 200, 300, 200],           // px, per column
+  wraps: ["WRAP", "WRAP", "WRAP", "WRAP", "WRAP", "WRAP", "CLIP"],       // WRAP = wrapped, CLIP = cut
   technicalCol: 7,
   technicalFont: "Courier New",
   technicalSize: 8
@@ -52,10 +50,7 @@ const RefreshLogGrid = {
       head.setFontWeight("bold");
       head.setBackground(L.headerBackground);
       head.setHorizontalAlignment("center");
-      head.setWrapStrategy("CLIP");                                       // a header is one line: it must not make a fitted column narrow
       grid.freezeRows(L.headerRow);
-      grid.setColumnWidth(L.sourceCol, L.sourceWidth);
-      grid.setColumnWidth(L.sheetsCol, L.sheetsWidth);
     }
     grid.insertRowsAfter(L.headerRow, 1, { plain: true, fit: true });      // the new row takes the look of the header above it: put right below
     const row = grid.getRange(L.firstEntryRow, 1, 1, cols);
@@ -72,18 +67,13 @@ const RefreshLogGrid = {
     const technical = grid.getRange(L.firstEntryRow, L.technicalCol);
     technical.setFontFamily(L.technicalFont);
     technical.setFontSize(L.technicalSize);
-    // The wrapping is a property of the COLUMN, set for every entry row on every write (so a log sheet made by an older version is put right too): only the two columns of a
-    // fixed width wrap (a long source name, the sheets one per line), the technical text is cut at the edge of its cell, the rest is one line. "Fit to data" sizes a column
-    // by its longest text - a wrapped column would be fitted by its wrapped layout and come out narrow.
+    // The widths and the wrapping are a property of the COLUMN, set for every entry row on every write (the fixed layout above; an older log sheet is put right too)
     const dataRows = Math.max(grid.maxRows - L.headerRow, 1);
-    const wrap = (col, cols, strategy) => grid.getRange(L.firstEntryRow, col, dataRows, cols).setWrapStrategy(strategy);
-    wrap(L.sourceCol, 1, "WRAP");
-    wrap(L.sourceCol + 1, L.sheetsCol - L.sourceCol - 1, "OVERFLOW");
-    wrap(L.sheetsCol, 1, "WRAP");
-    wrap(L.technicalCol, 1, "CLIP");
-    grid.getRange(L.headerRow, 1, 1, cols).setWrapStrategy("CLIP");         // a header is one line: it must not make a fitted column narrow
-    grid.autoResizeColumns(L.sourceCol + 1, L.sheetsCol - L.sourceCol - 1);     // every column but "Źródło" and "Odświeżone arkusze" (fixed widths) fits its content
-    grid.autoResizeColumns(L.technicalCol, 1);
+    L.widths.forEach((px, i) => {
+      grid.setColumnWidth(i + 1, px);
+      grid.getRange(L.firstEntryRow, i + 1, dataRows, 1).setWrapStrategy(L.wraps[i]);
+    });
+    grid.getRange(L.headerRow, 1, 1, cols).setWrapStrategy("WRAP");
     grid.commit();
   }
 };
