@@ -17,16 +17,23 @@ function fullMenu() {
   ui
       .createAddonMenu()
       .addItem('Autoryzuj', 'startAuthFlow')
-      .addItem('Stan konfiguracji','statusCheck')
-      .addSubMenu(devToolsMenu_(ui))
       .addItem('Nowy kreator importu', 'insertImportWizard')
       .addItem('Analizuj zapytanie','checkConfigSheet')
       .addItem('Oszacuj wielkość danych','estimateForCurrentSheet')
       .addItem('Pobierz dane dla tego arkusza','refreshCurrentSheet')
       .addItem('Pobierz dane dla wszystkich arkuszy', 'refreshAll')
-      .addItem('Ustawienia połączenia BC','connectionSetup')
+      .addSubMenu(settingsMenu_(ui))
+      .addSubMenu(devToolsMenu_(ui))
       .addItem('Wyloguj', 'logoutFlow')
       .addToUi();
+}
+
+/**
+ * "Ustawienia" submenu: the three tabs of the settings sidebar ("Ustawienia"), each opens the sidebar on its tab. The connection settings (BC tenant, environment, company)
+ * are the tab "Połączenie z BC" - the sidebar of their own is gone. The configuration check (agents) runs whenever the sidebar is opened, on whichever tab.
+ */
+function settingsMenu_(ui){
+  return ui.createMenu('Ustawienia').addItem('Ogólne','statusCheck').addItem('Połączenie z BC','connectionSetup').addItem('Auto-odświeżanie','autoRefreshSettings');
 }
 
 /** "Narzędzia programisty" submenu. The live check entry exists only while the helper files are in the project. */
@@ -36,8 +43,14 @@ function devToolsMenu_(ui){
   return menu;
 }
 
+/** Menu "Ustawienia" -> "Ogólne" (the old "Stan konfiguracji"). */
 function statusCheck(){
-  return Controller.run("requestStatusCheck",()=>StatusManager.statusSidebar());
+  return Controller.run("requestStatusCheck",()=>StatusManager.statusSidebar("status"));
+}
+
+/** Menu "Ustawienia" -> "Auto-odświeżanie". */
+function autoRefreshSettings(){
+  return Controller.run("requestStatusCheck",()=>StatusManager.statusSidebar("refresh"));
 }
 
 function listAllTriggers(){
@@ -52,13 +65,9 @@ function checkConfigSheet(){
   return Controller.run("requestCheckConfigSheet",()=>MenuActions.analyseActive());
 }
 
+/** Menu "Ustawienia" -> "Połączenie z BC": the settings sidebar on the tab with the connection settings. */
 function connectionSetup(){
-  Controller.run("menuConnectionSetup",()=>{
-    const html = HtmlService.createTemplateFromFile('Global Settings Side Bar').evaluate()
-        .setTitle('Ustawienia połączenia BC');
-    SpreadsheetApp.getUi() // Or DocumentApp or SlidesApp or FormApp.
-        .showSidebar(html);
-  });
+  Controller.run("menuConnectionSetup",()=>StatusManager.statusSidebar("help"));
 }
 
 function refreshCurrentSheet(){

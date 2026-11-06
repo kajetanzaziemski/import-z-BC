@@ -82,10 +82,18 @@ module.exports = function register(t) {
     assert.deepStrictEqual(a.calls(), [['logout']]);
   });
 
-  test('menu: the connection settings and the status / trigger table open their sidebars', () => {
+  test('menu: "Ustawienia" has three items, each opens the settings sidebar (title "Ustawienia") on its tab; the last three items are Ustawienia, Narzędzia programisty, Wyloguj', () => {
     const a = scenario();
-    a.ex.eval(`connectionSetup()`); a.ex.eval(`statusCheck()`); a.ex.eval(`listAllTriggers()`);
-    assert.deepStrictEqual(a.calls(), [['sidebar', 'Ustawienia połączenia BC'], ['sidebar', 'Konfiguracja'], ['sidebar', 'Wszystkie Triggery w projekcie']]);
+    a.ex.eval(`globalThis.__tabs = []; { const f = StatusManager.statusSidebar; StatusManager.statusSidebar = t => { __tabs.push(t); return f.call(StatusManager, t); }; }`);
+    a.ex.eval(`statusCheck()`); a.ex.eval(`connectionSetup()`); a.ex.eval(`autoRefreshSettings()`); a.ex.eval(`listAllTriggers()`);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(a.ex.eval(`__tabs`))), ['status', 'help', 'refresh']);
+    assert.deepStrictEqual(a.calls(), [['sidebar', 'Ustawienia'], ['sidebar', 'Ustawienia'], ['sidebar', 'Ustawienia'], ['sidebar', 'Wszystkie Triggery w projekcie']]);
+    const text = fs.readFileSync(path.join(ROOT, 'Menu.js'), 'utf8');
+    assert.ok(/createMenu\('Ustawienia'\)\.addItem\('Ogólne','statusCheck'\)\.addItem\('Połączenie z BC','connectionSetup'\)\.addItem\('Auto-odświeżanie','autoRefreshSettings'\)/.test(text));
+    const full = text.slice(text.indexOf('function fullMenu'), text.indexOf('/**', text.indexOf('function fullMenu')));
+    const items = [...full.matchAll(/\.add(?:Item|SubMenu)\(([^,)]*)/g)].map(m => m[1]);
+    assert.deepStrictEqual(items.slice(-3), ["settingsMenu_(ui", "devToolsMenu_(ui", "'Wyloguj'"]);
+    assert.ok(!/Stan konfiguracji|Ustawienia połączenia BC/.test(text.replace(/\/\*[\s\S]*?\*\//g, '')), 'the old items are gone');
   });
 
   test('menu: the action names the live check and the gate rely on are kept', () => {

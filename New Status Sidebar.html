@@ -525,6 +525,8 @@
       /* =========================================================
          Init
       ========================================================= */
+      // the menu opens the sidebar on a tab (Ogólne / Połączenie z BC / Auto-odświeżanie); the configuration check runs whichever it is
+      var initialTab = '<?= typeof initialTab === "undefined" ? "status" : initialTab ?>';
       function refreshAllInfo() {
         refreshStatusInfo();
         refreshAgentInfo();
@@ -532,7 +534,10 @@
         refreshLogSheetInfo();
       }
 
-      window.onload = refreshAllInfo;
+      window.onload = function () {
+        refreshAllInfo();
+        if (initialTab !== 'status') selectTab(initialTab);
+      };
     </script>
   </head>
   <body>

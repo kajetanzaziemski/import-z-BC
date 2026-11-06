@@ -10,7 +10,7 @@ class StatusManager{
 	static basicStatusCheck(){ return Agents.isActive(); }
 
 	static lightFailInfo() {
-		Controller.registerClosingOnce(()=>SpreadsheetApp.getUi().alert("Kreator importu z BC nie jest w pełni skonfigurowany dla tego arkusza! Wybierz \"Stan konfiguracji\" z menu dodatku, żeby wznowić poprawne działanie arkusza."),"userAlert");
+		Controller.registerClosingOnce(()=>SpreadsheetApp.getUi().alert("Kreator importu z BC nie jest w pełni skonfigurowany dla tego arkusza! Wybierz \"Ustawienia\" -> \"Ogólne\" z menu dodatku, żeby wznowić poprawne działanie arkusza."),"userAlert");
 	}
 
 	static fullStatusCheck(){ Agents.ensureActive(); }
@@ -55,9 +55,12 @@ class StatusManager{
       		.showSidebar(html);
 	}
 
-	static statusSidebar(){
-		const html = HtmlService.createTemplateFromFile('New Status Sidebar').evaluate()
-      		.setTitle('Konfiguracja');
+	/** The settings sidebar. @param tab {"status"|"help"|"refresh"} The tab it opens on: Ogólne, Połączenie z BC, Auto-odświeżanie. */
+	static statusSidebar(tab = "status"){
+		const template = HtmlService.createTemplateFromFile('New Status Sidebar');
+		template.initialTab = tab;
+		const html = template.evaluate()
+      		.setTitle('Ustawienia');
   		SpreadsheetApp.getUi() // Or DocumentApp or SlidesApp or FormApp.
       		.showSidebar(html);
 	}
