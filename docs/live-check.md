@@ -175,6 +175,12 @@ It is part of `menuRefreshCurrentSheet` (a config sheet), `menuRefreshAll`, the 
 `lcVerifyRefreshTrigger_` also requires that exactly one refresh trigger belongs to this document - the permit's - judged by the user's records in the user properties (`lcDocumentsRefreshTriggers_`), none when the refresh is off. A set-up that dropped out for a newer edit
 (note "refresh set-up dropped") is skipped: the newer run is judged on its own.
 
+## Two live check failures after real-sheet runs (hashes re-pinned)
+- `simpleOnEdit` (and `change.ignored`) reported the document property **`refreshSetup`** as a change: it is the ticket of the newest-only lock (`runLatestOnly`) that a set-up of the automatic refresh writes, at the same time as the simple trigger of the same edit runs. It is allowed exactly like the
+  `<sheet>_coedit` flags - only when another checked run overlapped (`lcParallelCoeditFlags_`); on a quiet document it is still a change.
+- `config.coedit` "dropdowns match the rows - E11 should be a </>... dropdown": the verifier's operator list (`LC_OPERATORS`) still had the bare `=`; since `e470426` the dropdown carries equality as `" ="` with a leading space (a bare `=` would start a formula; bugs-fixed #18). The list is now
+  `["<",">"," =","<>","<=",">=","endswith","startswith","contains"]` and a test keeps it equal to what `OData Query.js` / `Data Validations.js` build.
+
 ## Quiet jobs
 `sheet.ignored`, `change.ignored` and `change.own` (`LIVE_CHECK_QUIET_JOBS`, `Live Check.js`) only look at an event and do nothing; they were most of the report. While they **pass** (or skip) nothing is logged, stored or shown, and their "running" placeholder
 is removed at once. One that fails or warns (an edit in a config sheet wrongly ignored) is recorded and shown like any other run. `settings.edit` and `agent.skipped` also do nothing but are still reported.

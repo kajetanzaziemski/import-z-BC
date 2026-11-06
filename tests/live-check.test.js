@@ -311,13 +311,13 @@ module.exports = function register(t) {
     assert.ok(/data writing \(D2: background #ff0000, font #000000; before the run: background #cccccc, font #999999\)/.test(r.detail), r.detail);
   });
 
-  test('live check: the "<sheet>_coedit" lock flags count as a change only when no other checked run overlapped this one', () => {
+  test('live check: the "<sheet>_coedit" and "refreshSetup" lock flags count as a change only when no other checked run overlapped this one', () => {
     const p = new FakePlatform();
     const ex = p.execution(FILES);
     const put = (k, t, s, ms) => ex.eval(`PropertiesService.getDocumentProperties().setProperty(LIVE_CHECK_RESULT_PREFIX + "${k}", JSON.stringify({t: "${t}", a: "x", s: "${s}", ms: ${ms}, c: []}))`);
     const startedAt = Date.parse('2026-10-25T10:00:10.000Z');
     ex.eval(`globalThis.__c = { key: 'mine', startedAt: ${startedAt} }; lcStoredResults_ = () => JSON.parse(globalThis.__stored)`);
-    const flags = stored => { ex.ctx.__stored = JSON.stringify(stored); return ex.eval(`lcParallelCoeditFlags_(__c).length`); };
+    const flags = stored => { ex.ctx.__stored = JSON.stringify(stored); return ex.eval(`lcParallelCoeditFlags_(__c).length`) / 2; };      // two flags: "<sheet>_coedit" and "refreshSetup"
     const e = (k, t, s, ms) => ({ k, t, s, ms, a: 'sheetEditAction', c: [] });
     ex.eval(`Date.now = () => ${startedAt + 5000}`);
     assert.strictEqual(flags([]), 0, 'quiet document');
@@ -466,6 +466,19 @@ module.exports = function register(t) {
     assert.deepStrictEqual(run(refused, { issuedFor: 'old' }, { issuedFor: 'old' }), [[['permit untouched', 'PASS']], 'the set-up was refused: the user already has the limit of clock triggers']);
     assert.deepStrictEqual(run(refused, { issuedFor: 'new' }, { issuedFor: 'old' })[0], [['permit untouched', 'FAIL']], 'a refusal that changed the permit');
     assert.throws(() => run({ message: 'Exception: boom' }, { issuedFor: 'a' }, { issuedFor: 'a' }), /c\.spreadsheet is not a function/, 'another error is not taken for the refusal: the ordinary judgement goes on');
+  });
+
+  test('live check: the flags of the lock helpers are allowed to differ while a run overlapped - the co-edit flags AND the refresh set-up flag; the operator dropdown is " =" with a leading space', () => {
+    const p = new FakePlatform();
+    const ex = p.execution(FILES);
+    ex.eval(`globalThis.__c = { key: 'mine', startedAt: 1000 }; lcStoredResults_ = () => [{ k: 'other', t: new Date(1500).toISOString(), s: 'RUN', ms: 0 }]; Date.now = () => 2000`);
+    const allowed = Array.from(ex.eval(`lcParallelCoeditFlags_(__c).map(String)`));
+    assert.deepStrictEqual(allowed, ['/_coedit$/', 'refreshSetup']);
+    assert.deepStrictEqual(Array.from(ex.eval(`LC_OPERATORS`)), ['<', '>', ' =', '<>', '<=', '>=', 'endswith', 'startswith', 'contains'], 'the list the dropdown really has (Data Validations.js)');
+    // and it is what the code builds: the operators of OData Query.js with the equality as " " + "=" (Data Validations.js)
+    const code = fs.readFileSync(path.join(ROOT, 'OData Query.js'), 'utf8').match(/static listComparisonOperators\(\)\{ return (\[[^\]]*\])/)[1];
+    assert.deepStrictEqual(Array.from(ex.eval(`LC_OPERATORS`)), JSON.parse(code).map(op => op === '=' ? ' =' : op));
+    assert.ok(/op == "=" \? " =" : op/.test(fs.readFileSync(path.join(ROOT, 'Data Validations.js'), 'utf8')));
   });
 
   const THREE_ROWS = `ODataConnection.prototype.getDataArray = () => [['No'], ['C1'], ['C2']];`;

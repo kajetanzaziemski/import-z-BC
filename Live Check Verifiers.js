@@ -19,7 +19,7 @@
 // - - - - - - - - expected values (copied from the code as it is now) - - - - - - - -
 
 const LC_QUERY_OPTIONS = ["select","filter","filterLogic","orderBy","limit"];
-const LC_OPERATORS = ["<",">","=","<>","<=",">=","endswith","startswith","contains"];
+const LC_OPERATORS = ["<",">"," =","<>","<=",">=","endswith","startswith","contains"];      // equality is " =" with a leading space: a bare "=" would start a formula (bugs-fixed #18)
 const LC_FILTER_LOGICS = ["AND","OR"];
 const LC_SORTING_ORDERS = ["asc","desc"];
 const LC_EMPTY_LIST_NOTE = 'Pusta lista może wynikać z braku połączenia z BC. Spróbuj nawiązać połączenie i wywołaj opcję "Analizuj zapytanie" dla tego arkusza';
@@ -210,7 +210,8 @@ function lcOtherRunsInProgress_(c){
 
 /**
  * Document properties that a run of ANOTHER execution may change while this one is judged: the "<sheet>_coedit" flags of the lock-and-retry helper
- * (runFunctionWithLock) that a co-edit running at the same time writes. Allowed only when some other checked run overlapped this one
+ * (runFunctionWithLock) that a co-edit running at the same time writes, and the "refreshSetup" flag of the same kind (runLatestOnly) that a set-up of the automatic refresh writes
+ * (an edit of the frequency fires the simple and the installable trigger at once). Allowed only when some other checked run overlapped this one
  * (still running, or finished after this one started); on a quiet document they still count as a change.
  */
 function lcParallelCoeditFlags_(c){
@@ -219,7 +220,7 @@ function lcParallelCoeditFlags_(c){
     const from = c.startedAt, to = Date.now();
     const overlapping = lcStoredResults_().some(e => e.k !== c.key && mine.indexOf(e.k) < 0 && Date.parse(e.t) <= to &&
       (e.s == "RUN" || Date.parse(e.t) + (e.ms || 0) >= from));
-    return overlapping ? [/_coedit$/] : [];
+    return overlapping ? [/_coedit$/,"refreshSetup"] : [];
   } catch(err) {
     return [];
   }
