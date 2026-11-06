@@ -45,7 +45,8 @@ const AutoRefreshPanel = {
   /**
    * The last set-up of the automatic refresh that failed, for the sidebar: only the headline of the red message of the settings sheet and the time of the attempt (with the
    * sentence about the limit of clock triggers between them when that was the cause) - not what is set now, the sidebar shows that itself - and the platform's error for the
-   * collapsed "Szczegóły błędu". null when the last set-up went right.
+   * collapsed "Szczegóły błędu". The first time (the set-up was made by an edit, not by the sidebar's button) it begins with the advice to try again with the button below;
+   * an error that came from the button itself is shown plainly. null when the last set-up went right.
    */
   setupError_(tz){
     try{
@@ -53,8 +54,8 @@ const AutoRefreshPanel = {
       if(!e) return null;
       const stamp = ms => SettingsGrid.stamp(new Date(ms), tz);
       const current = e.current && Object.assign({}, e.current, {next: e.current.next ? new Date(e.current.next) : null});
-      const lines = SettingsGrid.messageLines({ok: false, when: e.at, current: current, limit: !!e.limit}, d => SettingsGrid.stamp(Object.prototype.toString.call(d) === "[object Date]" ? d : new Date(d), tz), true);
-      return {lines: lines, limit: !!e.limit, details: e.details ?? "", at: stamp(e.at)};
+      const lines = SettingsGrid.messageLines({ok: false, when: e.at, current: current, limit: !!e.limit, advise: !e.retried}, d => SettingsGrid.stamp(Object.prototype.toString.call(d) === "[object Date]" ? d : new Date(d), tz), true);
+      return {lines: lines, limit: !!e.limit, retried: !!e.retried, details: e.details ?? "", at: stamp(e.at)};
     }catch(err){
       dbgLog(`Auto refresh panel: set-up error not read: ${err}`);
       return null;
@@ -214,6 +215,7 @@ const AutoRefreshPanel = {
   /** The button: the same as editing the frequency in the settings sheet (job settings.refreshApply for the live check). */
   apply(){
     Controller.intent("settings.refreshApply",{sheet: null, changeType: null});
+    ScheduleRefresh.byButton_ = true;          // an error of this set-up is an error of the retry the sidebar advised: it is shown plainly, without the advice
     getMainSettings().setRefreshTrigger();
   }
 };

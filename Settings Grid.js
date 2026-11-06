@@ -56,11 +56,14 @@ const SettingsGrid = {
   /** The sentence for a set-up that failed because Apps Script refuses one more clock trigger (a user may have 5 of them for an add-on); the list of the files the user refreshes is in the same tab. */
   triggerLimitText: "Możesz odświeżać automatycznie najwyżej 5 plików. Zobacz listę aktualnie odświeżanych arkuszy poniżej.",
 
+  /** What the sidebar advises first when it shows a failed set-up that was not made by its own button yet. */
+  retryAdvice: "Spróbuj ponownie używając przycisku poniżej.",
+
   /** The same for the settings sheet, where there is no list below: it points to the menu instead (the path follows on the next line, in bold). */
   triggerLimitSheetText: "Możesz odświeżać automatycznie najwyżej 5 plików. Zobacz szczegóły w menu dodatku:",
 
   /**
-   * The lines of the status message for a report ({ ok, off, when, frequency, next, current, limit }); `stamp` writes a time. Used for the message in the settings sheet
+   * The lines of the status message for a report ({ ok, off, when, frequency, next, current, limit, advise }); `stamp` writes a time. Used for the message in the settings sheet
    * and, `brief`, for the error shown in the sidebar.
    */
   messageLines(report, stamp, brief) {
@@ -75,7 +78,9 @@ const SettingsGrid = {
     }
     // brief (the sidebar): the headline, the sentence about the limit of clock triggers when that was the cause, and the time of the attempt - nothing about what is
     // set now (the sidebar shows that itself) and no pointer to the menu (the user is looking at the add-on)
+    // `advise` (the first time the sidebar shows this error): first of all, try again with the button of the sidebar; once the button was used and the error came again, the plain message
     if (brief) return ["Ustawienia odświeżania nie zostały zaktualizowane!",
+                       ...(report.advise ? [SettingsGrid.retryAdvice] : []),
                        ...(report.limit ? [SettingsGrid.triggerLimitText] : []),
                        `Próba zmiany ustawień została podjęta ${stamp(report.when)}.`];
     return ["Ustawienia odświeżania nie zostały zaktualizowane!",

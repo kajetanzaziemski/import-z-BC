@@ -392,16 +392,23 @@ module.exports = function register(t) {
     assert.strictEqual(withError(undefined).info().setupError, null);
   });
 
-  test('error: the sidebar shows only the headline of the red message and the time of the attempt - nothing about what is set now, no pointer to the menu - and the platform\'s error as details', () => {
+  test('error: the FIRST time the sidebar shows an error it begins with the advice to try again with the button below; nothing about what is set now, no pointer to the menu; the platform\'s error as details', () => {
     const e = withError(SETUP_ERROR()).info().setupError;
     assert.deepStrictEqual(e.lines, [
       'Ustawienia odświeżania nie zostały zaktualizowane!',
+      'Spróbuj ponownie używając przycisku poniżej.',
       'Próba zmiany ustawień została podjęta 2026-11-02 08:00:00 UTC+1.']);
-    assert.deepStrictEqual([e.limit, e.details], [false, 'Exception: Boom\n    at Object.setUp (ScheduleRefresh:57:30)']);
+    assert.deepStrictEqual([e.limit, e.retried, e.details], [false, false, 'Exception: Boom\n    at Object.setUp (ScheduleRefresh:57:30)']);
     assert.ok(!('path' in e));
-    // whatever was set at the moment, it is not in the sidebar's error
+    // whatever was set at the moment, it is not in the sidebar\'s error
     assert.deepStrictEqual(withError(SETUP_ERROR({ current: { active: false } })).info().setupError.lines, e.lines);
     assert.deepStrictEqual(withError(SETUP_ERROR({ current: null })).info().setupError.lines, e.lines);
+  });
+
+  test('error: an error that came from the sidebar\'s own button (the retry) is shown plainly - the headline and the time of the attempt, without the advice', () => {
+    const e = withError(SETUP_ERROR({ retried: true })).info().setupError;
+    assert.deepStrictEqual(e.lines, ['Ustawienia odświeżania nie zostały zaktualizowane!', 'Próba zmiany ustawień została podjęta 2026-11-02 08:00:00 UTC+1.']);
+    assert.strictEqual(e.retried, true);
   });
 
   test('error: the sheet\'s own message is unchanged - the headline, what is set now, where to look, the time (SettingsGrid.messageLines without "brief")', () => {
@@ -412,14 +419,35 @@ module.exports = function register(t) {
     assert.deepStrictEqual(lines(true), ['Ustawienia odświeżania nie zostały zaktualizowane!', 'Próba zmiany ustawień została podjęta T.']);
   });
 
-  test('error: when the set-up failed on the limit of clock triggers the main message says so, between the headline and the time of the attempt (the platform\'s error stays in the details)', () => {
-    const e = withError(SETUP_ERROR({ limit: true, details: 'Exception: Ten dodatek utworzył zbyt wiele wyzwalaczy' })).info().setupError;
-    assert.strictEqual(e.limit, true);
-    assert.strictEqual(e.lines.length, 3);
-    assert.strictEqual(e.lines[0], 'Ustawienia odświeżania nie zostały zaktualizowane!');
-    assert.strictEqual(e.lines[1], 'Możesz odświeżać automatycznie najwyżej 5 plików. Zobacz listę aktualnie odświeżanych arkuszy poniżej.');
-    assert.ok(/^Próba zmiany ustawień została podjęta/.test(e.lines[2]));
-    assert.ok(/zbyt wiele wyzwalaczy/.test(e.details));
+  test('error: when the set-up failed on the limit of clock triggers the main message says so, between the headline (and the advice, the first time) and the time of the attempt (the platform\'s error stays in the details)', () => {
+    const first = withError(SETUP_ERROR({ limit: true, details: 'Exception: Ten dodatek utworzył zbyt wiele wyzwalaczy' })).info().setupError;
+    assert.strictEqual(first.limit, true);
+    assert.strictEqual(first.lines.length, 4);
+    assert.deepStrictEqual([first.lines[0], first.lines[1]], ['Ustawienia odświeżania nie zostały zaktualizowane!', 'Spróbuj ponownie używając przycisku poniżej.']);
+    assert.strictEqual(first.lines[2], 'Możesz odświeżać automatycznie najwyżej 5 plików. Zobacz listę aktualnie odświeżanych arkuszy poniżej.');
+    assert.ok(/^Próba zmiany ustawień została podjęta/.test(first.lines[3]));
+    assert.ok(/zbyt wiele wyzwalaczy/.test(first.details));
+    const plain3 = withError(SETUP_ERROR({ limit: true, retried: true })).info().setupError;
+    assert.deepStrictEqual(plain3.lines.length, 3);
+    assert.strictEqual(plain3.lines[1], 'Możesz odświeżać automatycznie najwyżej 5 plików. Zobacz listę aktualnie odświeżanych arkuszy poniżej.');
+  });
+
+  test('page: with an error shown the button "Ustaw wg. danych w arkuszu" is enabled even when the sheet and what is set look the same (and the "same as current" note is not shown)', () => {
+    const html = fs.readFileSync(path.join(ROOT, 'New Status Sidebar.html'), 'utf8');
+    assert.ok(/\(sh\.differs \|\| info\.setupError \? '' : ' disabled'\)/.test(html));
+    assert.ok(/if \(!sh\.differs && !info\.setupError\) html \+= '<p class="gray">Ustawienia w arkuszu są takie same/.test(html));
+  });
+
+  test('error: the button marks the set-up as a retry - an error that comes from it is stored as retried; an error of an edit is not; an edit after a retried error starts again with the advice', () => {
+    const sc = scenario({ sheet: { freq: { freq: 1, unit: 'days' } } });
+    sc.ex.eval(`globalThis.__fail = 1; getMainSettings = () => ({ clearRefreshSettings() {}, setRefreshTrigger: () => { ScheduleRefresh.fail_({ toastRefreshError() {}, setRefreshMessage() {} }, new Error('boom ' + (__fail++))); throw new Error('boom'); } });`);
+    assert.throws(() => sc.ex.eval(`AutoRefreshPanel.apply()`), /boom/);
+    sc.save();
+    assert.strictEqual(sc.stored().refreshSetupError.retried, true, 'from the button');
+    const edit = scenario({ sheet: { freq: { freq: 1, unit: 'days' } } });
+    edit.ex.eval(`ScheduleRefresh.fail_({ toastRefreshError() {}, setRefreshMessage() {} }, new Error('boom'))`);
+    edit.save();
+    assert.strictEqual(edit.stored().refreshSetupError.retried, false, 'from an edit');
   });
 
   test('error: the settings sheet says the limit in its own words - "Możesz odświeżać automatycznie najwyżej 5 plików. Zobacz szczegóły w menu dodatku:" and the path on the next line (bold, as in the other messages) - in the place of the general pointer', () => {
@@ -449,7 +477,7 @@ module.exports = function register(t) {
     assert.strictEqual(JSON.stringify([sc.p.props.document, sc.p.triggers]), before);
   });
 
-  test('page: the tab "Auto-odświeżanie" reads when it is opened, on the refresh button and after applying; no polling; only the latest answer is shown; the apply button is disabled when nothing differs', () => {
+  test('page: the tab "Auto-odświeżanie" reads when it is opened, on the refresh button and after applying; no polling; only the latest answer is shown; the apply button is disabled when nothing differs (and no error is shown)', () => {
     const html = fs.readFileSync(path.join(ROOT, 'New Status Sidebar.html'), 'utf8');
     assert.ok(/data-tab="refresh" onclick="selectTab\('refresh'\)">Auto-odświeżanie</.test(html));
     assert.ok(/if \(tabId === 'refresh'\) loadRefreshInfo\(\);/.test(html), 'on opening the tab');
@@ -457,7 +485,7 @@ module.exports = function register(t) {
     assert.ok(/withSuccessHandler\(function \(\) \{ loadRefreshInfo\(\); \}\)/.test(html), 'after applying');
     assert.ok(/var id = \+\+refreshLoadId;/.test(html) && /if \(id === refreshLoadId\) showRefreshInfo\(info\)/.test(html), 'an older answer is dropped');
     assert.ok(!/setInterval|REFRESH_POLL|refreshPoll/.test(html), 'no polling');
-    assert.ok(/\(sh\.differs \? '' : ' disabled'\)/.test(html));
+    assert.ok(/\(sh\.differs \|\| info\.setupError \? '' : ' disabled'\)/.test(html));
     assert.ok(/Odświeżanie ustawione przez innego użytkownika - poniższe informacje mogą zawierać błędy\./.test(html));
     assert.ok(!/escapeHtml\(info\.last\.sheets/.test(html) && /escapeHtml\(n\)/.test(html), 'sheet names are escaped');
   });

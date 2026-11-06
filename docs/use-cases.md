@@ -140,3 +140,6 @@ When Apps Script refused one more clock trigger (the platform's "too many trigge
 
 ## The limit of 5 clock triggers
 Counted and refused by the add-on before it asks the platform (`ScheduleRefresh.assertRoomForTrigger_`, in `createTrigger_`): see `docs/clock-triggers.md` for the counting, every case in which a trigger is created and what each does at the limit.
+
+Retry advice: the first time the tab shows an error it begins with "Spróbuj ponownie używając przycisku poniżej." (`SettingsGrid.retryAdvice`, the `advise` flag of `messageLines`) and the button "Ustaw wg. danych w arkuszu" is ENABLED while an error is shown, also when the sheet and what is set look the same.
+`AutoRefreshPanel.apply` (the button) sets `ScheduleRefresh.byButton_`; a set-up that fails then stores `retried: true` and the tab shows the error plainly, without the advice. An error of an edit (or of "Wyłącz") is stored `retried: false`: the advice again.

@@ -295,6 +295,9 @@ const ScheduleRefresh = {
     return true;
   },
 
+  /** true while the set-up is made by the sidebar button "Ustaw wg. danych w arkuszu" (AutoRefreshPanel.apply): an error then is an error of the retry. One run per execution. */
+  byButton_: false,
+
   /** A set-up failed: the red message in the sheet, and the error kept for the sidebar (cleared by the next set-up that goes right). */
   fail_(settings, err){
     const current = ScheduleRefresh.current();
@@ -320,7 +323,7 @@ const ScheduleRefresh = {
   recordSetupError_(err, current, limit){
     try{
       const details = String(err && err.stack || err && err.message || err).slice(0,1200);
-      Settings.setRefreshSetupError({at: Date.now(), details: details, limit: !!limit,
+      Settings.setRefreshSetupError({at: Date.now(), details: details, limit: !!limit, retried: ScheduleRefresh.byButton_ === true,
         current: current ? {active: !!current.active, frequency: current.frequency, next: current.next ? current.next.getTime() : null} : null});
     }catch(e){ dbgLog(`Set-up error not kept: ${e}`); }
   },

@@ -247,11 +247,12 @@
         if (!sh || !sh.available) {
           html += '<p class="gray">' + (sh && sh.error ? 'Nie udało się odczytać arkusza ustawień.' : 'Arkusz ustawień jeszcze nie istnieje.') + '</p>';
         } else {
-          html += '<button class="action" id="applyRefreshBtn" onclick="applyRefreshSettings()"' + (sh.differs ? '' : ' disabled') + '> Ustaw wg. danych w arkuszu </button>';
+          // with an error shown the button is always there to be used (the sheet and what is set may look the same and still not be set up)
+          html += '<button class="action" id="applyRefreshBtn" onclick="applyRefreshSettings()"' + (sh.differs || info.setupError ? '' : ' disabled') + '> Ustaw wg. danych w arkuszu </button>';
           html += '<p class="gray">' + (sh.off
             ? '(odświeżanie wyłączone)'
             : '(odświeżanie co ' + escapeHtml(sh.every) + (sh.startAt ? ' o ' + escapeHtml(sh.startAt) : '') + '; nast. odśw. ' + escapeHtml(sh.next) + ')') + '</p>';
-          if (!sh.differs) html += '<p class="gray">Ustawienia w arkuszu są takie same jak aktualne.</p>';
+          if (!sh.differs && !info.setupError) html += '<p class="gray">Ustawienia w arkuszu są takie same jak aktualne.</p>';
         }
         // switching it off on purpose (the settings in the sheet are cleaned, the trigger removed): a second press within 4 s confirms
         html += '<p><button id="turnOffRefreshBtn" onclick="turnOffRefresh()"' + (info.current ? '' : ' disabled') + '> Wyłącz autoodświeżanie </button></p>';
