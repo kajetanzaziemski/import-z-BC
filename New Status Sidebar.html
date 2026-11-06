@@ -220,6 +220,9 @@
           html += '<p class="warn">Odświeżanie ustawione przez innego użytkownika - poniższe informacje mogą zawierać błędy.</p>';
         }
         html += '<h1> Aktualne ustawienia: </h1>';
+        if (info.current && info.current.legacy) {
+          html += '<p class="warn">Ustawienia odczytane z arkusza (ustawione w poprzedniej wersji dodatku) - dodatek nie może potwierdzić, że wyzwalacz istnieje. Użyj przycisku "Ustaw wg. danych w arkuszu", żeby ustawić odświeżanie od nowa.</p>';
+        }
         if (info.error) {
           html += '<p class="gray">Nie udało się odczytać aktualnych ustawień.</p>';
         } else if (info.current) {

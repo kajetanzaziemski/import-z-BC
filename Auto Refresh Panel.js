@@ -18,7 +18,9 @@ const AutoRefreshPanel = {
     const tz = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone();
     const stamp = ms => ms ? SettingsGrid.stamp(new Date(ms), tz) : null;
     const permit = MainSettings.getRefreshPermit();
-    const current = ScheduleRefresh.current(now);
+    // nothing set by this version: a sheet of the legacy era is judged from the sheet itself (a guess, marked `legacy`)
+    let current = ScheduleRefresh.current(now);
+    if(current && !current.active) current = ScheduleRefresh.legacyCurrent(now) ?? current;
 
     const out = {zone: SettingsGrid.offsetName(now, tz), current: null, last: null, sheet: null, error: current === null, diag: ScheduleRefresh.explain(now)};
     if(current?.active){
@@ -28,6 +30,7 @@ const AutoRefreshPanel = {
         startAt: current.startAt,
         next: stamp(current.next.getTime())
       };
+      if(current.legacy) out.current.legacy = true;
     }
     if(permit?.lastRun){
       out.last = {
@@ -171,7 +174,7 @@ const AutoRefreshPanel = {
         every: `${frequency.freq} ${SettingsGrid.unitName(frequency)}`,
         startAt: atText,
         next: stamp(next.getTime()),
-        differs: !current?.active || current.intervalHours !== hours || (current.startAt ?? null) !== atText
+        differs: !current?.active || !!current.legacy || current.intervalHours !== hours || (current.startAt ?? null) !== atText
       };
     }catch(err){
       dbgLog(`Auto refresh panel: settings sheet not read: ${err}`);

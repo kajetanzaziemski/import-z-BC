@@ -453,6 +453,43 @@ const ScheduleRefresh = {
     }
   },
 
+  /**
+   * A sheet set up by the LEGACY version (before refresh permits): it never issued a permit, or only the legacy handler did (autoRefresh() issues one for itself, with no
+   * interval and no owner token - only the set-up of this version writes those). A permit with no trigger (issuedFor null) is a set-up of this version too: the refresh was
+   * switched off on purpose. Nothing else marks it; a permit is never deleted, so "no permit" cannot come back after a set-up.
+   */
+  isLegacyEra_(permit){
+    if(!permit) return true;
+    return !!permit.issuedFor && !permit.off && !permit.issuedBy && !permit.intervalHours;
+  },
+
+  /**
+   * What a sheet of the legacy era is probably doing, judged from the sheet alone (its triggers carry no frequency and none of them can be told from the other users'):
+   * "on" when the sheet has a frequency and the last refresh is no older than one interval plus a margin (a quarter of it, at least an hour). Otherwise, and for a sheet
+   * that is not of the legacy era, null. `legacy: true` marks the answer as a guess; `next` is the last refresh + the interval, rolled forward.
+   * @returns {{active: true, legacy: true, foreign: false, intervalHours: number, startAt: null, frequency: Object, next: Date}|null}
+   */
+  legacyCurrent(now = new Date()){
+    try{
+      if(!ScheduleRefresh.isLegacyEra_(MainSettings.getRefreshPermit())) return null;
+      const settings = getMainSettings();
+      const frequency = settings.getRefreshFrequency();
+      if(!frequency?.freq || (frequency.unit != "days" && frequency.unit != "hrs")) return null;
+      const last = settings.getLastRefresh();
+      const lastMs = Object.prototype.toString.call(last) === "[object Date]" ? last.getTime() : (typeof last == "number" ? last : NaN);
+      if(isNaN(lastMs)) return null;
+      const hours = frequency.unit == "days" ? 24 * frequency.freq : frequency.freq;
+      const step = hours * 3600000;
+      if(now.getTime() - lastMs > step + Math.max(3600000, step / 4)) return null;
+      let next = lastMs + step;
+      if(next <= now.getTime()) next += Math.ceil((now.getTime() - next + 1) / step) * step;
+      return {active: true, legacy: true, foreign: false, intervalHours: hours, startAt: null, frequency: {freq: frequency.freq, unit: frequency.unit}, next: new Date(next)};
+    }catch(err){
+      dbgLog(`Legacy refresh state not read: ${err}`);
+      return null;
+    }
+  },
+
   /** Writes the message; if that fails, or the report is a failure, a toast tells about it (the toast is the last resort and must not throw). */
   report_(settings, report){
     let written = false;

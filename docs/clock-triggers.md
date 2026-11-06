@@ -31,3 +31,13 @@ Nothing else creates a clock trigger: `onOpen` / the time zone check, the schedu
 
 ## The live check
 A refusal is an expected error of the jobs `settings.refreshFrequency` / `settings.refreshApply`: the verifier then only requires that the permit is as it was (`lcVerifyRefreshTrigger_`).
+
+## A sheet set up by the legacy version (the sidebar's guess)
+
+Before refresh permits a document had a clock trigger (handler `autoRefresh`) and nothing else that says what is set: no interval, no owner. When the document has **no permit**,
+or only the permit the legacy handler issued for itself (an `issuedFor`, no `intervalHours`, no `issuedBy`, not `off`), the "Auto-odświeżanie" tab judges from the sheet
+(`ScheduleRefresh.legacyCurrent`): the refresh is shown as **on** when the sheet has a frequency and the last refresh is no older than one interval plus a margin (a quarter of
+the interval, at least an hour); the next refresh is the last one + the interval. The tab says it is a guess, and "Ustaw wg. danych w arkuszu" is active (it makes a proper trigger
+and permit; the legacy trigger then finds a permit that is not its own and deletes itself). Nothing else is used as a marker: every set-up of this version writes a permit
+(also when it switches the refresh off, then `issuedFor` is null), and a permit is never deleted, so no extra document property is needed. Only the sidebar uses the guess;
+the trigger logic (`ScheduleRefresh.current`) does not.

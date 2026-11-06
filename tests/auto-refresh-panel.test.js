@@ -39,7 +39,7 @@ module.exports = function register(t) {
       { const g = SpreadsheetApp.getActiveSpreadsheet; SpreadsheetApp.getActiveSpreadsheet = () => Object.assign(g(), __cfg.activeRows ? (b => ({ getSpreadsheetTimeZone: b.getSpreadsheetTimeZone, getSheets: () => { __sheetReads++; return b.getSheets(); } }))(__book({ rows: __cfg.activeRows, gid: 7 })) : { getSheets: () => [] }); }
       globalThis.__sheetReads = 0;
       getMainSettings = () => ({
-        getRefreshFrequency: () => __cfg.sheet.freq, getRefreshStartAt: () => __cfg.sheet.at ?? null,
+        getRefreshFrequency: () => __cfg.sheet.freq, getRefreshStartAt: () => __cfg.sheet.at ?? null, getLastRefresh: () => __cfg.sheet.last ?? null,
         getSheetListWithRefreshTrue: () => [{ configSheet: 'K1', resultSheet: 'Dane K1', refresh: true }, { configSheet: 'K3', resultSheet: 'Dane K3', refresh: true }],
         setLastRefresh() {}, setRefreshTrigger: () => __log.push(['setRefreshTrigger']), clearRefreshSettings: () => __log.push(['clearRefreshSettings'])
       });
@@ -70,6 +70,27 @@ module.exports = function register(t) {
     assert.deepStrictEqual(i.current, { foreign: false, every: '1 dzień', startAt: '17:30', next: '2026-11-02 18:00:00 UTC+1' });
     const h = scenario({ permit: permit({ intervalHours: 3, startAt: null, nextRefresh: NOW + HOUR }), triggers: ['t1'] }).info();
     assert.deepStrictEqual([h.current.every, h.current.startAt], ['3 h', null]);
+  });
+
+  test('panel: a sheet of the legacy era (no permit, or the permit only the legacy handler issued) is "on" by what the sheet says - a frequency and a last refresh not older than an interval plus a margin; else off', () => {
+    const f = { freq: 1, unit: 'days' };
+    const on = scenario({ sheet: { freq: f, last: new Date(NOW - 20 * HOUR) } }).info();
+    assert.deepStrictEqual([on.current.legacy, on.current.every, on.current.startAt, on.current.next, on.sheet.differs], [true, '1 dzień', null, '2026-11-02 15:00:00 UTC+1', true]);
+    const margin = scenario({ sheet: { freq: f, last: new Date(NOW - 29 * HOUR) } }).info();
+    assert.strictEqual(margin.current.legacy, true, '24 h + 6 h margin');
+    assert.strictEqual(scenario({ sheet: { freq: f, last: new Date(NOW - 31 * HOUR) } }).info().current, null, 'too old');
+    assert.strictEqual(scenario({ sheet: { freq: f, last: null } }).info().current, null, 'never refreshed');
+    assert.strictEqual(scenario({ sheet: { freq: { freq: null, unit: null }, last: new Date(NOW - HOUR) } }).info().current, null, 'no frequency');
+    const hourly = scenario({ sheet: { freq: { freq: 3, unit: 'hrs' }, last: new Date(NOW - 2 * HOUR) } }).info();
+    assert.deepStrictEqual([hourly.current.every, hourly.current.next], ['3 h', '2026-11-02 12:00:00 UTC+1']);
+    const legacyPermit = scenario({ permit: { issuedFor: 'old', lastRefresh: NOW - 30 * HOUR, lastRun: NOW - 20 * HOUR }, sheet: { freq: f, last: new Date(NOW - 20 * HOUR) } }).info();
+    assert.strictEqual(legacyPermit.current.legacy, true, 'the permit of the legacy handler: no interval, no owner');
+    // set up by this version: the permit decides, never the sheet
+    assert.strictEqual(scenario({ permit: permit({ off: true }), sheet: { freq: f, last: new Date(NOW - HOUR) } }).info().current, null, 'switched off');
+    assert.strictEqual(scenario({ permit: { issuedFor: null, lastRefresh: NOW, intervalHours: 0 }, sheet: { freq: f, last: new Date(NOW - HOUR) } }).info().current, null, 'a permit with no trigger: the add-on has switched it off');
+    assert.strictEqual(scenario({ permit: permit({ issuedBy: 'me', lastRefresh: NOW - 100 * HOUR, lastRun: NOW - 90 * HOUR }), sheet: { freq: f, last: new Date(NOW - HOUR) } }).info().current, null, 'its trigger is gone');
+    const html = fs.readFileSync(path.join(ROOT, 'New Status Sidebar.html'), 'utf8');
+    assert.ok(/info\.current\.legacy/.test(html) && /nie może potwierdzić/.test(html), 'the page says it is a guess');
   });
 
   test('panel: a permit whose trigger is not this user\'s: used lately -> shown as another user\'s (foreign); not used for a long time -> nothing', () => {
