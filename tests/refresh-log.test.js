@@ -219,7 +219,7 @@ module.exports = function register(t) {
   // ---- the three kinds of refresh write an entry -------------------------------------------------------------------------------------------------
   const STUBS = `getMainSettings = () => ({ getSheetList: () => [{ configSheet: 'K1', resultSheet: 'Dane K1', refresh: true }, { configSheet: 'K2', resultSheet: 'Dane K2', refresh: false }],
       getSheetListWithRefreshTrue: () => [{ configSheet: 'K1', resultSheet: 'Dane K1', refresh: true }], setLastRefresh() {}, getConfigSheetName: n => n });
-    RefreshSheet = { run: (cfg, res) => { if (cfg === 'BAD') throw new Error('Brak połączenia'); RefreshLog.noteSheet(res ?? 'Dane ' + cfg, cfg === 'K1' ? 10 : 20); } };`;
+    RefreshSheet = { run: (cfg, res) => { try { if (cfg === 'BAD') throw new Error('Brak połączenia'); RefreshLog.noteSheet(res ?? 'Dane ' + cfg, cfg === 'K1' ? 10 : 20); } catch (e) { RefreshLog.noteFailedSheet(res ?? 'Dane ' + cfg, e); throw e; } } };`;
 
   test('menu "Pobierz dane dla wszystkich arkuszy": one entry "Odświeżanie wszystkich arkuszy" with every sheet and its rows; menu "dla tego arkusza": "Odświeżanie jednego arkusza" with the config sheet in the technical text', () => {
     const u = useCase(); u.ex.eval(STUBS);
@@ -230,14 +230,30 @@ module.exports = function register(t) {
     assert.deepStrictEqual([one.source, one.sheets, one.technical], ['Odświeżanie jednego arkusza', '1 arkusz:\nDane K2 (20 wierszy)', 'Menu: refresh one sheet (config sheet: K2)']);
   });
 
-  test('menu: on a sheet that is not a config sheet nothing is refreshed and nothing is logged; a failing sheet stops the run and the entry carries the error', () => {
+  test('menu: on a sheet that is not a config sheet nothing is refreshed and nothing is logged', () => {
     const u = useCase(); u.ex.eval(STUBS);
     u.ex.eval(`MenuActions.activeConfigSheet = () => null; Controller.registerClosingOnce = () => {}; MenuActions.refreshActive()`);
     assert.deepStrictEqual(u.entries(), []);
-    u.ex.eval(`getMainSettings = () => ({ getSheetList: () => [{ configSheet: 'K1', resultSheet: 'R1' }, { configSheet: 'BAD', resultSheet: 'R2' }, { configSheet: 'K2', resultSheet: 'R3' }] })`);
+  });
+
+  test('a failing sheet does not stop the others: all are tried, the first error is thrown at the end; the entry counts and lists ONLY the sheets that went through, names the failed ones and has their errors in the technical column', () => {
+    const u = useCase(); u.ex.eval(STUBS);
+    u.ex.eval(`getMainSettings = () => ({ getSheetList: () => [{ configSheet: 'K1', resultSheet: 'R1' }, { configSheet: 'BAD', resultSheet: 'R2' }, { configSheet: 'K2', resultSheet: 'R3' }, { configSheet: 'BAD', resultSheet: 'R4' }] })`);
     assert.throws(() => u.ex.eval(`RefreshAll.all()`), /Brak połączenia/);
     const [e] = u.entries();
-    assert.deepStrictEqual([e.status, e.sheets], ['Brak połączenia', '1 arkusz:\nR1 (10 wierszy)']);
+    assert.strictEqual(e.sheets, '2 arkusze:\nR1 (10 wierszy)\nR3 (20 wierszy)', 'the two that went through: counted and listed');
+    assert.strictEqual(e.status, 'Błąd ❗️ Przy pobieraniu danych dla arkuszy: R2, R4.');
+    assert.strictEqual(e.technical, 'Menu: refresh all sheets. Platform error: Brak połączenia | Brak połączenia');
+    // one failed sheet: singular
+    const one = useCase(); one.ex.eval(STUBS);
+    one.ex.eval(`getMainSettings = () => ({ getSheetList: () => [{ configSheet: 'K1', resultSheet: 'R1' }, { configSheet: 'BAD', resultSheet: 'R2' }] })`);
+    assert.throws(() => one.ex.eval(`RefreshAll.all()`), /Brak połączenia/);
+    assert.deepStrictEqual(one.entries().map(x => [x.status, x.sheets]), [['Błąd ❗️ Przy pobieraniu danych dla arkusza R2.', '1 arkusz:\nR1 (10 wierszy)']]);
+    // everything failed: none counted
+    const none = useCase(); none.ex.eval(STUBS);
+    none.ex.eval(`getMainSettings = () => ({ getSheetList: () => [{ configSheet: 'BAD', resultSheet: 'R1' }] })`);
+    assert.throws(() => none.ex.eval(`RefreshAll.all()`), /Brak połączenia/);
+    assert.strictEqual(none.entries()[0].sheets, '0 arkuszy');
   });
 
   test('automatic refresh: RefreshAll.scheduled writes "Autoodświeżanie" with the clock trigger in the technical text; a trigger that retires writes an entry that says nothing was refreshed', () => {
@@ -252,7 +268,7 @@ module.exports = function register(t) {
 
   test('the sheets: RefreshSheet notes a written result sheet with its data rows (header not counted), a BC error document as a problem, a config sheet without a table as a problem', () => {
     const text = fs.readFileSync(path.join(ROOT, 'RefreshSheet.js'), 'utf8');
-    assert.ok(/RefreshLog\.noteSheet\(sheetName,Math\.max\(table\.length - 1,0\)\)/.test(text));
+    assert.ok(/refreshed = bcError \? null : \{name: sheetName, rows: Math\.max\(table\.length - 1,0\)\}/.test(text) && /if\(refreshed\) RefreshLog\.noteSheet\(refreshed\.name,refreshed\.rows\)/.test(text), 'a sheet counts as refreshed only at the very end');
     assert.ok(/RefreshLog\.noteProblem\(`BC \(\$\{sheetName\}\): /.test(text) && /RefreshLog\.noteProblem\(`Brak tabeli w arkuszu konfiguracji/.test(text));
   });
 

@@ -32,7 +32,7 @@ const RefreshSheet = {
   run_(configSheetName,resultSheetName){
     configSheetName = configSheetName ?? getMainSettings().getConfigSheetNames()[0];
     let shCoed = new SheetCoeditor(configSheetName,true);
-    let odConnection, columnDataTypes;
+    let odConnection, columnDataTypes, refreshed = null;
     try{ 
       if(!shCoed.getTable()){
         dbgLog("No table in config sheet. Quitting.");
@@ -60,11 +60,13 @@ const RefreshSheet = {
       ResultSheet.write(sheetName,table,columnDataTypes);
       const bcError = odConnection.getError();
       if(bcError) RefreshLog.noteProblem(`BC (${sheetName}): ${[bcError.code,bcError.message].filter(x => x).join(": ")}`);
-      else RefreshLog.noteSheet(sheetName,Math.max(table.length - 1,0));
+      refreshed = bcError ? null : {name: sheetName, rows: Math.max(table.length - 1,0)};
     } catch (e) {
       shCoed.switchDataWritingControl(false);
       throw e;  
     }
     shCoed.switchDataWritingControl(false);
+    // Counted as refreshed only now that everything went through (data written, indicators back to idle): a sheet that failed is never also in the "refreshed" list
+    if(refreshed) RefreshLog.noteSheet(refreshed.name,refreshed.rows);
   }
 };

@@ -735,7 +735,7 @@ module.exports = function register(t) {
     assert.throws(() => sc.ex.eval(`autoRefreshHandler(${event('trig-A')})`), /BC down/);
     // the error came while the data of a sheet was pulled: the status says for which sheet, the error itself is in the technical column
     assert.deepStrictEqual(plain(sc.ex.eval(`__logged.map(e => [e.source, e.status, e.technical])`)),
-      [['Autoodświeżanie', 'Błąd ❗️ Przy pobieraniu danych dla arkusza R1.', 'Clock trigger trig-A. Platform error: BC down']]);
+      [['Autoodświeżanie', 'Błąd ❗️ Przy pobieraniu danych dla arkuszy: R1, R3.', 'Clock trigger trig-A. Platform error: BC down | BC down']]);       // both ticked sheets were tried
   });
 
   test('log: a trigger that does not hold the permit deletes itself and writes an entry that says so - technical: the trigger and that it was deleted, status: nothing was refreshed (both handlers)', () => {
@@ -842,10 +842,16 @@ module.exports = function register(t) {
     assert.deepStrictEqual(sc.calls(), [['refresh', 'K1'], ['refresh', 'K3'], ['lastRefresh', true]]);
   });
 
-  test('refresh loops: the first failing sheet stops the loop (later sheets are not refreshed)', () => {
+  test('refresh loops: a failing sheet does NOT stop the loop - every sheet is tried, then the FIRST error goes on to the caller; a scheduled refresh that failed does not note the time', () => {
     const sc = scenario({ refreshError: 'boom' });
     assert.throws(() => sc.ex.eval(`RefreshAll.ticked()`), /boom/);
-    assert.deepStrictEqual(sc.calls(), [['refresh', 'K1']]);
+    assert.deepStrictEqual(sc.calls(), [['refresh', 'K1'], ['refresh', 'K3']]);
+    const all = scenario({ refreshError: 'boom' });
+    assert.throws(() => all.ex.eval(`refreshAll()`), /boom/);
+    assert.deepStrictEqual(all.calls(), [['refresh', 'K1'], ['refresh', 'K2'], ['refresh', 'K3']]);
+    const scheduled = scenario({ refreshError: 'boom' });
+    assert.throws(() => scheduled.ex.eval(`RefreshAll.scheduled()`), /boom/);
+    assert.ok(!scheduled.calls().some(c => c[0] === 'lastRefresh'), 'the time is not noted after a failure');
   });
 
 

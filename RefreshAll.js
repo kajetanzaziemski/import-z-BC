@@ -1,25 +1,36 @@
 // ---------------------------------------------------------------------------
 // REFRESH ALL (use case): refresh several config sheets, one after the other, with RefreshSheet.
 // Moved here unchanged from Menu.js (refreshAll, refreshAllTrue) and Settings Sheet.js (autoRefreshFunction).
-// The first sheet that fails stops the loop and the error goes on to the caller.
+// A sheet that fails does not stop the others: every sheet is tried, the failures are collected (and written to the download log, RefreshSheet) and, when the loop is
+// done, the FIRST error goes on to the caller (the same error as before for one failing sheet).
 // ---------------------------------------------------------------------------
 
 const RefreshAll = {
   /** Every config/result pair of the settings sheet, in the order listed there (menu "refresh all"). */
   all(){
     RefreshLog.run(REFRESH_LOG_SOURCES.all,"Menu: refresh all sheets",
-      () => getMainSettings().getSheetList().forEach(cfg => RefreshSheet.run(cfg.configSheet,cfg.resultSheet)));
+      () => RefreshAll.each_(getMainSettings().getSheetList()));
+  },
+
+  /** Refreshes every pair, one after the other. A pair that fails does not stop the rest; the first error is thrown when all were tried. */
+  each_(list){
+    const errors = [];
+    list.forEach(cfg => {
+      try{ RefreshSheet.run(cfg.configSheet,cfg.resultSheet); }
+      catch(err){ errors.push(err); }
+    });
+    if(errors.length) throw errors[0];
   },
 
   /** Only the pairs ticked for automatic refresh. */
   ticked(){
     const list = getMainSettings().getSheetListWithRefreshTrue();
-    if(list.length) list.forEach(cfg => RefreshSheet.run(cfg.configSheet,cfg.resultSheet));
+    if(list.length) RefreshAll.each_(list);
   },
 
   /**
    * What a time-based trigger does: refresh the ticked pairs, then note the time on the settings sheet.
-   * Quirk kept: the time is noted also when nothing was ticked; it is not noted when a refresh fails.
+   * Quirk kept: the time is noted also when nothing was ticked; it is not noted when a refresh fails (the other sheets are tried first).
    */
   scheduled(technical = "Clock trigger"){
     RefreshLog.run(REFRESH_LOG_SOURCES.auto,technical,() => {
