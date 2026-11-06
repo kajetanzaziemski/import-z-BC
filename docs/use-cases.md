@@ -137,3 +137,6 @@ platform's message and stack cut to 1200 characters - the settings are one prope
 The Auto-odświeżanie tab shows it (`AutoRefreshPanel.setupError_`), after the last refresh and before the buttons, as a red box with only the headline "Ustawienia odświeżania nie zostały zaktualizowane!" and the time of the attempt (`SettingsGrid.messageLines(..., brief)`: not what is set now - the tab shows that itself - and no pointer to the menu; the sheet's own message keeps both) and "Szczegóły błędu" folded, holding the platform's error.
 When Apps Script refused one more clock trigger (the platform's "too many triggers" / "zbyt wiele wyzwalaczy", or a trigger-related error while the user already has 5 clock triggers: `isTriggerLimit_`) the main message says so between the headline and the time of the attempt
 ("Przekroczono limit 5 wyzwalaczy czasowych na użytkownika ... Triggery odświeżania" - the developer tool that deletes triggers); the sheet's message says it too.
+
+## The limit of 5 clock triggers
+Counted and refused by the add-on before it asks the platform (`ScheduleRefresh.assertRoomForTrigger_`, in `createTrigger_`): see `docs/clock-triggers.md` for the counting, every case in which a trigger is created and what each does at the limit.

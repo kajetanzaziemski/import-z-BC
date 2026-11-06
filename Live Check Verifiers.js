@@ -496,6 +496,14 @@ function lcVerifyRefreshTrigger_(c,settings){
     c.skip("refresh trigger matches the settings sheet","a newer edit took over the set-up");
     return;
   }
+  // The set-up was refused on purpose because the user has the limit of clock triggers (5): nothing was removed or created and the permit is as it was
+  if(c.error && (c.error.triggerLimit === true || /Nie utworzono triggera: masz już/.test(String(c.error.message)))){
+    c.expectError(() => true,"the set-up was refused: the user already has the limit of clock triggers");
+    c.attempt("a refused set-up leaves the permit as it was",() => {
+      c.expectEqual("permit untouched",(c.settings().refreshPermit || {}).issuedFor ?? null,(lcPreviousPermit_(c) || {}).issuedFor ?? null);
+    });
+    return;
+  }
   c.attempt("refresh trigger matches the settings sheet",() => {
     const timers = lcTriggersSeen_().filter(t => ["autoRefresh","autoRefreshHandler"].includes(t.getHandlerFunction()));
     const permit = c.settings().refreshPermit;

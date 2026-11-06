@@ -343,6 +343,76 @@ module.exports = function register(t) {
     assert.deepStrictEqual(plain(sc.ex.eval(`__msgs.map(m => [m.ok, m.limit])`)), [[false, true]]);
   });
 
+  // ---- the limit of 5 clock triggers per user --------------------------------------------------------------------------------------------------
+  const clockIds = (sc, n, prefix = 'c') => { for (let i = 0; i < n; i++) sc.p.triggers.push(NAMED(prefix + i)); };
+
+  test('limit: with 5 other clock triggers (any document) a set-up is REFUSED before anything is removed - the old trigger and the permit stay, the error is the limit, the message is red, the error is kept for the sidebar', () => {
+    const sc = scenario({ settings: PERMIT('t-old') });
+    sc.p.triggers.push(NAMED('t-old'));
+    clockIds(sc, 5);
+    sc.p.triggers.push({ id: 'agent', fn: 'sheetEdit', type: 'ON_EDIT', source: 'ss-1', params: {} });      // an agent is no clock trigger
+    applySettings(sc, { freq: 4, unit: 'hrs' });
+    assert.throws(() => sc.ex.eval(`ScheduleRefresh.apply(__ss)`), /Nie utworzono triggera: masz już 5 wyzwalaczy czasowych/);
+    sc.save();
+    assert.deepStrictEqual(triggers(sc.p).map(x => x.id).sort(), ['agent', 'c0', 'c1', 'c2', 'c3', 'c4', 't-old'], 'nothing removed, nothing created');
+    assert.strictEqual(permit(sc).issuedFor, 't-old');
+    assert.strictEqual(sc.stored().refreshSetupError.limit, true);
+    assert.deepStrictEqual(plain(sc.ex.eval(`__msgs.map(m => [m.ok, m.limit])`)), [[false, true]]);
+    assert.ok(/c0, c1, c2, c3, c4/.test(sc.stored().refreshSetupError.details), 'the details name the triggers that fill the limit');
+  });
+
+  test('limit: the trigger the set-up replaces does not count - 4 others + the old one is fine (5 afterwards); with no old trigger 4 others is fine too, 5 is not', () => {
+    const replace = scenario({ settings: PERMIT('t-old') });
+    replace.p.triggers.push(NAMED('t-old')); clockIds(replace, 4);
+    applySettings(replace, { freq: 4, unit: 'hrs' });
+    replace.ex.eval(`ScheduleRefresh.apply(__ss)`);
+    assert.strictEqual(triggers(replace.p).filter(x => x.type === 'CLOCK').length, 5);
+    const fresh4 = scenario(); clockIds(fresh4, 4);
+    applySettings(fresh4, { freq: 4, unit: 'hrs' });
+    fresh4.ex.eval(`ScheduleRefresh.apply(__ss)`);
+    assert.strictEqual(triggers(fresh4.p).filter(x => x.type === 'CLOCK').length, 5);
+    const fresh5 = scenario(); clockIds(fresh5, 5);
+    applySettings(fresh5, { freq: 4, unit: 'hrs' });
+    assert.throws(() => fresh5.ex.eval(`ScheduleRefresh.apply(__ss)`), /limit Apps Script: 5/);
+  });
+
+  test('limit: triggers the list does not show still count when the user\'s records saw or made them in the last ten minutes; older records do not', () => {
+    const now = Date.now();
+    const sc = scenario();
+    clockIds(sc, 3);
+    sc.p.props.user['refreshTrigger:hidden1'] = JSON.stringify({ docId: 'doc-B', seenAt: now - 60000 });
+    sc.p.props.user['refreshTrigger:hidden2'] = JSON.stringify({ docId: 'doc-C', setAt: now - 5 * 60000 });
+    sc.p.props.user['refreshTrigger:stale'] = JSON.stringify({ docId: 'doc-D', seenAt: now - 2 * 3600000, setAt: now - 5 * 3600000 });
+    assert.deepStrictEqual(plain(sc.ex.eval(`ScheduleRefresh.clockTriggerIds_().sort()`)), ['c0', 'c1', 'c2', 'hidden1', 'hidden2']);
+    applySettings(sc, { freq: 4, unit: 'hrs' });
+    assert.throws(() => sc.ex.eval(`ScheduleRefresh.apply(__ss)`), /hidden1, hidden2/, 'the two hidden ones make 5: refused');
+    sc.p.props.user['refreshTrigger:hidden2'] = JSON.stringify({ docId: 'doc-C', setAt: now - 30 * 60000 });          // it is a long time since it was seen
+    applySettings(sc, { freq: 4, unit: 'hrs' });
+    sc.ex.eval(`ScheduleRefresh.apply(__ss)`);
+    assert.strictEqual(triggers(sc.p).filter(x => x.id === 'trig-1').length, 1, 'with 4 counted there is room');
+  });
+
+  test('limit: the leftovers of THIS document (its records, not the permit\'s) are removed before the count - they would take places of the limit for nothing', () => {
+    const sc = scenario({ settings: PERMIT('t-old') });
+    sc.p.triggers.push(NAMED('t-old')); clockIds(sc, 3);
+    ['o1', 'o2'].forEach(id => { sc.p.triggers.push(NAMED(id)); sc.p.props.user['refreshTrigger:' + id] = DOC_REC(); });
+    applySettings(sc, { freq: 4, unit: 'hrs' });
+    sc.ex.eval(`ScheduleRefresh.apply(__ss)`);
+    assert.deepStrictEqual(triggers(sc.p).map(x => x.id).sort(), ['c0', 'c1', 'c2', 'trig-1']);
+  });
+
+  test('limit: every way to a new trigger passes the check - createTrigger_ (also the restoring of an old trigger) refuses at the limit; the error says it is the limit', () => {
+    const sc = scenario(); clockIds(sc, 5);
+    const err = plain(sc.ex.eval(`(() => { try { ScheduleRefresh.createTrigger_('days', 1, null); } catch (e) { return { limit: e.triggerLimit, limitByRule: ScheduleRefresh.isTriggerLimit_(e), message: e.message }; } return null; })()`));
+    assert.deepStrictEqual([err.limit, err.limitByRule], [true, true]);
+    assert.strictEqual(triggers(sc.p).length, 5, 'nothing created');
+    // restoring: the old trigger cannot be put back when the places are taken - the permit is marked off, as for any failed restore
+    const restore = scenario({ settings: { refreshPermit: { issuedFor: 'gone', issuedBy: 'me', lastRefresh: 1, intervalHours: 24 } } }); clockIds(restore, 5);
+    restore.ex.eval(`ScheduleRefresh.restoreAfterFailure_(MainSettings.getRefreshPermit())`);
+    restore.save();
+    assert.strictEqual(restore.stored().refreshPermit.off, true);
+  });
+
   test('set-up: with the refresh switched off none of this document\'s refresh triggers is left (the permit is marked off)', () => {
     const sc = scenario({ settings: PERMIT('t-old') });
     ['t-old', 't-orphan', 't-otherdoc'].forEach(id => sc.p.triggers.push(NAMED(id)));

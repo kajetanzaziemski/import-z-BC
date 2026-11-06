@@ -449,6 +449,21 @@ module.exports = function register(t) {
     assert.ok(/this document has exactly one refresh trigger/.test(src) && /the refresh is off: none of this document's refresh triggers is left/.test(src));
   });
 
+  test('live check: a set-up refused because of the limit of 5 clock triggers is an EXPECTED error and only the permit is checked (it must be as it was); any other error is still a failure', () => {
+    const plain = v => JSON.parse(JSON.stringify(v));
+    const p = new FakePlatform();
+    const ex = p.execution(FILES);
+    const run = (error, permitNow, permitBefore) => plain(ex.eval(`(() => { const out = [];
+      const c = { notes: [], error: ${JSON.stringify(error)}, expected: null, settings: () => ({ refreshPermit: ${JSON.stringify(permitNow)} }), before: { docProps: { importSettingsArray: JSON.stringify({ refreshPermit: ${JSON.stringify(permitBefore)} }) } },
+        expectError(pred, why) { if (this.error && pred(this.error)) this.expected = why; }, attempt: (n, f) => f(), expectEqual: (n, a, b) => out.push([n, a === b ? 'PASS' : 'FAIL']),
+        skip() {}, expect() {} };
+      lcVerifyRefreshTrigger_(c, { exists: true }); return [out, c.expected]; })()`));
+    const refused = { message: 'Nie utworzono triggera: masz już 5 wyzwalaczy czasowych', triggerLimit: true };
+    assert.deepStrictEqual(run(refused, { issuedFor: 'old' }, { issuedFor: 'old' }), [[['permit untouched', 'PASS']], 'the set-up was refused: the user already has the limit of clock triggers']);
+    assert.deepStrictEqual(run(refused, { issuedFor: 'new' }, { issuedFor: 'old' })[0], [['permit untouched', 'FAIL']], 'a refusal that changed the permit');
+    assert.throws(() => run({ message: 'Exception: boom' }, { issuedFor: 'a' }, { issuedFor: 'a' }), /c\.spreadsheet is not a function/, 'another error is not taken for the refusal: the ordinary judgement goes on');
+  });
+
   const THREE_ROWS = `ODataConnection.prototype.getDataArray = () => [['No'], ['C1'], ['C2']];`;
   const FMT = /number format uniform in every column/;
   test('live check, end to end: a result column whose number format differs between data rows -> FAIL naming the column and the actual formats (header shown, not judged)', () => {

@@ -13,6 +13,8 @@
 // ---------------------------------------------------------------------------
 
 const REFRESH_TRIGGER_SEEN_SECONDS = 120;
+const CLOCK_TRIGGER_LIMIT = 5;                       // Apps Script: clock triggers a user may have for the add-on (all documents together)
+const CLOCK_TRIGGER_RECENT_MS = 10 * 60000;          // a trigger the records saw (or made) this recently counts even when the trigger list does not show it
 
 const ScheduleRefresh = {
   /**
@@ -48,10 +50,14 @@ const ScheduleRefresh = {
     const intervalHrs = frequency.unit == "days" ? 24 * interval : interval;
     const nextRefresh = ScheduleRefresh.nextRefresh(new Date(), frequency.unit, interval, startAt);
 
+    try{ ScheduleRefresh.removeOtherTriggersOfThisDocument_(permit?.issuedFor); }catch(err){ dbgLog(`Leftover triggers of this document not removed: ${err}`); }
+    // Room for one more clock trigger? The one this set-up replaces does not count. Refused HERE, before anything is removed: the old trigger and the permit stay.
+    ScheduleRefresh.assertRoomForTrigger_(permit?.issuedFor);
+
     ScheduleRefresh.removeRefreshTrigger_(permit?.issuedFor);
     let newTrigger;
     try{
-      newTrigger = ScheduleRefresh.createTrigger_(frequency.unit, interval, startAt);
+      newTrigger = ScheduleRefresh.createTrigger_(frequency.unit, interval, startAt, true);
     }catch(err){
       ScheduleRefresh.restoreAfterFailure_(permit);
       throw err;
@@ -79,8 +85,35 @@ const ScheduleRefresh = {
     try{ RefreshRegistry.remove(triggerId); }catch(err){ dbgLog(`Refresh trigger record not removed: ${err}`); }
   },
 
+  /**
+   * The clock triggers of the user, as far as the add-on can tell: those the trigger list shows (three looks, it is not reliable) and those the user's records saw or made
+   * within the last ten minutes (the list may lag behind a trigger just made, or leave one out). Triggers of ALL documents count: the limit is per user.
+   * @param except {String} A trigger about to be removed, not counted.
+   * @returns {Array<String>} their ids
+   */
+  clockTriggerIds_(except){
+    const ids = new Set(ScheduleRefresh.triggersSeen_().filter(t => String(t.getEventType()) == "CLOCK").map(t => t.getUniqueId()));
+    try{
+      const now = Date.now();
+      RefreshRegistry.all().forEach(r => { if(now - Math.max(r.seenAt ?? 0, r.setAt ?? 0, r.lastRun ?? 0) < CLOCK_TRIGGER_RECENT_MS) ids.add(r.id); });
+    }catch(err){ dbgLog(`Refresh trigger records not read for the count: ${err}`); }
+    if(except) ids.delete(except);
+    return [...ids];
+  },
+
+  /** Refuses (throws a TriggerLimitError) when one more clock trigger would be more than the limit. `except`: the trigger that is about to be removed. */
+  assertRoomForTrigger_(except){
+    const ids = ScheduleRefresh.clockTriggerIds_(except);
+    if(ids.length >= CLOCK_TRIGGER_LIMIT){
+      const err = new Error(`Nie utworzono triggera: masz już ${ids.length} wyzwalaczy czasowych (limit Apps Script: ${CLOCK_TRIGGER_LIMIT} na użytkownika, wszystkie dokumenty razem). Usuń niepotrzebne w menu Narzędzia programisty -> Triggery odświeżania. Triggery: ${ids.join(", ")}.`);
+      err.triggerLimit = true;
+      throw err;
+    }
+  },
+
   /** Builds and creates the time trigger: every `interval` days (at the hour of startAt) or hours, near the minute, in the zone of startAt. */
-  createTrigger_(unit, interval, startAt){
+  createTrigger_(unit, interval, startAt, checked){
+    if(!checked) ScheduleRefresh.assertRoomForTrigger_(null);          // every way to a new trigger passes this check (the set-up has made it already)
     const trigger = ScriptApp.newTrigger('autoRefreshHandler').timeBased();
     if(unit == "days"){
       trigger.everyDays(interval);
@@ -275,6 +308,7 @@ const ScheduleRefresh = {
    * user's language: "zbyt wiele wyzwalaczy".) A trigger-related error while the user already has 5 clock triggers counts too.
    */
   isTriggerLimit_(err){
+    if(err && err.triggerLimit === true) return true;                       // refused by assertRoomForTrigger_
     const text = String(err && err.message || err);
     if(/too many triggers|zbyt wiele wyzwalaczy|zbyt wiele trigger|maximum number of triggers/i.test(text)) return true;
     try{
@@ -303,6 +337,22 @@ const ScheduleRefresh = {
   },
 
   /**
+   * Deletes the refresh triggers the user's records say belong to THIS document, except `keeper` (and forgets their records). They are leftovers of earlier runs; they
+   * also take a place of the limit of clock triggers, so a set-up clears them before it counts.
+   */
+  removeOtherTriggersOfThisDocument_(keeper, triggers){
+    const here = RefreshRegistry.document_().docId;
+    if(!here) return;
+    triggers = triggers ?? ScheduleRefresh.triggersSeen_().filter(t => ["autoRefresh","autoRefreshHandler"].includes(t.getHandlerFunction()));
+    const ids = triggers.map(t => t.getUniqueId());
+    RefreshRegistry.all().filter(r => r.docId === here && r.id !== keeper && ids.includes(r.id)).forEach(r => {
+      triggers.filter(t => t.getUniqueId() === r.id).forEach(t => ScriptApp.deleteTrigger(t));
+      ScheduleRefresh.forget_(r.id);
+      dbgLog(`Another refresh trigger of this document removed: ${r.id}`);
+    });
+  },
+
+  /**
    * After a set-up: is the result what the settings ask for, and is it the ONLY refresh trigger of this document? The triggers that belong to this document are the
    * ones the user's records name (Refresh Registry.js; a time trigger has no document of its own): every one of them but the permit's is deleted. Then the
    * permit must be valid (issued for a trigger that exists, not off, the interval and the time of day of the settings); with the refresh off no trigger of this
@@ -317,13 +367,7 @@ const ScheduleRefresh = {
       const triggers = ScheduleRefresh.triggersSeen_().filter(t => ["autoRefresh","autoRefreshHandler"].includes(t.getHandlerFunction()));
       const ids = triggers.map(t => t.getUniqueId());
       const keeper = wanted ? permit?.issuedFor : null;
-      if(here){
-        RefreshRegistry.all().filter(r => r.docId === here && r.id !== keeper && ids.includes(r.id)).forEach(r => {
-          triggers.filter(t => t.getUniqueId() === r.id).forEach(t => ScriptApp.deleteTrigger(t));
-          ScheduleRefresh.forget_(r.id);
-          dbgLog(`Another refresh trigger of this document removed: ${r.id}`);
-        });
-      }
+      ScheduleRefresh.removeOtherTriggersOfThisDocument_(keeper,triggers);
       if(wanted){
         if(!permit?.issuedFor || permit.off) problems.push("brak ważnego zezwolenia");
         else if(permit.intervalHours !== wanted.hours) problems.push("zezwolenie ma inną częstotliwość niż ustawienia");
