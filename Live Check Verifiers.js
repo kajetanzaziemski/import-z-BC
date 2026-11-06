@@ -243,6 +243,19 @@ function lcParallelSettingsWrites_(c){
   }
 }
 
+/** Does the newest entry of the download log - written by this run - say that a sheet failed ("Błąd ❗️ ...")? Read from the sheet as the user sees it. */
+function lcLogRunFailed_(c){
+  try{
+    const sheet = c.spreadsheet().getSheetByName(c.settings().logSheetName || "Dziennik pobrań");
+    if(!sheet) return false;
+    const row = sheet.getRange(2,1,1,7).getValues()[0];
+    const start = row[1];
+    return Object.prototype.toString.call(start) === "[object Date]" && start.getTime() >= c.startedAt - 2000 && /Błąd ❗️/.test(String(row[4]));
+  }catch(err){
+    return false;
+  }
+}
+
 /**
  * The download log (Refresh Log.js): the refresh that just ran is its NEWEST entry, row 2 under the headers - source, start inside this run, an end not before it, a status
  * (the error message when the run failed), and the technical text. Read from the sheet itself, as the user sees it. `technical` is a RegExp for the technical column.
@@ -1239,9 +1252,11 @@ function lcVerifyScheduledRefresh_(c){
   c.expect("permitted trigger stays installed",triggerStillThere,"trigger removed itself");
   // The time of the last refresh is the last FULLY correct one: a failed attempt leaves it with a note, a correct one removes the note
   const FAILED_NOTE = "Komórka pokazuje czas ostatniego w pełni poprawnego odświeżania. Sprawdź arkusz dziennika pobrań, żeby zobaczyć informacje o wszystkich próbach odświeżania.";
-  if(c.error) c.expectEqual("the time of the last refresh has the note of a failed attempt",settings.lastRefreshNote,FAILED_NOTE);
+  // A failed attempt is an error that was thrown OR a sheet that BC answered with an error document (the log says "Błąd ❗️ ...", nothing is thrown)
+  const failedAttempt = !!c.error || lcLogRunFailed_(c);
+  if(failedAttempt) c.expectEqual("the time of the last refresh has the note of a failed attempt",settings.lastRefreshNote,FAILED_NOTE);
   else c.expectEqual("a fully correct refresh: the time of the last refresh has no note",settings.lastRefreshNote ?? "","");
-  if(c.error) return;
+  if(failedAttempt) return;
   const permit = c.settings().refreshPermit;
   c.expect("permit issued for this trigger",!!permit && permit.issuedFor === uid,JSON.stringify(permit));
   c.expect("permit records the run",!!permit && permit.lastRun >= c.startedAt - 2000,`lastRun ${permit?.lastRun}`);

@@ -485,7 +485,7 @@ module.exports = function register(t) {
     const src = fs.readFileSync(path.join(ROOT, 'Live Check Verifiers.js'), 'utf8');
     assert.ok(/out\.lastRefreshNote = sheet\.getRange\(r,4\)\.getNote\(\)/.test(src), 'the note is read from D of the lastRefresh line');
     const fn = src.slice(src.indexOf('function lcVerifyScheduledRefresh_(c)'), src.indexOf('function lcVerifyRetiredRefresh_'));
-    assert.ok(/if\(c\.error\) c\.expectEqual\("the time of the last refresh has the note of a failed attempt",settings\.lastRefreshNote,FAILED_NOTE\)/.test(fn));
+    assert.ok(/if\(failedAttempt\) c\.expectEqual\("the time of the last refresh has the note of a failed attempt",settings\.lastRefreshNote,FAILED_NOTE\)/.test(fn));
     assert.ok(/else c\.expectEqual\("a fully correct refresh: the time of the last refresh has no note",settings\.lastRefreshNote \?\? "",""\)/.test(fn));
     const text = src.match(/const FAILED_NOTE = "([^"]*)"/)[1];
     assert.strictEqual(text, fs.readFileSync(path.join(ROOT, 'Settings Sheet.js'), 'utf8').match(/const LAST_REFRESH_FAILED_NOTE = "([^"]*)"/)[1], 'the same words as the add-on writes');

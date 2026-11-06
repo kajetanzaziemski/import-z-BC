@@ -801,6 +801,19 @@ module.exports = function register(t) {
     assert.strictEqual(next({}, t), 0, 'no interval: unknown');
   });
 
+  test('last refresh: a sheet BC answered with an error document (nothing thrown) is a failed attempt too - the note, no time, the run is not recorded on the permit', () => {
+    const sc = scenario({ settings: { refreshPermit: { issuedFor: 'trig-A', lastRefresh: 1, intervalHours: 6, nextRefresh: Date.now() } } });
+    sc.ex.eval(`RefreshAll.ticked = () => { RefreshLog.noteFailedSheet('Dane K1', 'BC BadRequest: zle'); }`);
+    assert.strictEqual(sc.ex.eval(`RefreshAll.scheduled()`), false);
+    assert.strictEqual(sc.ex.eval(`__noted`), 1, 'noted once');
+    assert.ok(!sc.calls().some(c => c[0] === 'lastRefresh'), 'the time is not written');
+    const run = scenario({ settings: { refreshPermit: { issuedFor: 'trig-A', lastRefresh: 1, intervalHours: 6, nextRefresh: Date.now() } } });
+    run.ex.eval(`RefreshAll.ticked = () => { RefreshLog.noteFailedSheet('Dane K1', 'BC BadRequest: zle'); }`);
+    run.ex.eval(`autoRefreshHandler(${event('trig-A')})`);
+    run.save();
+    assert.strictEqual(permit(run).lastRun, undefined, 'not recorded');
+  });
+
   test('trigger: a refresh that fails writes no message; a message that cannot be written does not fail the run (the permit still records it)', () => {
     const failing = scenario({ settings: { refreshPermit: { issuedFor: 'trig-A', lastRefresh: 1, intervalHours: 6, nextRefresh: Date.now() } } });
     failing.ex.eval(MSG);

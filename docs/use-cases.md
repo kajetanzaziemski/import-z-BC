@@ -163,4 +163,4 @@ Last refresh after a failed attempt: when a scheduled refresh throws (a sheet th
 
 Every failed sheet is reported the same way (download log): a BC error document (BadRequest, ...) counts as a failed sheet exactly like an error the platform threw - the status only says "Błąd ❗️ Przy pobieraniu danych dla arkusza/arkuszy: ..." naming ALL of them, and the technical column
 carries every error with its sheet ("<what fired it>. Errors: <sheet>: <error> | <sheet>: <error>"; BC's as "BC <code>: <message>"). Only a config sheet without a table is still a handled problem that stays in the status as text. Note: a sheet with a BC error document still does not throw, so
-the time of the last refresh / the permit are noted for such a run as before (open: should it count as a failed attempt - no time, the note - like a thrown error?).
+such a run counts as a failed attempt too: no time of the last refresh, the failed-attempt note on it, and the run is not recorded on the permit - like a thrown error.

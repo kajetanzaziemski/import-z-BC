@@ -483,9 +483,9 @@ const ScheduleRefresh = {
     Controller.intent("refresh.scheduled",{sheet: null, changeType: null});
     const sheets = ScheduleRefresh.tickedResultSheets_();
     const started = Date.now();
-    RefreshAll.scheduled(ScheduleRefresh.triggerText_(e.triggerUid,false));
+    const fullyCorrect = RefreshAll.scheduled(ScheduleRefresh.triggerText_(e.triggerUid,false));
     
-    ScheduleRefresh.finishRun_(e.triggerUid,sheets,started);
+    if(fullyCorrect !== false) ScheduleRefresh.finishRun_(e.triggerUid,sheets,started);       // a failed attempt (BC's error for a sheet) is not recorded on the permit either
   },
 
   /** What the log says about the clock trigger that fired. */
@@ -568,9 +568,9 @@ const ScheduleRefresh = {
     Controller.intent("refresh.scheduled",{sheet: null, changeType: null});
     const sheets = ScheduleRefresh.tickedResultSheets_();
     const started = Date.now();
-    RefreshAll.scheduled(ScheduleRefresh.triggerText_(e.triggerUid,true));
+    const fullyCorrect = RefreshAll.scheduled(ScheduleRefresh.triggerText_(e.triggerUid,true));
     
-    ScheduleRefresh.finishRun_(e.triggerUid,sheets,started);
+    if(fullyCorrect !== false) ScheduleRefresh.finishRun_(e.triggerUid,sheets,started);       // a failed attempt (BC's error for a sheet) is not recorded on the permit either
   },
 
   /** Deletes the refresh trigger (current or legacy handler) with this id, if there is one. Any other trigger with that id (an agent) is left alone. */

@@ -46,6 +46,11 @@ const RefreshLog = {
     if(RefreshLog.session_) RefreshLog.session_.problems.push(String(text));
   },
 
+  /** Did a sheet of the refresh that is running fail (an error thrown, or BC's error document)? */
+  hasFailures(){
+    return !!RefreshLog.session_ && RefreshLog.session_.failures.length > 0;
+  },
+
   noteFailedSheet(name, error){
     if(RefreshLog.session_) RefreshLog.session_.failures.push({name: String(name), message: String(error && error.message || error)});
   },

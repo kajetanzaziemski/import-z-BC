@@ -30,17 +30,25 @@ const RefreshAll = {
 
   /**
    * What a time-based trigger does: refresh the ticked pairs, then note the time on the settings sheet.
-   * Quirk kept: the time is noted also when nothing was ticked; it is not noted when a refresh fails (the other sheets are tried first).
+   * Quirk kept: the time is noted also when nothing was ticked; it is not noted when a refresh fails (the other sheets are tried first) - an error thrown or BC's error
+   * document for a sheet. Returns false for a failed attempt that threw nothing (the caller then does not record the run), true otherwise.
    */
   scheduled(technical = "Clock trigger"){
-    RefreshLog.run(REFRESH_LOG_SOURCES.auto,technical,() => {
+    return RefreshLog.run(REFRESH_LOG_SOURCES.auto,technical,() => {
       try{
         RefreshAll.ticked();
       }catch(err){
         RefreshAll.noteFailedAttempt_();       // the time stays as it was, with a note that says why
         throw err;
       }
+      // BC answered a sheet with an error document: nothing is thrown, but the attempt failed all the same - the time is not noted, the note is put, the caller does not
+      // record the run on the permit (false)
+      if(RefreshLog.hasFailures()){
+        RefreshAll.noteFailedAttempt_();
+        return false;
+      }
       getMainSettings().setLastRefresh(new Date());
+      return true;
     });
   },
 
