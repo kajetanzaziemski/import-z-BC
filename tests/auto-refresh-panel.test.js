@@ -349,13 +349,13 @@ module.exports = function register(t) {
     assert.strictEqual(sc.p.triggers.length, 1);
   });
 
-  test('page: the order of the tab - current settings, the last refresh, the error of the last set-up (if any), the buttons (no header of their own), the list of triggers, the zone, and the technical details at the very bottom', () => {
+  test('page: the order of the tab - current settings, the last refresh, the header "Zmiana ustawień:" with the error of the last set-up (if any) and the apply button, the header of switching off, the list of triggers, the zone, and the technical details at the very bottom', () => {
     const html = fs.readFileSync(path.join(ROOT, 'New Status Sidebar.html'), 'utf8');
     const body = html.slice(html.indexOf('function showRefreshInfo(info)'), html.indexOf('function renderTriggerList'));
     const at = t => { const i = body.indexOf(t); assert.ok(i >= 0, t); return i; };
-    const order = ['Aktualne ustawienia:', 'Ostatnio odświeżone:', 'renderSetupError(info.setupError)', 'id="applyRefreshBtn"', 'id="applyRefreshError"', 'Arkusze, które odświeżasz automatycznie:', 'Strefa czasowa:', 'Szczegóły techniczne'].map(at);
+    const order = ['Aktualne ustawienia:', 'Ostatnio odświeżone:', 'Zmiana ustawień:', 'renderSetupError(info.setupError)', 'id="applyRefreshBtn"', 'Wyłącz autoodświeżanie:', 'id="turnOffRefreshBtn"', 'id="applyRefreshError"', 'Arkusze, które odświeżasz automatycznie:', 'Strefa czasowa:', 'Szczegóły techniczne'].map(at);
     assert.deepStrictEqual(order, [...order].sort((a, b) => a - b));
-    assert.ok(!/Zmień ustawienia/.test(html), 'no separate header for changing the settings');
+    assert.ok(/Odśwież informacje w tym panelu/.test(html));
   });
 
   test('page: the section "Arkusze, które odświeżasz automatycznie:" shows the document as a link in a new tab, under it how often and the last refresh; everything is escaped', () => {

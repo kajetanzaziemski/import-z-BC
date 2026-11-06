@@ -215,7 +215,7 @@
       function showRefreshInfo(info) {
         var html = '';
         var btn = document.getElementById('reloadRefreshBtn');
-        if (btn) { btn.disabled = false; btn.innerHTML = 'Odśwież'; }
+        if (btn) { btn.disabled = false; btn.innerHTML = 'Odśwież informacje w tym panelu'; }
         if (info.current && info.current.foreign) {
           html += '<p class="warn">Odświeżanie ustawione przez innego użytkownika - poniższe informacje mogą zawierać błędy.</p>';
         }
@@ -240,9 +240,10 @@
         }
 
         // the last set-up of the refresh that failed (nothing here when the last one went right): the message of the settings sheet, the platform's error folded
+        html += '<h1> Zmiana ustawień: </h1>';
         if (info.setupError) html += renderSetupError(info.setupError);
 
-        // changing the settings belongs to the current settings: the buttons under them, with no header of their own
+        // changing the settings has its own header (above)
         var sh = info.sheet;
         if (!sh || !sh.available) {
           html += '<p class="gray">' + (sh && sh.error ? 'Nie udało się odczytać arkusza ustawień.' : 'Arkusz ustawień jeszcze nie istnieje.') + '</p>';
@@ -255,6 +256,7 @@
           if (!sh.differs && !info.setupError) html += '<p class="gray">Ustawienia w arkuszu są takie same jak aktualne.</p>';
         }
         // switching it off on purpose (the settings in the sheet are cleaned, the trigger removed): a second press within 4 s confirms
+        html += '<h1> Wyłącz autoodświeżanie: </h1>';
         html += '<p><button id="turnOffRefreshBtn" onclick="turnOffRefresh()"' + (info.current ? '' : ' disabled') + '> Wyłącz autoodświeżanie </button></p>';
         html += '<div id="applyRefreshError"></div>';
 
@@ -293,7 +295,7 @@
 
       function showRefreshInfoError(error) {
         var btn = document.getElementById('reloadRefreshBtn');
-        if (btn) { btn.disabled = false; btn.innerHTML = 'Odśwież'; }
+        if (btn) { btn.disabled = false; btn.innerHTML = 'Odśwież informacje w tym panelu'; }
         document.getElementById('refreshInfo-panel').innerHTML =
           '<p id="status">Błąd pobierania danych: ' + escapeHtml(error.message) + '</p>';
       }
@@ -649,7 +651,7 @@
 
     <!-- ============ TAB 3: auto-refresh (read on opening, by the button, after applying) ============ -->
     <div id="tab-refresh" class="tab-panel">
-      <button id="reloadRefreshBtn" onclick="loadRefreshInfo()"> Odśwież </button>
+      <button id="reloadRefreshBtn" onclick="loadRefreshInfo()"> Odśwież informacje w tym panelu </button>
       <div id="refreshInfo-panel"><p id="status">Pobieranie danych…</p></div>
     </div>
 
