@@ -386,7 +386,7 @@ module.exports = function register(t) {
     assert.ok(/Arkusze, które odświeżasz automatycznie:/.test(html) && /renderTriggerList\(info\.triggers\)/.test(html));
     assert.ok(/'<a href="' \+ escapeHtml\(t\.url\) \+ '" target="_blank" rel="noopener">'/.test(html));
     assert.ok(/Odświeżanie co: /.test(html) && /Ostatnio odświeżone: /.test(html));
-    assert.ok(/info\.current && \(info\.current\.foreign \|\| info\.current\.legacy)\) \{\s*html \+= '<p><a href="#" onclick="showRefreshHelp\(\); return false;">Dlaczego nie widzę tego arkusza\?<\/a><\/p>'/.test(html), 'the note only when another user\'s trigger may refresh this document (a permit that names a foreign trigger, or a guess from the sheet of the legacy era)');
+    assert.ok(/info\.current && \(info\.current\.foreign \|\| info\.current\.legacy\)\) \{\s*html \+= '<p><a href="#" onclick="showRefreshHelp\(\); return false;">Dlaczego nie widzę tego arkusza\?<\/a><\/p>'/.test(html), 'the note only when another user\'s trigger may refresh this document (a permit that names a foreign trigger, or a guess from the sheet of the legacy era)');
     assert.ok(!/Trigger innego użytkownika/.test(html), 'it is not listed');
     assert.ok(/escapeHtml\(t\.id\)/.test(html) && /escapeHtml\(t\.handler\)/.test(html) && /escapeHtml\(t\.name\)/.test(html));
   });
