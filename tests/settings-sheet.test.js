@@ -383,6 +383,18 @@ module.exports = function register(t) {
     assert.strictEqual(cell().fmt.boldRuns, undefined);
   }));
 
+  MODES.forEach(mode => test('limit of clock triggers: the sheet\'s red message points to the menu in its own words and the path is bold, in the place of the general pointer [' + mode + ']', () => {
+    const s = scope(mode);
+    s.run(`globalThis.__ss = new SettingsSheet(); Utilities.formatDate = (d, tz, p) => p === 'Z' ? '+0100' : p === 'z' ? 'CET' : d.toISOString().slice(0, 19).replace('T', ' ')`);
+    s.run(`__ss.setRefreshMessage({ ok: false, limit: true, when: new Date(1750000000000), current: { active: false } })`);
+    const text = s.run(`__ss.grid.rows()[7][1]`);
+    assert.strictEqual(text, ['Ustawienia odświeżania nie zostały zaktualizowane!', 'Odświeżanie automatyczne jest wyłączone.',
+      'Możesz odświeżać automatycznie najwyżej 5 plików. Zobacz szczegóły w menu dodatku:', 'Import z BC -> Ustawienia.', 'Próba zmiany ustawień została podjęta 2025-06-15 15:06:40 UTC+1.'].join('\n'));
+    const at = text.indexOf('Import z BC -> Ustawienia');
+    assert.deepStrictEqual(plain(s.book.sheets['Ustawienia'].cells['8,3'].fmt.boldRuns), [[at, at + 'Import z BC -> Ustawienia'.length]]);
+    assert.ok(!/Zmień ustawienia, żeby spróbować/.test(text));
+  }));
+
   MODES.forEach(mode => test('a sheet made before the two lines: the first message adds them after the frequency line; the lines below and the remembered rows move [' + mode + ']', () => {
     const s = scope(mode, sh => fillSettings(sh, { configs: CONFIGS }));
     s.run(`globalThis.__ss = new SettingsSheet(); Utilities.formatDate = (d, tz, p) => p === 'Z' ? '+0200' : 'x'`);

@@ -56,6 +56,9 @@ const SettingsGrid = {
   /** The sentence for a set-up that failed because Apps Script refuses one more clock trigger (a user may have 5 of them for an add-on); the list of the files the user refreshes is in the same tab. */
   triggerLimitText: "Możesz odświeżać automatycznie najwyżej 5 plików. Zobacz listę aktualnie odświeżanych arkuszy poniżej.",
 
+  /** The same for the settings sheet, where there is no list below: it points to the menu instead (the path follows on the next line, in bold). */
+  triggerLimitSheetText: "Możesz odświeżać automatycznie najwyżej 5 plików. Zobacz szczegóły w menu dodatku:",
+
   /**
    * The lines of the status message for a report ({ ok, off, when, frequency, next, current, limit }); `stamp` writes a time. Used for the message in the settings sheet
    * and, `brief`, for the error shown in the sidebar.
@@ -76,9 +79,9 @@ const SettingsGrid = {
                        ...(report.limit ? [SettingsGrid.triggerLimitText] : []),
                        `Próba zmiany ustawień została podjęta ${stamp(report.when)}.`];
     return ["Ustawienia odświeżania nie zostały zaktualizowane!",
-            ...(report.limit ? [SettingsGrid.triggerLimitText] : []),
             ...(report.current ? status(report.current) : []),
-            "Zmień ustawienia, żeby spróbować ponownie lub zobacz szczegóły w menu dodatku:",
+            // the limit of clock triggers has its own pointer to the menu in the place of the general one
+            report.limit ? SettingsGrid.triggerLimitSheetText : "Zmień ustawienia, żeby spróbować ponownie lub zobacz szczegóły w menu dodatku:",
             SettingsGrid.messagePath + ".",
             `Próba zmiany ustawień została podjęta ${stamp(report.when)}.`];
   },

@@ -422,6 +422,15 @@ module.exports = function register(t) {
     assert.ok(/zbyt wiele wyzwalaczy/.test(e.details));
   });
 
+  test('error: the settings sheet says the limit in its own words - "Możesz odświeżać automatycznie najwyżej 5 plików. Zobacz szczegóły w menu dodatku:" and the path on the next line (bold, as in the other messages) - in the place of the general pointer', () => {
+    const sc = scenario();
+    const lines = (limit, brief) => plain(sc.ex.eval(`SettingsGrid.messageLines({ ok: false, limit: ${limit}, when: 1, current: { active: true, frequency: { freq: 1, unit: 'days' }, next: new Date(2) } }, d => 'T', ${brief})`));
+    assert.deepStrictEqual(lines(true, false), ['Ustawienia odświeżania nie zostały zaktualizowane!', 'Dane będą odświeżane automatycznie co 1 dzień.', 'Następne odświeżenie T.',
+      'Możesz odświeżać automatycznie najwyżej 5 plików. Zobacz szczegóły w menu dodatku:', 'Import z BC -> Ustawienia.', 'Próba zmiany ustawień została podjęta T.']);
+    assert.deepStrictEqual(lines(true, true), ['Ustawienia odświeżania nie zostały zaktualizowane!', 'Możesz odświeżać automatycznie najwyżej 5 plików. Zobacz listę aktualnie odświeżanych arkuszy poniżej.', 'Próba zmiany ustawień została podjęta T.'], 'the sidebar keeps its own sentence');
+    assert.strictEqual(lines(false, false)[3], 'Zmień ustawienia, żeby spróbować ponownie lub zobacz szczegóły w menu dodatku:', 'without the limit: the general pointer');
+  });
+
   test('page: the error is a red box with the lines and "Szczegóły błędu" in a closed <details> that holds the platform\'s error; it sits after the last refresh and before the buttons', () => {
     const html = fs.readFileSync(path.join(ROOT, 'New Status Sidebar.html'), 'utf8');
     const fn = html.slice(html.indexOf('function renderSetupError(e)'), html.indexOf('function renderTriggerList'));
