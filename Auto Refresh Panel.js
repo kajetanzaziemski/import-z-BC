@@ -241,11 +241,13 @@ function getAutoRefreshInfo(){
 
 /** Developer tools sidebar: the user's time triggers. Read only. */
 function getRefreshTriggerList(){
+  DeveloperTools.require();
   return Controller.run("requestRefreshTriggerList",() => AutoRefreshPanel.triggersOnly());
 }
 
 /** Developer tools sidebar, "Usuń trigger": deletes the time trigger, no cleanup of any kind (see AutoRefreshPanel.forceDeleteTrigger). */
 function forceDeleteRefreshTrigger(triggerId){
+  DeveloperTools.require();
   Controller.checkInput("requestForceDeleteTrigger",{id: triggerId});
   return Controller.run("requestForceDeleteTrigger",() => AutoRefreshPanel.forceDeleteTrigger(triggerId));
 }

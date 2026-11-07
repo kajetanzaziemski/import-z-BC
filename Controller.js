@@ -1,3 +1,16 @@
+/**
+ * The developer tools (menu "Narzędzia programisty": the trigger tables, the live check, and the server functions of their sidebars) are OFF in the version users get:
+ * not in the menu, their server functions refuse to run, and the live check hooks below never call into the live check files - whatever is stored in the properties.
+ * The code stays in the project as dead code. A developer's build turns them on by setting `enabled` to true (the tests do).
+ */
+const DeveloperTools = {
+  enabled: false,
+  /** The first line of every server function that only a developer tools sidebar calls. */
+  require(){
+    if(!DeveloperTools.enabled) throw new Error("Ta funkcja jest wyłączona w tej wersji dodatku.");
+  }
+};
+
 const Controller = (function () {
   const initActions = [];      // registered once, at "load" time (top-level code)
   let closingActions = [];     // reset per run
@@ -22,23 +35,23 @@ const Controller = (function () {
     closingActions.push(fn);
   }
 
-  // Live check helpers ("Live Check.js") are optional: without that file all of the below does nothing.
+  // Live check helpers ("Live Check.js") are optional: without that file, or with the developer tools off, all of the below does nothing.
   function checkBegin(actionName) {
-    return typeof liveCheckBegin === "function" ? liveCheckBegin(actionName) : null;
+    return DeveloperTools.enabled && typeof liveCheckBegin === "function" ? liveCheckBegin(actionName) : null;
   }
 
   function checkEnd(check, error, result, note) {
-    if(check && typeof liveCheckEnd === "function") liveCheckEnd(check, error, result, note);
+    if(check && DeveloperTools.enabled && typeof liveCheckEnd === "function") liveCheckEnd(check, error, result, note);
   }
 
   /** Hands the live check of an action what it was called with (event object, arguments). Call right before the action. */
   function checkInput(actionName, data) {
-    if(typeof liveCheckInput === "function") liveCheckInput(actionName, data);
+    if(DeveloperTools.enabled && typeof liveCheckInput === "function") liveCheckInput(actionName, data);
   }
 
   /** Leaves the live check of the running action a note about a decision taken. */
   function checkNote(text) {
-    if(typeof liveCheckNote === "function") liveCheckNote(text);
+    if(DeveloperTools.enabled && typeof liveCheckNote === "function") liveCheckNote(text);
   }
 
   /**
@@ -46,7 +59,7 @@ const Controller = (function () {
    * jobs. data = { sheet, changeType }. Nothing happens without the live check files.
    */
   function intent(name, data) {
-    if(typeof liveCheckIntent === "function") liveCheckIntent(name, data);
+    if(DeveloperTools.enabled && typeof liveCheckIntent === "function") liveCheckIntent(name, data);
   }
 
   /**

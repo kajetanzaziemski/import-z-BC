@@ -20,6 +20,7 @@ function toastMessage(message,title){
 }
 
 function listProjectTriggers(){
+  DeveloperTools.require();
   return Controller.run("requestListProjectTriggers",() => StatusManager.getAllProjectTriggers());
 }
 

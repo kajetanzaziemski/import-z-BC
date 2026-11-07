@@ -14,7 +14,7 @@ function menuSelector(isAuthorized){
  */
 function fullMenu() {
   const ui = SpreadsheetApp.getUi();
-  ui
+  const menu = ui
       .createAddonMenu()
       .addItem('Autoryzuj', 'startAuthFlow')
       .addItem('Nowy kreator importu', 'insertImportWizard')
@@ -22,10 +22,9 @@ function fullMenu() {
       .addItem('Oszacuj wielkość danych','estimateForCurrentSheet')
       .addItem('Pobierz dane dla tego arkusza','refreshCurrentSheet')
       .addItem('Pobierz dane dla wszystkich arkuszy', 'refreshAll')
-      .addSubMenu(settingsMenu_(ui))
-      .addSubMenu(devToolsMenu_(ui))
-      .addItem('Wyloguj', 'logoutFlow')
-      .addToUi();
+      .addSubMenu(settingsMenu_(ui));
+  if(DeveloperTools.enabled) menu.addSubMenu(devToolsMenu_(ui));        // not in the version users get
+  menu.addItem('Wyloguj', 'logoutFlow').addToUi();
 }
 
 /**
@@ -54,10 +53,12 @@ function autoRefreshSettings(){
 }
 
 function listAllTriggers(){
+  DeveloperTools.require();
   return Controller.run("requestListAllTriggers",()=>StatusManager.triggerTableSidebar());
 }
 
 function refreshTriggersSidebar(){
+  DeveloperTools.require();
   return Controller.run("requestRefreshTriggersSidebar",()=>StatusManager.refreshTriggersSidebar());
 }
 

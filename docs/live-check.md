@@ -189,3 +189,11 @@ is removed at once. One that fails or warns (an edit in a config sheet wrongly i
 
 The menu items "Stan konfiguracji" and "Ustawienia połączenia BC" became the submenu "Ustawienia" (Ogólne, Połączenie z BC, Auto-odświeżanie), all three opening the same sidebar on a tab.
 Their entry points are `menuSettingsGeneral`, `menuSettingsConnection`, `menuSettingsAutoRefresh` (read-only, as `requestStatusCheck` / `menuConnectionSetup` were, which are gone).
+
+## Off in the version users get (`DeveloperTools.enabled`, Controller.js)
+
+The developer tools - the menu "Narzędzia programisty" (Wszystkie triggery, Triggery odświeżania, Live check), the server functions of their sidebars (`listAllTriggers`, `refreshTriggersSidebar`,
+`listProjectTriggers`, `deleteAllAgents`, `deleteAllInDocumentTriggerLog`, `deleteAllInUserTriggerLog`, `getRefreshTriggerList`, `forceDeleteRefreshTrigger`) and the live check - are dead code in a public
+version: `DeveloperTools.enabled` is `false`, so the menu does not show them, the server functions throw ("Ta funkcja jest wyłączona w tej wersji dodatku.") and the live check hooks of `Controller`
+(`checkBegin` / `checkEnd` / `checkInput` / `checkNote` / `intent`) never call into `Live Check.js`, whatever is stored in the properties (nothing is recorded, no toast, no verifier runs). The files stay
+in the project. A developer's build sets `enabled` to `true`; the tests do it for every execution (`platform.developerTools = false` keeps the shipped state).

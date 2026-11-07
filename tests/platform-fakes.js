@@ -133,6 +133,8 @@ class FakePlatform {
   execution(files, extraGlobals) {
     const ctx = vm.createContext(Object.assign(this.globals(), extraGlobals || {}));
     files.forEach(f => new vm.Script(fs.readFileSync(path.join(ROOT, f), 'utf8'), { filename: f }).runInContext(ctx));
+    // the developer tools are off in the version users get (Controller.js); the tests of them, and the code that runs next to them, switch them on - `platform.developerTools = false` keeps the shipped state
+    if (this.developerTools !== false) vm.runInContext('if (typeof DeveloperTools !== "undefined") DeveloperTools.enabled = true;', ctx);
     return { ctx, eval: code => vm.runInContext(code, ctx), get: name => vm.runInContext(name, ctx) };
   }
 }

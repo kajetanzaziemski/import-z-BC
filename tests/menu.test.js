@@ -96,6 +96,21 @@ module.exports = function register(t) {
     assert.ok(!/Stan konfiguracji|Ustawienia połączenia BC/.test(text.replace(/\/\*[\s\S]*?\*\//g, '')), 'the old items are gone');
   });
 
+  test('developer tools OFF (the version users get): no "Narzędzia programisty" in the menu, their server functions refuse to run, and the live check hooks never call into the live check', () => {
+    const p = new FakePlatform(); p.developerTools = false;
+    const names = [];
+    const ex = p.execution(BASE, { __names: names, SpreadsheetApp: { getUi: () => { const m = n => ({ addItem: () => m(n), addSubMenu: s => { names.push(s.name); return m(n); }, addToUi() {}, name: n }); return { createAddonMenu: () => m('add-on'), createMenu: n => m(n) }; } } });
+    ex.eval(`fullMenu()`);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(names)), ['Ustawienia']);
+    ['listAllTriggers()', 'refreshTriggersSidebar()', 'listProjectTriggers()', 'deleteAllAgents()', 'deleteAllInDocumentTriggerLog()', 'deleteAllInUserTriggerLog()']
+      .forEach(call => assert.throws(() => ex.eval(call), /wyłączona/, call));
+    ex.eval(`globalThis.__lc = 0; liveCheckBegin = liveCheckEnd = liveCheckInput = liveCheckNote = liveCheckIntent = () => { __lc++; };`);
+    ex.eval(`Controller.run('requestAddonStatus', () => 1); Controller.checkInput('x', {}); Controller.checkNote('n'); Controller.intent('j', {})`);
+    assert.strictEqual(ex.eval(`__lc`), 0, 'no hook is called');
+    const text = fs.readFileSync(path.join(ROOT, 'Menu.js'), 'utf8');
+    assert.ok(/if\(DeveloperTools\.enabled\) menu\.addSubMenu\(devToolsMenu_\(ui\)\)/.test(text));
+  });
+
   test('menu: the action names the live check and the gate rely on are kept', () => {
     const text = fs.readFileSync(path.join(ROOT, 'Menu.js'), 'utf8');
     ['requestCheckConfigSheet', 'menuSettingsConnection', 'menuSettingsGeneral', 'menuSettingsAutoRefresh', 'menuAuthFlow', 'menuInsertImportWizard', 'menuLogoutFlow', 'requestListAllTriggers']

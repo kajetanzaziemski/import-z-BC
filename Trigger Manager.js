@@ -103,6 +103,7 @@ class AgentManager{
 }
 
 function deleteAllAgents() {
+	DeveloperTools.require();
 	Controller.run("requestDeleteAllAgents",()=>getAgentManager().deleteAll());
 }
 
@@ -331,6 +332,7 @@ class DocumentTriggerLog extends TriggerLog{
 }
 
 function deleteAllInDocumentTriggerLog() {
+	DeveloperTools.require();
 	Controller.run("deleteAllInDocumentTriggerLog",()=>getDocumentTriggerLog().deleteAll());
 }
 
@@ -350,6 +352,7 @@ class UserTriggerLog extends TriggerLog{
 }
 
 function deleteAllInUserTriggerLog() {
+	DeveloperTools.require();
 	Controller.run("deleteAllInUserTriggerLog",()=>getUserTriggerLog().deleteAll());
 }
 
