@@ -180,4 +180,12 @@ The scheduled run also keeps its own time (`REFRESH_TIME_LIMIT_SECONDS`, 1700 s)
 the entry says "Przekroczono limit czasu odświeżania (1700 s). Nie odświeżono arkuszy: ..." and the run fails like any failed attempt (the note on the time of the last refresh, no record on the permit),
 with time left to write the log. A single request to BC that hangs longer cannot be interrupted.
 
+**The trace** (`RefreshLog.trace`, to find where the minutes of a slow run go): every run keeps timed lines (`+12.3s ...`, seconds since the run started), written both to the execution log (`console.log`, prefix
+`[refresh]`: a run the platform kills still leaves them there) and to the **technical column of the entry, under the technical text, one line each** (the first line is still the technical text). Lines:
+`HTTP #n <status>, <bytes> B in <ms> ms (token <ms> ms) | <url>` or `HTTP #n FAILED after <ms> ms ...: <error>` for every request to BC (`BC Connection.js`; the url is cut at 300 characters in the cell, whole in the execution log;
+the line "HTTP #n GET <url>" goes to the execution log only, BEFORE the request - when a run dies inside a request it is the last line); `page n: parsed in <ms> ms, <rows> rows so far` (`OData Connection.js`);
+`sheet "K": start / config read in / BC read in / written in / sheet done in` (`RefreshSheet.js`); `write "R": <rows> x <cols>` and the steps of the writing (structure, each chunk of values, flush; `BulkSheet` `onStep`).
+At most 400 lines and 40 000 characters are kept in the cell (the middle is cut; the execution log has all). The entry is written over after a request when 30 s passed since its last write (`RefreshLog.flush`), besides
+after each sheet. Tracing never fails a request or a run. Outside a refresh (the metadata download) the requests are only in the execution log.
+
 Both clock handlers write their trigger id with `Logger.log` at the start (always, not only with the debug log on).

@@ -29,8 +29,15 @@ const RefreshSheet = {
     }
   },
 
+  /** A line of the trace of the running refresh (Refresh Log.js); nothing when nothing is logged. */
+  trace_(text){
+    if(typeof RefreshLog !== "undefined") RefreshLog.trace(text);
+  },
+
   run_(configSheetName,resultSheetName){
     configSheetName = configSheetName ?? getMainSettings().getConfigSheetNames()[0];
+    const sheetStart = Date.now();
+    RefreshSheet.trace_(`sheet "${configSheetName}": start`);
     let shCoed = new SheetCoeditor(configSheetName,true);
     let odConnection, columnDataTypes, refreshed = null;
     try{ 
@@ -42,7 +49,11 @@ const RefreshSheet = {
       }
       
       odConnection = ImportQuery.connectionFor(shCoed);
+      RefreshSheet.trace_(`sheet "${configSheetName}": config read in ${Date.now() - sheetStart} ms`);
+      const fetchStart = Date.now();
       odConnection.readAllPages(shCoed);
+      const got = odConnection.getDataArray();
+      RefreshSheet.trace_(`sheet "${configSheetName}": BC read in ${Date.now() - fetchStart} ms, ${got ? Math.max(got.length - 1,0) : 0} rows${odConnection.getError() ? " (BC error document)" : ""}`);
 
       // An error document from BC is shown as it is (code / message rows, text): it has no columns to look up in the metadata.
       columnDataTypes = odConnection.getError()
@@ -54,6 +65,7 @@ const RefreshSheet = {
     }
     shCoed.switchReadingControl(false);
     shCoed.switchDataWritingControl(true);
+    const writeStart = Date.now();
     try{  
       const table = odConnection.getDataArray();
       const sheetName = resultSheetName ?? getMainSettings().getResultSheetName(configSheetName);
@@ -67,6 +79,7 @@ const RefreshSheet = {
       throw e;  
     }
     shCoed.switchDataWritingControl(false);
+    RefreshSheet.trace_(`sheet "${configSheetName}": written in ${Date.now() - writeStart} ms, sheet done in ${Date.now() - sheetStart} ms`);
     // Counted as refreshed only now that everything went through (data written, indicators back to idle): a sheet that failed is never also in the "refreshed" list
     if(refreshed) RefreshLog.noteSheet(refreshed.name,refreshed.rows);
   }

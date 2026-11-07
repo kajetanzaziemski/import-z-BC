@@ -13,6 +13,9 @@ const ResultSheet = {
    */
   write(sheetName,table,columnDataTypes){
     dbgLog(columnDataTypes);
-    BulkSheet.writeTable(sheetName,table,{columnFormats: columnDataTypes.map(dataType => new DataType(dataType).getSpreadsheetNumberFormat())});
+    const trace = text => { if(typeof RefreshLog !== "undefined") RefreshLog.trace(text); };
+    trace(`write "${sheetName}": ${table.length} rows x ${table[0] ? table[0].length : 0} columns`);
+    BulkSheet.writeTable(sheetName,table,{columnFormats: columnDataTypes.map(dataType => new DataType(dataType).getSpreadsheetNumberFormat()),
+                                          onStep: (step, ms) => trace(`write "${sheetName}": ${step} ${ms} ms`)});
   }
 };

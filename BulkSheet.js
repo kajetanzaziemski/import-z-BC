@@ -15,13 +15,20 @@
 
 const BULK_CHUNK_CELLS = 50000;
 
+/** Reports a finished step to options.onStep (timing only; never fails the write). */
+function bulkStep_(options, name, since) {
+  if (typeof options.onStep !== 'function') return;
+  try { options.onStep(name, Date.now() - since); } catch (err) { /* timing only */ }
+}
+
 const BulkSheet = {
   /**
    * Replaces the content of the sheet (created when missing) with `table`, starting at A1.
    * @param sheetName {String}
    * @param table {Array[]} Rows of equal length; at least one row with at least one cell. Checked before anything is touched.
    * @param options {{columnFormats: String[], chunkCells: Number}} columnFormats[i]: number format of column i + 1 for the whole table height
-   *        (missing / null / undefined: the column keeps what clearing left); chunkCells: cells per write call (default BULK_CHUNK_CELLS).
+   *        (missing / null / undefined: the column keeps what clearing left); chunkCells: cells per write call (default BULK_CHUNK_CELLS);
+   *        onStep(name, ms): called after each step (the structure, each chunk of values) with the time it took, for timing; a failure in it is ignored.
    * @returns {{rows: Number, cols: Number, chunks: Number}}
    */
   writeTable(sheetName, table, options) {
@@ -44,6 +51,7 @@ const BulkSheet = {
 
   writeTableViaService_(sheetName, table, formats, options) {
     const rows = table.length, cols = table[0].length;
+    let t = Date.now();
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     let sheet = ss.getSheetByName(sheetName);
     if (!sheet) sheet = ss.insertSheet(sheetName);
@@ -55,25 +63,35 @@ const BulkSheet = {
     formats.forEach((format, index) => {
       if (format !== undefined && format !== null) sheet.getRange(1, index + 1, rows, 1).setNumberFormat(format);
     });
+    bulkStep_(options, 'structure (service: clear, growth, formats)', t);
 
     const perChunk = Math.max(1, Math.floor((options.chunkCells || BULK_CHUNK_CELLS) / cols));
+    const totalChunks = Math.ceil(rows / perChunk);
     let chunks = 0;
     for (let first = 0; first < rows; first += perChunk) {
+      t = Date.now();
       const part = table.slice(first, first + perChunk);
       sheet.getRange(first + 1, 1, part.length, cols).setValues(part);
       chunks++;
+      bulkStep_(options, 'values chunk ' + chunks + '/' + totalChunks + ' (setValues, ' + part.length + ' rows)', t);
     }
+    t = Date.now();
     SpreadsheetApp.flush();
+    bulkStep_(options, 'flush', t);
     return { rows: rows, cols: cols, chunks: chunks };
   },
 
   writeTableViaApi_(sheetName, table, formats, options) {
     const rows = table.length, cols = table[0].length;
+    let t = Date.now();
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     if (!ss.getSheetByName(sheetName)) ss.insertSheet(sheetName);
     SpreadsheetApp.flush();                                     // the API has to see the new sheet and the last writes of the service
+    bulkStep_(options, 'flush before the API', t);
+    t = Date.now();
     const quoted = "'" + sheetName.replace(/'/g, "''") + "'";
     const info = Sheets.Spreadsheets.get(ss.getId(), { ranges: [quoted + '!A1'], fields: 'sheets(properties(sheetId,title,gridProperties(rowCount,columnCount)))' });
+    bulkStep_(options, 'API spreadsheets.get', t);
     const props = info.sheets.find(sh => sh.properties.title === sheetName).properties;
     const sheetId = props.sheetId, maxRows = props.gridProperties.rowCount, maxCols = props.gridProperties.columnCount;
     const needCols = Math.max(cols, formats.length);
@@ -89,19 +107,24 @@ const BulkSheet = {
         fields: 'userEnteredFormat.numberFormat'
       } });
     });
+    t = Date.now();
     Sheets.Spreadsheets.batchUpdate({ requests: requests }, ss.getId());
+    bulkStep_(options, 'API batchUpdate (clear, growth, ' + formats.length + ' formats)', t);
 
     const tz = ss.getSpreadsheetTimeZone();
     const cell = v => v === undefined || v === null ? '' : (v instanceof Date ? Utilities.formatDate(v, tz, 'yyyy-MM-dd HH:mm:ss') : v);
     const perChunk = Math.max(1, Math.floor((options.chunkCells || BULK_CHUNK_CELLS) / cols));
+    const totalChunks = Math.ceil(rows / perChunk);
     let chunks = 0;
     for (let first = 0; first < rows; first += perChunk) {
+      t = Date.now();
       const part = table.slice(first, first + perChunk).map(row => row.map(cell));
       Sheets.Spreadsheets.Values.batchUpdate({
         valueInputOption: 'USER_ENTERED',
         data: [{ range: quoted + '!A' + (first + 1), values: part }]
       }, ss.getId());
       chunks++;
+      bulkStep_(options, 'values chunk ' + chunks + '/' + totalChunks + ' (API, ' + part.length + ' rows)', t);
     }
     return { rows: rows, cols: cols, chunks: chunks };
   }

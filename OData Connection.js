@@ -63,7 +63,12 @@ class ODataConnection{
         if(shCoed) shCoed.switchConnectionControl(true);
         if(typeof RefreshLog !== "undefined") RefreshLog.checkTime();       // a scheduled refresh that ran out of time fails here, with time left to write the log
         this.fetchHttpResponse(this.nextPage);
+        const parseStart = Date.now();
         this.readPage();
+        if(typeof RefreshLog !== "undefined"){
+          RefreshLog.trace(`page ${i}: parsed in ${Date.now() - parseStart} ms, ${this.dataArray ? Math.max(this.dataArray.length - 1,0) : 0} rows so far${this.error ? ", BC error document" : this.nextPage ? ", more pages" : ", last page"}`);
+          RefreshLog.flush();
+        }
         i++;
         if(i==2 && shCoed) shCoed.setTotRowsInfo(this.getTotalRows());
         if(this.error){

@@ -13,6 +13,10 @@
 //   Every run opens its entry when it STARTS (status "Nieznany (w trakcie lub błąd wykonania)", no end), writes it over after each sheet with what is known and completes it at
 //                                               the end, so a run the platform kills still shows. The row is found again by the hash of its cells; not found (edited by the user) = a new row.
 //   RefreshLog.run(..., {limitSeconds})         checkTime() / timeIsUp() fail the run after limitSeconds (the scheduled one: 1700) with the log written
+//   RefreshLog.trace(text)                      a timed line of the run's trace ("+12.3s ..."): kept for the technical column of the entry (after the technical text, one line each) AND
+//                                               written to the execution log (console.log), which a run the platform kills still leaves. The trace has the HTTP requests to BC
+//                                               (BC Connection.js), the pages (OData Connection.js), and the phases of each sheet (Refresh Sheet.js, Result Sheet.js). Capped (lines and characters).
+//   RefreshLog.live(text)                       the execution log only (a request about to be sent: if the run dies inside it, that line is the last one)
 //   RefreshLog.logOnly(source, technical, status)   an entry for a run that refreshed nothing on purpose (a clock trigger that deleted itself)
 //
 // Writing the log never fails a refresh: a failure there is console.error and a note on the live check run.
@@ -30,6 +34,12 @@ const REFRESH_LOG_UNKNOWN = "Nieznany (w trakcie lub błąd wykonania)";
 /** A scheduled run gives up after this many seconds (the platform ends an execution at 30 minutes), leaving time to write the log. */
 const REFRESH_TIME_LIMIT_SECONDS = 1700;
 
+/** The trace kept in the technical cell: at most this many lines and characters (a cell holds 50 000); the execution log has everything. */
+const REFRESH_TRACE_MAX_LINES = 400;
+const REFRESH_TRACE_MAX_CHARS = 40000;
+/** The entry is written over after a request at most this often (ms), so that a run killed inside a long sheet still shows what it did. */
+const REFRESH_TRACE_FLUSH_MS = 30000;
+
 class RefreshTimeLimitError extends Error{}
 
 const RefreshLog = {
@@ -44,7 +54,8 @@ const RefreshLog = {
     if(RefreshLog.session_) return work();
     const start = new Date();
     const session = RefreshLog.session_ = {source: source, technical: technical, start: start, sheets: [], problems: [], failures: [], error: null,
-      deadline: opts && opts.limitSeconds ? start.getTime() + opts.limitSeconds * 1000 : null, limitSeconds: opts && opts.limitSeconds, hash: null};
+      deadline: opts && opts.limitSeconds ? start.getTime() + opts.limitSeconds * 1000 : null, limitSeconds: opts && opts.limitSeconds, hash: null,
+      trace: [], traceDropped: 0, lastWrite: Date.now()};
     session.hash = RefreshLog.open_(session);
     try{
       return work();
@@ -68,6 +79,41 @@ const RefreshLog = {
     if(RefreshLog.timeIsUp()) throw new RefreshTimeLimitError(`Przekroczono limit czasu odświeżania (${RefreshLog.session_.limitSeconds} s).`);
   },
 
+  /** A line of the trace, with the time since the run started. Never throws. */
+  trace(text){
+    try{
+      const s = RefreshLog.session_;
+      const line = s ? `+${((Date.now() - s.start.getTime()) / 1000).toFixed(1)}s ${text}` : String(text);
+      console.log(`[refresh] ${line}`);
+      if(!s) return;
+      if(s.trace.length < REFRESH_TRACE_MAX_LINES) s.trace.push(line); else s.traceDropped++;
+    }catch(err){}
+  },
+
+  /** Execution log only (not kept in the entry). Never throws. */
+  live(text){
+    try{
+      const s = RefreshLog.session_;
+      console.log(`[refresh] ${s ? `+${((Date.now() - s.start.getTime()) / 1000).toFixed(1)}s ` : ""}${text}`);
+    }catch(err){}
+  },
+
+  /** Writes the entry over (with the trace so far), if that was not done within REFRESH_TRACE_FLUSH_MS: a run the platform kills inside a long sheet still shows what it did. */
+  flush(){
+    const s = RefreshLog.session_;
+    if(s && s.hash && Date.now() - s.lastWrite >= REFRESH_TRACE_FLUSH_MS) RefreshLog.progress_();
+  },
+
+  /** The technical text and the trace under it, one line each (cut in the middle when it is too long for a cell). */
+  withTrace_(technical, session){
+    const lines = session.trace || [];
+    if(!lines.length) return technical;
+    if(session.traceDropped) lines.push(`... ${session.traceDropped} more lines in the execution log`);
+    let text = lines.join("\n");
+    if(text.length > REFRESH_TRACE_MAX_CHARS) text = text.slice(0,15000) + "\n...\n" + text.slice(-(REFRESH_TRACE_MAX_CHARS - 15000));
+    return `${technical}\n${text}`;
+  },
+
   /** The entry of a run that has just started: the start and what is known, no end. Returns the hash of the row written, or null when it could not be written. */
   open_(session){
     try{
@@ -87,6 +133,7 @@ const RefreshLog = {
   progress_(){
     const session = RefreshLog.session_;
     if(!session || !session.hash) return;
+    session.lastWrite = Date.now();
     try{
       session.hash = RefreshLogGrid.update(MainSettings.getLogSheetName(),session.hash,RefreshLog.openEntry_(session));
     }catch(err){
@@ -148,7 +195,7 @@ const RefreshLog = {
       duration: AutoRefreshPanel.duration(end.getTime() - session.start.getTime()),
       status: status,
       sheets: [`${n} ${RefreshLog.plural_(n,"arkusz","arkusze","arkuszy")}${n ? ":" : ""}`].concat(lines).join("\n"),
-      technical: failure ? `${session.technical}. Errors: ${session.failures.map(x => `${x.name}: ${x.message}`).join(" | ")}` : session.technical
+      technical: RefreshLog.withTrace_(failure ? `${session.technical}. Errors: ${session.failures.map(x => `${x.name}: ${x.message}`).join(" | ")}` : session.technical, session)
     };
   },
 

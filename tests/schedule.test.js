@@ -722,12 +722,13 @@ module.exports = function register(t) {
     const logged = plain(sc.ex.eval(`__logged`));
     assert.strictEqual(logged.length, 1);
     // the fake config sheets here have no table: a failure the add-on handles itself is the status, and no sheet counts as refreshed
-    assert.deepStrictEqual([logged[0].name, logged[0].source, logged[0].status, logged[0].sheets, logged[0].technical],
+    // (the trace of the run - RefreshLog.trace - follows the technical text on the next lines)
+    assert.deepStrictEqual([logged[0].name, logged[0].source, logged[0].status, logged[0].sheets, logged[0].technical.split('\n')[0]],
       ['Dziennik pobrań', 'Autoodświeżanie', 'Brak tabeli w arkuszu konfiguracji „K1”; Brak tabeli w arkuszu konfiguracji „K3”', '0 arkuszy', 'Clock trigger trig-A']);
     const legacy = scenario({ settings: { refreshPermit: { issuedFor: 'trig-L', lastRefresh: 1, intervalHours: 6 } } });
     legacy.p.triggers.push(NAMED('trig-L', 'autoRefresh'));
     legacy.ex.eval(`autoRefresh(${event('trig-L')})`);
-    assert.strictEqual(plain(legacy.ex.eval(`__logged[0].technical`)), 'Clock trigger trig-L (old version: autoRefresh function)');
+    assert.strictEqual(plain(legacy.ex.eval(`__logged[0].technical.split('\\n')[0]`)), 'Clock trigger trig-L (old version: autoRefresh function)');
   });
 
   test('last refresh: a scheduled refresh that failed leaves the time alone and puts a note on it; a fully correct one does not (the note is removed by setLastRefresh); a note that cannot be written never hides the error', () => {
@@ -753,7 +754,7 @@ module.exports = function register(t) {
     sc.p.triggers.push(NAMED('trig-A'));
     assert.throws(() => sc.ex.eval(`autoRefreshHandler(${event('trig-A')})`), /BC down/);
     // the error came while the data of a sheet was pulled: the status says for which sheet, the error itself is in the technical column
-    assert.deepStrictEqual(plain(sc.ex.eval(`__logged.map(e => [e.source, e.status, e.technical])`)),
+    assert.deepStrictEqual(plain(sc.ex.eval(`__logged.map(e => [e.source, e.status, e.technical.split('\\n')[0]])`)),
       [['Autoodświeżanie', 'Błąd ❗️ Przy pobieraniu danych dla arkuszy: R1, R3.', 'Clock trigger trig-A. Errors: R1: BC down | R3: BC down']]);       // both ticked sheets were tried
   });
 

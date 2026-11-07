@@ -277,6 +277,93 @@ module.exports = function register(t) {
     assert.deepStrictEqual([one.source, one.sheets, one.technical], ['Odświeżanie jednego arkusza', '1 arkusz:\nDane K2 (20 wierszy)', 'Menu: refresh one sheet (config sheet: K2)']);
   });
 
+  /** BulkSheet on a simulated book (one commit path); run(code) returns the names of the steps the onStep hook of the code was given. */
+  function bulkScope(mode) {
+    const book = new SimBook({ api: mode === 'api' });
+    const ctx = vm.createContext({ console: { log() {}, error() {} } });
+    book.install(ctx);
+    ['Grid.js', 'Grid Util.js', 'BulkSheet.js'].forEach(f => new vm.Script(fs.readFileSync(path.join(ROOT, f), 'utf8'), { filename: f }).runInContext(ctx));
+    return { run: code => { vm.runInContext(`globalThis.__steps = []; ${code}`, ctx); return plain(vm.runInContext(`__steps`, ctx)); } };
+  }
+
+  // ---- the trace: what the run did and how long each step took ----------------------------------------------------------------------------------
+  const BC_FILES = ['BC Connection.js'];
+  function traced() {
+    const u = useCase(null, BC_FILES);
+    u.ex.eval(`globalThis.__console = []; console.log = m => __console.push(String(m));
+      globalThis.__responses = []; globalThis.BCAuth = { accessToken: () => 'TOKEN' };
+      globalThis.UrlFetchApp = { fetch: (url, o) => { const r = __responses.shift(); if (r instanceof Error) throw r; return r; } };
+      globalThis.ConnectionError = class ConnectionError extends Error {};`);
+    return { ...u, console: () => plain(u.ex.eval(`__console`)) };
+  }
+
+  test('trace: every HTTP request to BC is logged - a line before it goes out (execution log only) and a line when it is over (status, size, time, time for the token, url), kept in the technical column under the technical text', () => {
+    const u = traced();
+    u.ex.eval(`__responses.push({ getResponseCode: () => 200, getContent: () => new Array(1234) });
+      RefreshLog.run('Autoodświeżanie', 'Clock trigger t1', () => { BCConnection.fetchURL('https://bc/odata/Company(\\'X\\')/T?$top=5'); })`);
+    const [e] = u.entries();
+    const lines = e.technical.split('\n');
+    assert.strictEqual(lines[0], 'Clock trigger t1');
+    assert.strictEqual(lines.length, 2, e.technical);
+    assert.ok(/^\+\d+\.\ds HTTP #\d+ 200, 1234 B in \d+ ms \(token \d+ ms\) \| https:\/\/bc\/odata\/Company\('X'\)\/T\?\$top=5$/.test(lines[1]), lines[1]);
+    const con = u.console();
+    assert.ok(/^\[refresh\] \+\d+\.\ds HTTP #\d+ GET https:\/\/bc\//.test(con[0]), 'the "about to send" line is first: ' + con[0]);
+    assert.ok(/HTTP #\d+ 200, 1234 B/.test(con[1]), con[1]);
+    assert.ok(!/GET/.test(e.technical), 'the before-line is not kept in the cell');
+  });
+
+  test('trace: a request that fails is logged with its error and time, and the error still goes on as before; a long url is cut in the kept trace but whole in the execution log', () => {
+    const u = traced();
+    const url = 'https://bc/' + 'x'.repeat(500);
+    u.ex.eval(`__responses.push(new Error('Address unavailable'));`);
+    assert.throws(() => u.ex.eval(`RefreshLog.run('Autoodświeżanie', 'Clock trigger t1', () => { BCConnection.fetchURL(${JSON.stringify(url)}); })`), /Address unavailable/);
+    const [e] = u.entries();
+    assert.ok(/HTTP #\d+ FAILED after \d+ ms \(token \d+ ms\): Address unavailable \| https:\/\/bc\/x+\.\.\. \(511 chars\)$/.test(e.technical.split('\n')[1]), e.technical);
+    assert.ok(u.console().some(m => m.includes(url)), 'the whole url is in the execution log');
+  });
+
+  test('trace: outside a refresh a request is only written to the execution log; the lines are capped in the cell (the execution log has them all) and the entry is never broken by the trace', () => {
+    const u = traced();
+    u.ex.eval(`__responses.push({ getResponseCode: () => 200, getContent: () => [] }); BCConnection.fetchURL('https://bc/meta')`);
+    assert.strictEqual(u.entries().length, 0);
+    assert.ok(u.console().some(m => /HTTP #\d+ 200, 0 B/.test(m)));
+    u.ex.eval(`RefreshLog.run('Autoodświeżanie', 'T', () => { for (let i = 0; i < 1000; i++) RefreshLog.trace('line ' + i); })`);
+    const lines = u.entries()[0].technical.split('\n');
+    assert.strictEqual(lines.length, 1 + 400 + 1, 'technical + 400 lines + the note');
+    assert.ok(/600 more lines/.test(lines[lines.length - 1]));
+    assert.strictEqual(u.console().filter(m => /line \d+$/.test(m)).length, 1000);
+    u.ex.eval(`RefreshLog.run('Autoodświeżanie', 'T', () => { for (let i = 0; i < 300; i++) RefreshLog.trace('x'.repeat(300)); })`);
+    assert.ok(u.entries()[0].technical.length < 41000, 'cut in the middle to fit a cell: ' + u.entries()[0].technical.length);
+  });
+
+  test('trace: the entry is written over during a long run (after a request, at most every 30 s) with the trace so far - a run the platform kills inside one sheet still shows what it did', () => {
+    const u = traced();
+    u.ex.eval(`globalThis.__snaps = [];
+      RefreshLogGrid.update = (name, token, e) => { __snaps.push(e.technical); return token; };
+      RefreshLog.run('Autoodświeżanie', 'T', () => {
+        RefreshLog.trace('a'); RefreshLog.flush();                              // just opened: no write
+        RefreshLog.session_.lastWrite -= 31000; RefreshLog.trace('b'); RefreshLog.flush();      // 31 s since the last write
+        RefreshLog.trace('c'); RefreshLog.flush();                              // again at once: no write
+      })`);
+    const snaps = plain(u.ex.eval(`__snaps`));
+    assert.strictEqual(snaps.length, 2, 'one progress write and the closing one');
+    assert.ok(/\+\d+\.\ds a\n\+\d+\.\ds b$/.test(snaps[0]), snaps[0]);
+    assert.ok(/ c$/.test(snaps[1]));
+  });
+
+  test('trace: pages, sheets and the writing of the result sheet are timed (OData Connection.js, Refresh Sheet.js, Result Sheet.js, Bulk Sheet.js) - the steps report to the trace and a failing hook never fails the write', () => {
+    const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
+    assert.ok(/RefreshLog\.trace\(`page \$\{i\}: parsed in/.test(read('OData Connection.js')) && /RefreshLog\.flush\(\)/.test(read('OData Connection.js')));
+    assert.ok(/BC read in/.test(read('RefreshSheet.js')) && /written in/.test(read('RefreshSheet.js')) && /config read in/.test(read('RefreshSheet.js')));
+    assert.ok(/onStep: \(step, ms\) => trace/.test(read('ResultSheet.js')));
+    MODES.forEach(mode => {
+      const steps = bulkScope(mode).run(`BulkSheet.writeTable('R', [['a','b'],[1,2],[3,4],[5,6]], { chunkCells: 4, onStep: (n, ms) => __steps.push(n + ':' + typeof ms) })`);
+      assert.ok(steps.length >= 3 && steps.every(x => /:number$/.test(x)), mode + ': ' + steps.join(' | '));
+      assert.ok(steps.some(x => /values chunk 1\/2/.test(x)) && steps.some(x => /values chunk 2\/2/.test(x)), mode + ': ' + steps.join(' | '));
+      bulkScope(mode).run(`BulkSheet.writeTable('R', [['a'],[1]], { onStep: () => { throw new Error('hook'); } })`);        // must not throw
+    });
+  });
+
   test('menu: on a sheet that is not a config sheet nothing is refreshed and nothing is logged', () => {
     const u = useCase(); u.ex.eval(STUBS);
     u.ex.eval(`MenuActions.activeConfigSheet = () => null; Controller.registerClosingOnce = () => {}; MenuActions.refreshActive()`);
