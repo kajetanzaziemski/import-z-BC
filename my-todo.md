@@ -1,3 +1,11 @@
+# Regular checkup for time triggers
+
+To deal with crashed triggers run a separate clock trigger - a "medic" - that would check for jobs done by all other triggers.
+
+Medic should run every hour, read all user's permits in look for a mismatch between lastFired and lastRun. On an idetified problem:
+1) Find and redo the log entry for the identified run: Mark it as failed with status "Błąd [!] Przekroczono maksymalny czas wykonania (30 min)." and add detail in the technical column with a note that it was modified by the medic. - for this job a row hash should be stored somewhere so that the medic can identify the row. If no row is found, create a new one.
+2) 
+
 # [DONE, not yet checked on a real spreadsheet] Auto refresh
 
 Implemented on branch better-auto-refresh: line "refreshTime" (D = time of day, formatted HH:mm and right aligned once, when the line is made - a legacy sheet gets it directly below refreshFrequency, refreshStatus directly below it; "17:30", "17", "5:30 PM" are understood; days -> atHour + nearMinute, hours -> nearMinute ONLY, the hour is ignored; the platform only promises "near"),
