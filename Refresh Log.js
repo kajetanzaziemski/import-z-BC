@@ -8,7 +8,8 @@
 //   RefreshLog.noteSheet(name, rows)            (RefreshSheet) a result sheet was written
 //   RefreshLog.noteProblem(text)                (RefreshSheet) a failure the add-on handled itself (BC answered with an error, no table in the config sheet): the status
 //   RefreshLog.noteFailedSheet(name, error)     (RefreshSheet) the data of this sheet could not be pulled - the platform threw an error, or BC answered with an error document: the status only says
-//                                               "Błąd ❗️ Przy pobieraniu danych dla arkusza X." (all the failed sheets: "dla arkuszy: X, Y."), the errors go to the technical column,
+//                                               "Błąd ❗️ Przy pobieraniu danych dla arkusza X." (all the failed sheets: "dla arkuszy: X, Y."; a sheet that BC refused access to says why after its name:
+//                                               "dla arkuszy: X: Odmowa dostępu do BC, Y."), the errors go to the technical column,
 //                                               each with its sheet: "Errors: X: <error> | Y: <error>"
 //   Every run opens its entry when it STARTS (status "Nieznany (w trakcie lub błąd wykonania)", no end), writes it over after each sheet with what is known and completes it at
 //                                               the end, so a run the platform kills still shows. The row is found again by the hash of its cells; not found (edited by the user) = a new row.
@@ -31,6 +32,10 @@ const REFRESH_LOG_UNKNOWN = "Nieznany (w trakcie lub błąd wykonania)";
 const REFRESH_TIME_LIMIT_SECONDS = 1700;
 
 class RefreshTimeLimitError extends Error{}
+
+/** What BCConnection throws when there is no valid token for BC, and what the log says instead (after the name of the sheet). */
+const BC_ACCESS_DENIED_MESSAGE = "Access not granted or expired.";
+const BC_ACCESS_DENIED_TEXT = "Odmowa dostępu do BC";
 
 const RefreshLog = {
   session_: null,
@@ -134,7 +139,8 @@ const RefreshLog = {
     const lines = session.sheets.map(x => `${x.name} (${x.rows} ${RefreshLog.plural_(x.rows,"wiersz","wiersze","wierszy")})`);
     // A failure while the data of a sheet was pulled: the status only says for which sheet(s); the error itself is for the technical column. An error that is
     // not tied to a sheet (the lock, the settings sheet ...) is the status as it is.
-    const failed = session.failures.map(x => x.name);
+    // BC refused the access (no token, or it expired): the status says so after the sheet's name; the platform's text stays in the technical column
+    const failed = session.failures.map(x => x.message === BC_ACCESS_DENIED_MESSAGE ? `${x.name}: ${BC_ACCESS_DENIED_TEXT}` : x.name);
     const failure = !failed.length ? null
       : failed.length == 1 ? `Błąd ❗️ Przy pobieraniu danych dla arkusza ${failed[0]}.`
       : `Błąd ❗️ Przy pobieraniu danych dla arkuszy: ${failed.join(", ")}.`;
