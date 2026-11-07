@@ -231,6 +231,16 @@ module.exports = function register(t) {
     assert.ok(e.technical.startsWith('Menu: refresh all sheets. Errors: '));
   });
 
+  test('entry: "Access not granted or expired." says "Odmowa dostępu do BC" after the name of the sheet (one sheet, several, mixed with other failures); the technical column keeps the platform\'s text', () => {
+    const u = useCase();
+    u.ex.eval(`RefreshLog.run('Autoodświeżanie', 'Clock trigger t1', () => { RefreshLog.noteFailedSheet('Dane wg. Konfiguracja 1', new ConnectionError('Access not granted or expired.')); })`);
+    u.ex.eval(`RefreshLog.run('Autoodświeżanie', 'Clock trigger t1', () => { RefreshLog.noteProblem('Brak tabeli w arkuszu konfiguracji „K9”'); RefreshLog.noteFailedSheet('Dane wg. Konfiguracja 1', new ConnectionError('Access not granted or expired.')); RefreshLog.noteFailedSheet('Dane wg. Konfiguracja 2', 'BC BadRequest: zle'); RefreshLog.noteFailedSheet('Dane wg. Konfiguracja 3', new ConnectionError('Access not granted or expired.')); })`);
+    const [one, many] = u.entries();
+    assert.strictEqual(one.status, 'Błąd ❗️ Przy pobieraniu danych dla arkusza Dane wg. Konfiguracja 1: Odmowa dostępu do BC.');
+    assert.strictEqual(one.technical, 'Clock trigger t1. Errors: Dane wg. Konfiguracja 1: Access not granted or expired.');
+    assert.strictEqual(many.status, 'Brak tabeli w arkuszu konfiguracji „K9”; Błąd ❗️ Przy pobieraniu danych dla arkuszy: Dane wg. Konfiguracja 1: Odmowa dostępu do BC, Dane wg. Konfiguracja 2, Dane wg. Konfiguracja 3: Odmowa dostępu do BC.');
+  });
+
   test('entry: an error that is not tied to a sheet (no sheet was being pulled) is still the status as it is', () => {
     const u = useCase();
     assert.throws(() => u.ex.eval(`RefreshLog.run('Autoodświeżanie', 'Clock trigger t1', () => { throw new Error('Exceeded maximum execution time'); })`), /Exceeded/);
