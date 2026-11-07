@@ -90,6 +90,4 @@ The columns should include: source of refresh ("Autoodświeżanie", "Odświeżan
 
 Add a section "Arkusz dziennika pobrań" in Ogólne settings. layout analagous to import settings sheet name settings.
 
-# Live check fails to check
-
-_empty_
+# Connection with BC (Microsoft) - client secret etc. / what is the best way?
