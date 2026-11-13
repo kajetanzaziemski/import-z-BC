@@ -67,7 +67,6 @@ class ODataConnection{
         this.readPage();
         if(typeof RefreshLog !== "undefined"){
           RefreshLog.trace(`page ${i}: parsed in ${Date.now() - parseStart} ms, ${this.dataArray ? Math.max(this.dataArray.length - 1,0) : 0} rows so far${this.error ? ", BC error document" : this.nextPage ? ", more pages" : ", last page"}`);
-          RefreshLog.flush();
         }
         i++;
         if(i==2 && shCoed) shCoed.setTotRowsInfo(this.getTotalRows());

@@ -307,63 +307,39 @@ module.exports = function register(t) {
     return { ...u, console: () => plain(u.ex.eval(`__console`)) };
   }
 
-  test('trace: every HTTP request to BC is logged - a line before it goes out (execution log only) and a line when it is over (status, size, time, time for the token, url), kept in the technical column under the technical text', () => {
+  test('trace: every HTTP request to BC is logged to the execution log only - a line before it goes out (whole url) and a line when it is over (status, size, time, time for the token, url); the download log entry is untouched', () => {
     const u = traced();
     u.ex.eval(`__responses.push({ getResponseCode: () => 200, getContent: () => new Array(1234) });
       RefreshLog.run('Autoodświeżanie', 'Clock trigger t1', () => { BCConnection.fetchURL('https://bc/odata/Company(\\'X\\')/T?$top=5'); })`);
-    const [e] = u.entries();
-    const lines = e.technical.split('\n');
-    assert.strictEqual(lines[0], 'Clock trigger t1');
-    assert.strictEqual(lines.length, 2, e.technical);
-    assert.ok(/^\+\d+\.\ds HTTP #\d+ 200, 1234 B in \d+ ms \(token \d+ ms\) \| https:\/\/bc\/odata\/Company\('X'\)\/T\?\$top=5$/.test(lines[1]), lines[1]);
+    assert.strictEqual(u.entries()[0].technical, 'Clock trigger t1', 'nothing of the trace in the sheet');
     const con = u.console();
-    assert.ok(/^\[refresh\] \+\d+\.\ds HTTP #\d+ GET https:\/\/bc\//.test(con[0]), 'the "about to send" line is first: ' + con[0]);
-    assert.ok(/HTTP #\d+ 200, 1234 B/.test(con[1]), con[1]);
-    assert.ok(!/GET/.test(e.technical), 'the before-line is not kept in the cell');
+    assert.strictEqual(con.length, 2);
+    assert.ok(/^\[refresh\] \+\d+\.\ds HTTP #\d+ GET https:\/\/bc\/odata\/Company\('X'\)\/T\?\$top=5$/.test(con[0]), con[0]);
+    assert.ok(/^\[refresh\] \+\d+\.\ds HTTP #\d+ 200, 1234 B in \d+ ms \(token \d+ ms\) \| https:\/\/bc\/odata\/Company\('X'\)\/T\?\$top=5$/.test(con[1]), con[1]);
   });
 
-  test('trace: a request that fails is logged with its error and time, and the error still goes on as before; a long url is cut in the kept trace but whole in the execution log', () => {
+  test('trace: a request that fails is logged with its error and time, and the error still goes on as before; a long url is cut in the "over" line but whole in the "before" line', () => {
     const u = traced();
     const url = 'https://bc/' + 'x'.repeat(500);
     u.ex.eval(`__responses.push(new Error('Address unavailable'));`);
     assert.throws(() => u.ex.eval(`RefreshLog.run('Autoodświeżanie', 'Clock trigger t1', () => { BCConnection.fetchURL(${JSON.stringify(url)}); })`), /Address unavailable/);
-    const [e] = u.entries();
-    assert.ok(/HTTP #\d+ FAILED after \d+ ms \(token \d+ ms\): Address unavailable \| https:\/\/bc\/x+\.\.\. \(511 chars\)$/.test(e.technical.split('\n')[1]), e.technical);
-    assert.ok(u.console().some(m => m.includes(url)), 'the whole url is in the execution log');
+    const con = u.console();
+    assert.ok(con[0].includes(url), 'the whole url before the request');
+    assert.ok(/HTTP #\d+ FAILED after \d+ ms \(token \d+ ms\): Address unavailable \| https:\/\/bc\/x+\.\.\. \(511 chars\)$/.test(con[1]), con[1]);
+    assert.strictEqual(u.entries()[0].technical, 'Clock trigger t1');
   });
 
-  test('trace: outside a refresh a request is only written to the execution log; the lines are capped in the cell (the execution log has them all) and the entry is never broken by the trace', () => {
+  test('trace: outside a refresh a request is logged too (no time offset); RefreshLog.trace never throws and writes nothing to the sheet', () => {
     const u = traced();
     u.ex.eval(`__responses.push({ getResponseCode: () => 200, getContent: () => [] }); BCConnection.fetchURL('https://bc/meta')`);
     assert.strictEqual(u.entries().length, 0);
-    assert.ok(u.console().some(m => /HTTP #\d+ 200, 0 B/.test(m)));
-    u.ex.eval(`RefreshLog.run('Autoodświeżanie', 'T', () => { for (let i = 0; i < 1000; i++) RefreshLog.trace('line ' + i); })`);
-    const lines = u.entries()[0].technical.split('\n');
-    assert.strictEqual(lines.length, 1 + 400 + 1, 'technical + 400 lines + the note');
-    assert.ok(/600 more lines/.test(lines[lines.length - 1]));
-    assert.strictEqual(u.console().filter(m => /line \d+$/.test(m)).length, 1000);
-    u.ex.eval(`RefreshLog.run('Autoodświeżanie', 'T', () => { for (let i = 0; i < 300; i++) RefreshLog.trace('x'.repeat(300)); })`);
-    assert.ok(u.entries()[0].technical.length < 41000, 'cut in the middle to fit a cell: ' + u.entries()[0].technical.length);
-  });
-
-  test('trace: the entry is written over during a long run (after a request, at most every 30 s) with the trace so far - a run the platform kills inside one sheet still shows what it did', () => {
-    const u = traced();
-    u.ex.eval(`globalThis.__snaps = [];
-      RefreshLogGrid.update = (name, token, e) => { __snaps.push(e.technical); return token; };
-      RefreshLog.run('Autoodświeżanie', 'T', () => {
-        RefreshLog.trace('a'); RefreshLog.flush();                              // just opened: no write
-        RefreshLog.session_.lastWrite -= 31000; RefreshLog.trace('b'); RefreshLog.flush();      // 31 s since the last write
-        RefreshLog.trace('c'); RefreshLog.flush();                              // again at once: no write
-      })`);
-    const snaps = plain(u.ex.eval(`__snaps`));
-    assert.strictEqual(snaps.length, 2, 'one progress write and the closing one');
-    assert.ok(/\+\d+\.\ds a\n\+\d+\.\ds b$/.test(snaps[0]), snaps[0]);
-    assert.ok(/ c$/.test(snaps[1]));
+    assert.ok(u.console().some(m => /^\[refresh\] HTTP #\d+ 200, 0 B/.test(m)), u.console().join('|'));
+    u.ex.eval(`console.log = () => { throw new Error('no console'); }; RefreshLog.trace('x'); RefreshLog.live('y');`);
   });
 
   test('trace: pages, sheets and the writing of the result sheet are timed (OData Connection.js, Refresh Sheet.js, Result Sheet.js, Bulk Sheet.js) - the steps report to the trace and a failing hook never fails the write', () => {
     const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
-    assert.ok(/RefreshLog\.trace\(`page \$\{i\}: parsed in/.test(read('OData Connection.js')) && /RefreshLog\.flush\(\)/.test(read('OData Connection.js')));
+    assert.ok(/RefreshLog\.trace\(`page \$\{i\}: parsed in/.test(read('OData Connection.js')) );
     assert.ok(/BC read in/.test(read('RefreshSheet.js')) && /written in/.test(read('RefreshSheet.js')) && /config read in/.test(read('RefreshSheet.js')));
     assert.ok(/onStep: \(step, ms\) => trace/.test(read('ResultSheet.js')));
     MODES.forEach(mode => {

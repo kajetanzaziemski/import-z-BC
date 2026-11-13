@@ -1,8 +1,8 @@
 // The authenticated fetch of one BC url (the token comes from BCAuth). Used by the OData reads and the metadata download.
 // Every request is logged: a line before it is sent (execution log only - if the run dies inside the request, that is the last line) and a line when it is over
-// (status, size, time, time spent on the token; or the error) - RefreshLog.trace, so it is in the execution log and in the technical column of the download log.
+// (status, size, time, time spent on the token; or the error) - RefreshLog.live / trace: the Apps Script execution log only (not the download log sheet).
 
-const BC_TRACE_URL_CHARS = 300;       // the url in the kept trace (the execution log has it whole)
+const BC_TRACE_URL_CHARS = 300;       // the url in the "request is over" line (the line before the request has it whole)
 
 class BCConnection{
   static fetchURL(url){
@@ -46,7 +46,7 @@ class BCConnection{
     return s.length > BC_TRACE_URL_CHARS ? s.slice(0,BC_TRACE_URL_CHARS) + `... (${s.length} chars)` : s;
   }
 
-  /** @param method "trace" (kept) or "live" (execution log only). Logging never fails a request. */
+  /** @param method "live" (before the request) or "trace" (after it); both go to the execution log. Logging never fails a request. */
   static log_(method, text){
     try{ if(typeof RefreshLog !== "undefined") RefreshLog[method](text); }catch(err){}
   }
