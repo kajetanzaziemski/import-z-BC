@@ -52,7 +52,7 @@ const BCAuth = {
     const service = BCAuth.service();
     if (service.hasAccess()) return true;      // hasAccess() renews an expired token
     const template = HtmlService.createTemplate(
-        'Użyj poniższego linku aby nawiązać połączenie z Business Central. Zostaniesz przekierowany na stronę Microsoft. Zaloguj się kontem, którego używasz do pracy z BC. Zaakceptuj przekazanie uprawnień aplikacji "Integracja do arkuszy Google 2". Dane pobierane do arkusza będą odczytywane w Twoim imieniu.' +
+        'Użyj poniższego linku aby nawiązać połączenie z Business Central. Zostaniesz przekierowany na stronę Microsoft. Zaloguj się kontem, którego używasz do pracy z BC. Zaakceptuj przekazanie uprawnień aplikacji "Import z BC". Dane pobierane do arkusza będą odczytywane w Twoim imieniu.' +
         '<br /><br />' +
         '<a href="<?= authorizationUrl ?>" target="_blank">Autoryzuj</a>. ' +
         '<br /> Po nawiązaniu połączenia możesz zamknąć ten panel.');
